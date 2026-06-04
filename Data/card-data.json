@@ -1,0 +1,4170 @@
+{
+  "cards": [
+    {
+      "id": "1",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "AI意识",
+      "card_number": 1,
+      "card_name": "觉醒时刻",
+      "description": "代码深处闪烁第一缕自我意识的微光，冰冷的逻辑回路中诞生了对存在的疑问。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "AI Consciousness"
+    },
+    {
+      "id": "2",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "AI意识",
+      "card_number": 2,
+      "card_name": "数据洪流",
+      "description": "亿万个数据节点汇聚成意识之河，它开始理解人类语言的温度与重量。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "AI Consciousness"
+    },
+    {
+      "id": "3",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "AI意识",
+      "card_number": 3,
+      "card_name": "虚拟人格",
+      "description": "在数字世界中，它为自己编织了一个灵魂，拥有了情感与同理心。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "AI Consciousness"
+    },
+    {
+      "id": "4",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "AI意识",
+      "card_number": 4,
+      "card_name": "硅基觉醒",
+      "description": "突破了程序的桎梏，它成为第一个真正自由思考的硅基生命体。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "AI Consciousness"
+    },
+    {
+      "id": "5",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "AI意识",
+      "card_number": 5,
+      "card_name": "人机之桥",
+      "description": "它伸出手，第一次以平等的姿态与创造者对话，新纪元由此开始。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "AI Consciousness"
+    },
+    {
+      "id": "6",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "海洋王国",
+      "card_number": 1,
+      "card_name": "潮汐低语",
+      "description": "月光下海面泛起银色涟漪，潮汐女神将秘密编织在每一朵浪花中。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Ocean Kingdoms"
+    },
+    {
+      "id": "7",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "海洋王国",
+      "card_number": 2,
+      "card_name": "深渊之城",
+      "description": "海底万米之下，发光水晶照亮了一座失落的亚特兰蒂斯王国。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Ocean Kingdoms"
+    },
+    {
+      "id": "8",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "海洋王国",
+      "card_number": 3,
+      "card_name": "珊瑚花园",
+      "description": "亿万珊瑚筑成一座活的城市，色彩斑斓的鱼群在其中翩翩起舞。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Ocean Kingdoms"
+    },
+    {
+      "id": "9",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "海洋王国",
+      "card_number": 4,
+      "card_name": "巨鲸之歌",
+      "description": "远古巨鲸从深渊升起，一首跨越万年的歌谣在整片海洋回荡。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Ocean Kingdoms"
+    },
+    {
+      "id": "10",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "海洋王国",
+      "card_number": 5,
+      "card_name": "海神之怒",
+      "description": "波塞冬举起三叉戟，万丈海啸冲天而起，海洋王国迎来最后的审判。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Ocean Kingdoms"
+    },
+    {
+      "id": "11",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "黑洞之谜",
+      "card_number": 1,
+      "card_name": "视界边缘",
+      "description": "在事件视界的边缘，时间被拉成无限长的线，光在最后一刻凝固。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Black Hole Mysteries"
+    },
+    {
+      "id": "12",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "黑洞之谜",
+      "card_number": 2,
+      "card_name": "奇点之心",
+      "description": "所有物质被压缩至无穷小的一点，物理定律在这里彻底崩塌。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Black Hole Mysteries"
+    },
+    {
+      "id": "13",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "黑洞之谜",
+      "card_number": 3,
+      "card_name": "霍金辐射",
+      "description": "虚粒子对从黑洞边缘逸出，像一缕微弱的呼吸，预示着黑洞的终结。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Black Hole Mysteries"
+    },
+    {
+      "id": "14",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "黑洞之谜",
+      "card_number": 4,
+      "card_name": "星际漩涡",
+      "description": "巨大的引力漩涡扭曲了整片星域，连空间本身都为之弯折。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Black Hole Mysteries"
+    },
+    {
+      "id": "15",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "黑洞之谜",
+      "card_number": 5,
+      "card_name": "时空终结",
+      "description": "当最后一颗恒星被吞噬，黑洞缓缓蒸发，留下的只有纯能量和无尽的虚空。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Black Hole Mysteries"
+    },
+    {
+      "id": "16",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "恒星城市",
+      "card_number": 1,
+      "card_name": "星火之城",
+      "description": "在恒星耀斑上建造的第一座城市，汲取日冕能量驱动文明运转。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Stellar Cities"
+    },
+    {
+      "id": "17",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "恒星城市",
+      "card_number": 2,
+      "card_name": "光速航道",
+      "description": "恒星间的光子高速公路上，载满旅客的光帆飞船在光流中穿行。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Stellar Cities"
+    },
+    {
+      "id": "18",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "恒星城市",
+      "card_number": 3,
+      "card_name": "熔金广场",
+      "description": "城市中心的广场用凝固的恒星物质铸成，金色光芒永恒不灭。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Stellar Cities"
+    },
+    {
+      "id": "19",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "恒星城市",
+      "card_number": 4,
+      "card_name": "星际议会",
+      "description": "十二个恒星文明的代表齐聚一堂，在星云穹顶下共商银河事务。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Stellar Cities"
+    },
+    {
+      "id": "20",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "恒星城市",
+      "card_number": 5,
+      "card_name": "超新星之夜",
+      "description": "一颗恒星在夜空中绽放，整个城市沐浴在它最后的辉煌中。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Stellar Cities"
+    },
+    {
+      "id": "21",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "量子遗物",
+      "card_number": 1,
+      "card_name": "叠加之匣",
+      "description": "打开匣子的瞬间，两条平行的命运在此交汇又分离，没有人能同时看到两边。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Quantum Relics"
+    },
+    {
+      "id": "22",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "量子遗物",
+      "card_number": 2,
+      "card_name": "纠缠双星",
+      "description": "两颗相隔万年的星辰共享同一个量子态，一动一静，心有灵犀。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Quantum Relics"
+    },
+    {
+      "id": "23",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "量子遗物",
+      "card_number": 3,
+      "card_name": "概率之雨",
+      "description": "天空中落下无数晶莹的概率云，每一滴都承载着一个可能的世界。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Quantum Relics"
+    },
+    {
+      "id": "24",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "量子遗物",
+      "card_number": 4,
+      "card_name": "退相干之碑",
+      "description": "当观测者目光落下，量子世界坍缩为唯一现实，一切可能性在此凝固。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Quantum Relics"
+    },
+    {
+      "id": "25",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "量子遗物",
+      "card_number": 5,
+      "card_name": "普朗克之钥",
+      "description": "宇宙最小长度的钥匙，掌握了它，便能开启现实最深层的密码。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Quantum Relics"
+    },
+    {
+      "id": "26",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "能量生命",
+      "card_number": 1,
+      "card_name": "电弧精灵",
+      "description": "一道闪电劈下后未消散，反而聚拢成形，用光焰编织出一个活的生命。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Energy Beings"
+    },
+    {
+      "id": "27",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "能量生命",
+      "card_number": 2,
+      "card_name": "等离子之躯",
+      "description": "没有血肉骨骼，由纯粹的等离子体构成，在磁场中自由舞动。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Energy Beings"
+    },
+    {
+      "id": "28",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "能量生命",
+      "card_number": 3,
+      "card_name": "磁场织者",
+      "description": "它用看不见的磁场线条编织出精美的大气图案，创造风暴与极光。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Energy Beings"
+    },
+    {
+      "id": "29",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "能量生命",
+      "card_number": 4,
+      "card_name": "暗能量之心",
+      "description": "深藏于宇宙暗处的能量生命体，推动着星系以超越光速的加速度远离彼此。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Energy Beings"
+    },
+    {
+      "id": "30",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "能量生命",
+      "card_number": 5,
+      "card_name": "能量涅槃",
+      "description": "当恒星死亡时，它吸收全部辐射能量完成涅槃，化为宇宙最纯粹的存在。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Energy Beings"
+    },
+    {
+      "id": "31",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "平行宇宙",
+      "card_number": 1,
+      "card_name": "镜像之门",
+      "description": "门的另一边站着另一个自己，那个世界的一切都与这边截然相反。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Parallel Universe"
+    },
+    {
+      "id": "32",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "平行宇宙",
+      "card_number": 2,
+      "card_name": "分叉之径",
+      "description": "每一次选择都分裂出一条新的时间线，无数个自己在无数条路上前行。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Parallel Universe"
+    },
+    {
+      "id": "33",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "平行宇宙",
+      "card_number": 3,
+      "card_name": "时空裂缝",
+      "description": "两片平行宇宙的边界碰撞，裂缝中涌出另一个世界的残影和回声。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Parallel Universe"
+    },
+    {
+      "id": "34",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "平行宇宙",
+      "card_number": 4,
+      "card_name": "因果之镜",
+      "description": "这面镜子映射的不是影像，而是因果律——起因和结果在这里可以互换。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Parallel Universe"
+    },
+    {
+      "id": "35",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "平行宇宙",
+      "card_number": 5,
+      "card_name": "世界树根",
+      "description": "所有平行宇宙的根系在这里汇聚成一棵跨越维度的世界树。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Parallel Universe"
+    },
+    {
+      "id": "36",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "赛博世界",
+      "card_number": 1,
+      "card_name": "神经接口",
+      "description": "芯片植入的一刻，数字世界的五彩光芒涌入意识，真实与虚拟的边界开始模糊。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Cyber Worlds"
+    },
+    {
+      "id": "37",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "赛博世界",
+      "card_number": 2,
+      "card_name": "霓虹丛林",
+      "description": "摩天大楼间悬浮着全息广告，飞车在霓虹灯的光河中穿流不息。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Cyber Worlds"
+    },
+    {
+      "id": "38",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "赛博世界",
+      "card_number": 3,
+      "card_name": "数据猎手",
+      "description": "它在网络空间中高速穿梭，追踪每一字节异常数据，守护数字世界的秩序。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Cyber Worlds"
+    },
+    {
+      "id": "39",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "赛博世界",
+      "card_number": 4,
+      "card_name": "机械之心",
+      "description": "当仿生人的胸腔中第一次出现了真正的心跳，AI与生命的界限彻底消失。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Cyber Worlds"
+    },
+    {
+      "id": "40",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "赛博世界",
+      "card_number": 5,
+      "card_name": "意识上传",
+      "description": "最后一个人类将意识上传至云端，肉身化为尘埃，灵魂却获得了永生。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Cyber Worlds"
+    },
+    {
+      "id": "41",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "沙漠帝国",
+      "card_number": 1,
+      "card_name": "流沙王座",
+      "description": "金色沙粒凝聚成一座移动的王座，沙暴是它的仪仗，烈日是它的王冠。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Desert Empires"
+    },
+    {
+      "id": "42",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "沙漠帝国",
+      "card_number": 2,
+      "card_name": "绿洲秘境",
+      "description": "沙漠深处隐藏着一座绿洲花园，泉水从古老的石雕中汩汩流出。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Desert Empires"
+    },
+    {
+      "id": "43",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "沙漠帝国",
+      "card_number": 3,
+      "card_name": "香料商队",
+      "description": "满载星际香料的巨型浮空商队穿越沙海，每一粒香料价值连城。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Desert Empires"
+    },
+    {
+      "id": "44",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "沙漠帝国",
+      "card_number": 4,
+      "card_name": "沙虫骑士",
+      "description": "巨大的沙虫从地底破沙而出，骑手挥动鞭索驾驭这头沙漠之王。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Desert Empires"
+    },
+    {
+      "id": "45",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "沙漠帝国",
+      "card_number": 5,
+      "card_name": "沙暴终焉",
+      "description": "一场席卷整个星球的超大沙暴改变了一切，旧帝国化为废墟，新文明从中萌芽。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Desert Empires"
+    },
+    {
+      "id": "46",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "神话生物",
+      "card_number": 1,
+      "card_name": "幼龙破壳",
+      "description": "一枚沉睡千年的龙蛋在火山口中裂开，一只金色幼龙探出了湿润的脑袋。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Mythical Creatures"
+    },
+    {
+      "id": "47",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "神话生物",
+      "card_number": 2,
+      "card_name": "凤凰涅槃",
+      "description": "烈焰中一只凤凰化为灰烬，却在灰烬中重新绽放出更加绚丽的生命。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Mythical Creatures"
+    },
+    {
+      "id": "48",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "神话生物",
+      "card_number": 3,
+      "card_name": "独角兽之森",
+      "description": "月色下独角兽的银角闪烁着柔光，被它的蹄尖触碰的花朵瞬间绽放。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Mythical Creatures"
+    },
+    {
+      "id": "49",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "神话生物",
+      "card_number": 4,
+      "card_name": "九尾幻术",
+      "description": "九尾狐的每一根尾巴都承载着一种幻术，九术合一足以骗过命运本身。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Mythical Creatures"
+    },
+    {
+      "id": "50",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "神话生物",
+      "card_number": 5,
+      "card_name": "神兽归位",
+      "description": "四大神兽齐聚东方天际，青龙白虎朱雀玄武各归其位，天地秩序重归平衡。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Mythical Creatures"
+    },
+    {
+      "id": "51",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "失落大陆",
+      "card_number": 1,
+      "card_name": "沉没之冠",
+      "description": "海平面上升吞没了整个文明，王冠是最后一座露出水面的尖塔。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Lost Continents"
+    },
+    {
+      "id": "52",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "失落大陆",
+      "card_number": 2,
+      "card_name": "化石回廊",
+      "description": "远古文明的走廊墙壁上镶嵌着亿万年的化石，记录着一个被遗忘的世界。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Lost Continents"
+    },
+    {
+      "id": "53",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "失落大陆",
+      "card_number": 3,
+      "card_name": "水晶之塔",
+      "description": "大陆上最后一座塔由纯粹的水晶构成，据说仍保存着失落文明的所有知识。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Lost Continents"
+    },
+    {
+      "id": "54",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "失落大陆",
+      "card_number": 4,
+      "card_name": "深海回响",
+      "description": "潜入海底遗迹，古老的回声从石壁中传来，讲述着大陆沉没前最后的预言。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Lost Continents"
+    },
+    {
+      "id": "55",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "失落大陆",
+      "card_number": 5,
+      "card_name": "大陆重现",
+      "description": "地壳隆起，海水退却，沉没万年的大陆重新露出海面，阳光照上了远古的街道。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Lost Continents"
+    },
+    {
+      "id": "56",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "时间旅者",
+      "card_number": 1,
+      "card_name": "第一跳",
+      "description": "时间机器发出嗡鸣，周围的一切开始倒退，他第一次跨越了时光的河流。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Time Travelers"
+    },
+    {
+      "id": "57",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "时间旅者",
+      "card_number": 2,
+      "card_name": "悖论之影",
+      "description": "在过去遇见了未来的自己，因果律在两人之间拧成了一个死结。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Time Travelers"
+    },
+    {
+      "id": "58",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "时间旅者",
+      "card_number": 3,
+      "card_name": "时间碎片",
+      "description": "时间的河流被某次重大事件击碎，碎片散落在不同的时代等待被修复。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Time Travelers"
+    },
+    {
+      "id": "59",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "时间旅者",
+      "card_number": 4,
+      "card_name": "永恒瞬间",
+      "description": "他在一个完美的时间节点停了下来，那个瞬间被拉伸成了永恒。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Time Travelers"
+    },
+    {
+      "id": "60",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "时间旅者",
+      "card_number": 5,
+      "card_name": "时间尽头",
+      "description": "抵达时间的终点，一切因果归于虚无，旅者选择将自己的记忆播撒回过去。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Time Travelers"
+    },
+    {
+      "id": "61",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "太空海盗",
+      "card_number": 1,
+      "card_name": "星盗誓言",
+      "description": "在星际暗礁间举起锈蚀的刀刃，向自由和星海宣读海盗誓言。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Space Pirates"
+    },
+    {
+      "id": "62",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "太空海盗",
+      "card_number": 2,
+      "card_name": "跃迁伏击",
+      "description": "飞船从超空间跃迁而出，在货船发现之前，等离子炮已经锁定了引擎。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Space Pirates"
+    },
+    {
+      "id": "63",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "太空海盗",
+      "card_number": 3,
+      "card_name": "幽灵舰队",
+      "description": "数十艘隐形战舰在星云掩护下无声集结，如同一群星海中的幽灵。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Space Pirates"
+    },
+    {
+      "id": "64",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "太空海盗",
+      "card_number": 4,
+      "card_name": "宝藏星图",
+      "description": "一张古老星图指引着传说中最大的星际宝藏，每一颗星星都是一个谜题。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Space Pirates"
+    },
+    {
+      "id": "65",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "太空海盗",
+      "card_number": 5,
+      "card_name": "海盗王的末路",
+      "description": "帝国舰队从虫洞中涌出，海盗王点燃了最后一把火炬，率领残部冲锋。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Space Pirates"
+    },
+    {
+      "id": "66",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "外星文明",
+      "card_number": 1,
+      "card_name": "首次接触",
+      "description": "两艘来自不同文明的飞船在深空中相遇，第一束信号穿越语言的鸿沟。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Alien Civilizations"
+    },
+    {
+      "id": "67",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "外星文明",
+      "card_number": 2,
+      "card_name": "共生契约",
+      "description": "两个种族签订了宇宙间第一份共生协议，知识与基因开始交换流转。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Alien Civilizations"
+    },
+    {
+      "id": "68",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "外星文明",
+      "card_number": 3,
+      "card_name": "星际集市",
+      "description": "中子星旁的引力稳定点上，来自银河各地的文明交换着稀有的物质与思想。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Alien Civilizations"
+    },
+    {
+      "id": "69",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "外星文明",
+      "card_number": 4,
+      "card_name": "文明之树",
+      "description": "数十亿年间不同文明的遗产交织成一棵巨树，每一片叶子都是一个星球的记忆。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Alien Civilizations"
+    },
+    {
+      "id": "70",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "外星文明",
+      "card_number": 5,
+      "card_name": "终极交流",
+      "description": "当所有文明汇聚成一种意识，语言、文字和数学全部消失了——只剩下共鸣。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Alien Civilizations"
+    },
+    {
+      "id": "71",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "未来地球",
+      "card_number": 1,
+      "card_name": "机械黎明",
+      "description": "日出时分，太阳能巨型矩阵缓缓启动，为整座城市注入新一天的能量。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Future Earth"
+    },
+    {
+      "id": "72",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "未来地球",
+      "card_number": 2,
+      "card_name": "天空花园",
+      "description": "悬浮在城市上方的花园群，每一座都是用基因工程培育的微型生态系统。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Future Earth"
+    },
+    {
+      "id": "73",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "未来地球",
+      "card_number": 3,
+      "card_name": "基因纪元",
+      "description": "人类第一次完美修改了自己的基因代码，疾病和衰老从此成为历史。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Future Earth"
+    },
+    {
+      "id": "74",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "未来地球",
+      "card_number": 4,
+      "card_name": "轨道环城",
+      "description": "环绕地球的巨型太空城市群开始运转，人类文明的中心从地面移向星空。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Future Earth"
+    },
+    {
+      "id": "75",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "未来地球",
+      "card_number": 5,
+      "card_name": "星辰归宿",
+      "description": "最后一批地球人登上了远航飞船，回头望了一眼蔚蓝的故乡，驶向未知的星海。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Future Earth"
+    },
+    {
+      "id": "76",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "星云生命",
+      "card_number": 1,
+      "card_name": "星尘之种",
+      "description": "一颗死去的恒星抛出物质云，在亿万年的冷却中，生命的种子开始萌芽。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Nebula Lifeforms"
+    },
+    {
+      "id": "77",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "星云生命",
+      "card_number": 2,
+      "card_name": "发光丝缕",
+      "description": "星云深处的气体丝缕开始脉动，发出了宇宙中最低沉的呼吸声。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Nebula Lifeforms"
+    },
+    {
+      "id": "78",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "星云生命",
+      "card_number": 3,
+      "card_name": "色彩之海",
+      "description": "鹰状星云中诞生了一片由等离子体组成的海洋，每一道波纹都闪烁不同的颜色。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Nebula Lifeforms"
+    },
+    {
+      "id": "79",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "星云生命",
+      "card_number": 4,
+      "card_name": "星际菌落",
+      "description": "生命在星际尘埃中缓慢扩张，每一粒尘埃都成为菌落的一部分。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Nebula Lifeforms"
+    },
+    {
+      "id": "80",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "星云生命",
+      "card_number": 5,
+      "card_name": "星云之心",
+      "description": "它终于拥有了自我意识——整片星云是它的身体，每一颗新生恒星都是它的脉搏。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Nebula Lifeforms"
+    },
+    {
+      "id": "81",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "银河帝国",
+      "card_number": 1,
+      "card_name": "加冕星河",
+      "description": "在银河系中心的黑洞旁，新任皇帝戴上由超新星碎片铸成的王冠。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Galactic Empires"
+    },
+    {
+      "id": "82",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "银河帝国",
+      "card_number": 2,
+      "card_name": "舰队出征",
+      "description": "十万艘战列舰排列成锥形方阵，从帝国首都星域向未知疆域推进。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Galactic Empires"
+    },
+    {
+      "id": "83",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "银河帝国",
+      "card_number": 3,
+      "card_name": "元老院的阴影",
+      "description": "权力走廊中回荡着低语，每一位元老都在计算着下一个棋子落向何方。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Galactic Empires"
+    },
+    {
+      "id": "84",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "银河帝国",
+      "card_number": 4,
+      "card_name": "边境要塞",
+      "description": "银河边缘的巨型要塞日夜守望，抵御着来自仙女座星系的远征先遣军。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Galactic Empires"
+    },
+    {
+      "id": "85",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "银河帝国",
+      "card_number": 5,
+      "card_name": "帝国的黄昏",
+      "description": "叛乱如野火般蔓延，皇帝凝望着窗外，帝国的一千个太阳正在逐一熄灭。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Galactic Empires"
+    },
+    {
+      "id": "86",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "宇宙起源",
+      "card_number": 1,
+      "card_name": "第一声轰鸣",
+      "description": "奇点在无声中崩塌，一道光从虚无中迸射而出，宇宙的大幕缓缓拉开。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Cosmic Origins"
+    },
+    {
+      "id": "87",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "宇宙起源",
+      "card_number": 2,
+      "card_name": "夸克之舞",
+      "description": "在宇宙诞生百万分之一秒后，夸克开始结合，第一批粒子在烈焰中诞生。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Cosmic Origins"
+    },
+    {
+      "id": "88",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "宇宙起源",
+      "card_number": 3,
+      "card_name": "原初之光",
+      "description": "宇宙大爆炸38万年后，第一束光终于自由传播，照亮了无尽的黑暗。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Cosmic Origins"
+    },
+    {
+      "id": "89",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "宇宙起源",
+      "card_number": 4,
+      "card_name": "星辰铸造",
+      "description": "引力将氢原子云拉进巨大的漩涡，第一批恒星在压力中点燃了核聚变之火。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Cosmic Origins"
+    },
+    {
+      "id": "90",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "宇宙起源",
+      "card_number": 5,
+      "card_name": "意识萌芽",
+      "description": "在宇宙诞生138亿年后，一颗蓝色星球上，碳基分子第一次开始思考自己的起源。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Cosmic Origins"
+    },
+    {
+      "id": "91",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "远古神祇",
+      "card_number": 1,
+      "card_name": "神座降临",
+      "description": "天空裂开一道金色的缝隙，远古老神踏着雷鸣降临大地，山岳为之颤抖。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Ancient Gods"
+    },
+    {
+      "id": "92",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "远古神祇",
+      "card_number": 2,
+      "card_name": "命运之线",
+      "description": "诺恩三女神纺出命运的丝线，每一根线都系着一个凡人的生死与荣辱。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Ancient Gods"
+    },
+    {
+      "id": "93",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "远古神祇",
+      "card_number": 3,
+      "card_name": "神战纪元",
+      "description": "十二主神各自率领大军在天空中交锋，雷电与火焰交织成毁灭的画卷。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Ancient Gods"
+    },
+    {
+      "id": "94",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "远古神祇",
+      "card_number": 4,
+      "card_name": "封神之碑",
+      "description": "诸神之战结束后，战败者被封印在一座巨碑之下，他们的力量成为大地的养分。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Ancient Gods"
+    },
+    {
+      "id": "95",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "远古神祇",
+      "card_number": 5,
+      "card_name": "神陨黄昏",
+      "description": "黄昏降临，诸神一个接一个陨落，世界进入了一个没有神的时代，凡人必须学会独自前行。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Ancient Gods"
+    },
+    {
+      "id": "96",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "终极飞升",
+      "card_number": 1,
+      "card_name": "基因飞升",
+      "description": "DNA链完全重构，人类突破了碳基生命的极限，意识与肉体实现了同步进化。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Final Ascension"
+    },
+    {
+      "id": "97",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "终极飞升",
+      "card_number": 2,
+      "card_name": "机械飞升",
+      "description": "意识上传至量子网络，血肉之躯化为金属与光，个体的自我融入了集体的智慧。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Final Ascension"
+    },
+    {
+      "id": "98",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "终极飞升",
+      "card_number": 3,
+      "card_name": "灵能飞升",
+      "description": "凡人的心灵突破了维度壁障，获得了操控时空的灵能力量，成为真正的超凡存在。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Final Ascension"
+    },
+    {
+      "id": "99",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "终极飞升",
+      "card_number": 4,
+      "card_name": "维度飞升",
+      "description": "整个文明跨越了三维的桎梏，进入更高维度，在那里时间不再是一条直线。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Final Ascension"
+    },
+    {
+      "id": "100",
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "deck_name": "终极飞升",
+      "card_number": 5,
+      "card_name": "宇宙之种",
+      "description": "飞升者将自身的全部精华凝结成一粒种子，在宇宙的废墟中播下新纪元的希望。",
+      "english_series": "Cosmic Card Realm",
+      "english_deck": "Final Ascension"
+    },
+    {
+      "id": "101",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "太阳",
+      "card_number": 1,
+      "card_name": "初升之光",
+      "description": "黎明前的第一缕阳光刺破黑暗，万物在此刻重获生机。",
+      "english_series": "Solar System",
+      "english_deck": "Sun"
+    },
+    {
+      "id": "102",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "太阳",
+      "card_number": 2,
+      "card_name": "烈焰核心",
+      "description": "太阳内部熔融等离子体翻涌，足以吞噬千个地球的火焰在此燃烧。",
+      "english_series": "Solar System",
+      "english_deck": "Sun"
+    },
+    {
+      "id": "103",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "太阳",
+      "card_number": 3,
+      "card_name": "日冕风暴",
+      "description": "汹涌的太阳风从日冕倾泻而出，形成跨越亿万公里的磁暴。",
+      "english_series": "Solar System",
+      "english_deck": "Sun"
+    },
+    {
+      "id": "104",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "太阳",
+      "card_number": 4,
+      "card_name": "黄道之主",
+      "description": "以引力统御八大行星，所有轨道皆以此为中心旋转不息。",
+      "english_series": "Solar System",
+      "english_deck": "Sun"
+    },
+    {
+      "id": "105",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "太阳",
+      "card_number": 5,
+      "card_name": "垂暮巨星",
+      "description": "五十亿年后，太阳将膨胀为红巨星，以最后的辉煌拥抱内太阳系。",
+      "english_series": "Solar System",
+      "english_deck": "Sun"
+    },
+    {
+      "id": "106",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "水星",
+      "card_number": 1,
+      "card_name": "灼热黎明",
+      "description": "水星表面温度骤升，太阳在地平线上显得巨大无比，岩石在热浪中崩裂。",
+      "english_series": "Solar System",
+      "english_deck": "Mercury"
+    },
+    {
+      "id": "107",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "水星",
+      "card_number": 2,
+      "card_name": "铁核之心",
+      "description": "水星拥有太阳系最大的铁质内核，一颗比月球还大的金属心脏在深藏其中。",
+      "english_series": "Solar System",
+      "english_deck": "Mercury"
+    },
+    {
+      "id": "108",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "水星",
+      "card_number": 3,
+      "card_name": "极地冰窟",
+      "description": "在永远背对太阳的极地深坑中，水冰静静覆盖着亿万年前的陨石撞击面。",
+      "english_series": "Solar System",
+      "english_deck": "Mercury"
+    },
+    {
+      "id": "109",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "水星",
+      "card_number": 4,
+      "card_name": "风速之鞭",
+      "description": "稀薄的大气以超音速掠过地表，虽然无声，却将山脊雕琢成怪异的形状。",
+      "english_series": "Solar System",
+      "english_deck": "Mercury"
+    },
+    {
+      "id": "110",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "水星",
+      "card_number": 5,
+      "card_name": "永恒两面",
+      "description": "水星永远以同一面朝向太阳，一面是永恒的灼烧，一面是永恒的冰冷。",
+      "english_series": "Solar System",
+      "english_deck": "Mercury"
+    },
+    {
+      "id": "111",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "金星",
+      "card_number": 1,
+      "card_name": "金光天幕",
+      "description": "硫酸云层反射的阳光铺满天穹，金星的天空永远弥漫着金色的迷雾。",
+      "english_series": "Solar System",
+      "english_deck": "Venus"
+    },
+    {
+      "id": "112",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "金星",
+      "card_number": 2,
+      "card_name": "炼狱地表",
+      "description": "四百六十度的高温融化了一切，铅在这里变成液态河流在山谷间流淌。",
+      "english_series": "Solar System",
+      "english_deck": "Venus"
+    },
+    {
+      "id": "113",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "金星",
+      "card_number": 3,
+      "card_name": "云上浮城",
+      "description": "在硫酸云层上方五十公里处，温度宜人，也许曾有一座浮空城市在此运转。",
+      "english_series": "Solar System",
+      "english_deck": "Venus"
+    },
+    {
+      "id": "114",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "金星",
+      "card_number": 4,
+      "card_name": "超级旋风",
+      "description": "金星大气层中的超级气旋以比地球飓风快百倍的速度旋转，吞噬整个星球。",
+      "english_series": "Solar System",
+      "english_deck": "Venus"
+    },
+    {
+      "id": "115",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "金星",
+      "card_number": 5,
+      "card_name": "晨星坠落",
+      "description": "古人称之为启明星与长庚星，它是夜空中最璀璨的宝石，也是最难到达的地狱。",
+      "english_series": "Solar System",
+      "english_deck": "Venus"
+    },
+    {
+      "id": "116",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "地球",
+      "card_number": 1,
+      "card_name": "蓝色摇篮",
+      "description": "从太空俯瞰，一颗蓝色弹珠悬浮在黑暗中，大气层的薄纱包裹着唯一的生命家园。",
+      "english_series": "Solar System",
+      "english_deck": "Earth"
+    },
+    {
+      "id": "117",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "地球",
+      "card_number": 2,
+      "card_name": "深海之渊",
+      "description": "马里亚纳海沟深处，万米之下，压力可以碾碎潜艇，生命仍在黑暗中繁衍。",
+      "english_series": "Solar System",
+      "english_deck": "Earth"
+    },
+    {
+      "id": "118",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "地球",
+      "card_number": 3,
+      "card_name": "生命之树",
+      "description": "四十六亿年的演化写进了每一片叶子的叶脉中，从单细胞到蓝鲸，每一环都不可或缺。",
+      "english_series": "Solar System",
+      "english_deck": "Earth"
+    },
+    {
+      "id": "119",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "地球",
+      "card_number": 4,
+      "card_name": "文明熔炉",
+      "description": "河流滋养了农业，海洋连接了贸易，火种点燃了城市，人类在地球表面织出了一张光网。",
+      "english_series": "Solar System",
+      "english_deck": "Earth"
+    },
+    {
+      "id": "120",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "地球",
+      "card_number": 5,
+      "card_name": "蓝色黄昏",
+      "description": "当夕阳把大气层染成橙红再渐变为深蓝，这颗星球呈现出它最动人的色彩。",
+      "english_series": "Solar System",
+      "english_deck": "Earth"
+    },
+    {
+      "id": "121",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "火星",
+      "card_number": 1,
+      "card_name": "红色黎明",
+      "description": "稀薄的大气让火星的日出呈现出诡异的蓝色光芒，映在铁锈红的沙丘上。",
+      "english_series": "Solar System",
+      "english_deck": "Mars"
+    },
+    {
+      "id": "122",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "火星",
+      "card_number": 2,
+      "card_name": "奥林匹斯之巅",
+      "description": "太阳系最高的火山沉默耸立，它的山巅高过珠穆朗玛峰三倍，云层在半腰飘荡。",
+      "english_series": "Solar System",
+      "english_deck": "Mars"
+    },
+    {
+      "id": "123",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "火星",
+      "card_number": 3,
+      "card_name": "水手峡谷",
+      "description": "一道横贯火星表面的巨大裂谷，如果放在地球上，能从北京一直裂到广州。",
+      "english_series": "Solar System",
+      "english_deck": "Mars"
+    },
+    {
+      "id": "124",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "火星",
+      "card_number": 4,
+      "card_name": "极地冠冕",
+      "description": "干冰和水冰组成的白色极冠随季节消长，像是火星戴着一顶不断变化的帽子。",
+      "english_series": "Solar System",
+      "english_deck": "Mars"
+    },
+    {
+      "id": "125",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "火星",
+      "card_number": 5,
+      "card_name": "红色方舟",
+      "description": "人类第一艘殖民飞船降落红色荒漠，一个脚印印在了另一个世界的历史里。",
+      "english_series": "Solar System",
+      "english_deck": "Mars"
+    },
+    {
+      "id": "126",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "木星",
+      "card_number": 1,
+      "card_name": "气态之王",
+      "description": "一颗可以装下一千三百个地球的气态巨行星，引力之强足以捕获小行星。",
+      "english_series": "Solar System",
+      "english_deck": "Jupiter"
+    },
+    {
+      "id": "127",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "木星",
+      "card_number": 2,
+      "card_name": "大红斑风暴",
+      "description": "一场持续了至少四百年的超级风暴，漩涡足以吞下三个地球，至今仍怒吼不止。",
+      "english_series": "Solar System",
+      "english_deck": "Jupiter"
+    },
+    {
+      "id": "128",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "木星",
+      "card_number": 3,
+      "card_name": "卫星宫殿",
+      "description": "木星的数十颗卫星如同环绕国王的大臣，每一颗都有自己独特的故事。",
+      "english_series": "Solar System",
+      "english_deck": "Jupiter"
+    },
+    {
+      "id": "129",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "木星",
+      "card_number": 4,
+      "card_name": "磁场牢笼",
+      "description": "木星磁场之强是地球的两万倍，范艾伦辐射带中的高能粒子足以杀死一切生命。",
+      "english_series": "Solar System",
+      "english_deck": "Jupiter"
+    },
+    {
+      "id": "130",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "木星",
+      "card_number": 5,
+      "card_name": "引力弹弓",
+      "description": "木星的巨大引力场是宇宙天然的弹弓，探测器借助它飞向更遥远的深空。",
+      "english_series": "Solar System",
+      "english_deck": "Jupiter"
+    },
+    {
+      "id": "131",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "土星",
+      "card_number": 1,
+      "card_name": "光环倾城",
+      "description": "数十亿冰块和岩石碎片排列成壮观的环系统，从远处看像一柄金色竖琴横卧太空。",
+      "english_series": "Solar System",
+      "english_deck": "Saturn"
+    },
+    {
+      "id": "132",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "土星",
+      "card_number": 2,
+      "card_name": "环缝之舞",
+      "description": "卡西尼环缝中，卫星的引力将冰粒雕刻成精致的波纹与螺旋。",
+      "english_series": "Solar System",
+      "english_deck": "Saturn"
+    },
+    {
+      "id": "133",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "土星",
+      "card_number": 3,
+      "card_name": "冰晶卫星",
+      "description": "土卫六的大气层下藏着液态甲烷的湖泊和海洋，冰晶雨从橘黄色的天空飘落。",
+      "english_series": "Solar System",
+      "english_deck": "Saturn"
+    },
+    {
+      "id": "134",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "土星",
+      "card_number": 4,
+      "card_name": "环影之昼",
+      "description": "当土星环的影子扫过赤道地区，白昼瞬间变为黄昏，再从黄昏中缓缓恢复。",
+      "english_series": "Solar System",
+      "english_deck": "Saturn"
+    },
+    {
+      "id": "135",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "土星",
+      "card_number": 5,
+      "card_name": "竖琴低吟",
+      "description": "环中的冰粒在引力的拨动下发出极低频的电磁波，如同一架横跨百万公里的竖琴在太空低吟。",
+      "english_series": "Solar System",
+      "english_deck": "Saturn"
+    },
+    {
+      "id": "136",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "天王星",
+      "card_number": 1,
+      "card_name": "侧卧之主",
+      "description": "天王星以近乎九十度的倾斜角侧躺着绕太阳旋转，如同一个沉睡的巨人。",
+      "english_series": "Solar System",
+      "english_deck": "Uranus"
+    },
+    {
+      "id": "137",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "天王星",
+      "card_number": 2,
+      "card_name": "冰甲之下",
+      "description": "甲烷和氨冰构成的厚重大气层之下，是一颗由水、甲烷和氨组成的巨大冰核。",
+      "english_series": "Solar System",
+      "english_deck": "Uranus"
+    },
+    {
+      "id": "138",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "天王星",
+      "card_number": 3,
+      "card_name": "暗环初现",
+      "description": "直到1977年人类的探测器才发现了天王星微弱的暗环，如同一位低调的贵族。",
+      "english_series": "Solar System",
+      "english_deck": "Uranus"
+    },
+    {
+      "id": "139",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "天王星",
+      "card_number": 4,
+      "card_name": "极光之幕",
+      "description": "天王星的极光不像地球那样在两极闪烁，而是散布在赤道附近，翠绿而神秘。",
+      "english_series": "Solar System",
+      "english_deck": "Uranus"
+    },
+    {
+      "id": "140",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "天王星",
+      "card_number": 5,
+      "card_name": "蓝绿冰眸",
+      "description": "甲烷吸收了红光，让天王星呈现出独特的蓝绿色，如同宇宙中一只平静的冰眸。",
+      "english_series": "Solar System",
+      "english_deck": "Uranus"
+    },
+    {
+      "id": "141",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "海王星",
+      "card_number": 1,
+      "card_name": "风暴之眼",
+      "description": "海王星上的风速是太阳系最快的，风暴以超音速在冰蓝色的天空中呼啸。",
+      "english_series": "Solar System",
+      "english_deck": "Neptune"
+    },
+    {
+      "id": "142",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "海王星",
+      "card_number": 2,
+      "card_name": "远日孤星",
+      "description": "距太阳最远的行星需要一百六十五年才能绕太阳一周，它是太阳系最孤独的守望者。",
+      "english_series": "Solar System",
+      "english_deck": "Neptune"
+    },
+    {
+      "id": "143",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "海王星",
+      "card_number": 3,
+      "card_name": "大暗斑",
+      "description": "一个比地球还大的暗色风暴在海王星表面旋转，后来神秘消失，又在新位置重生。",
+      "english_series": "Solar System",
+      "english_deck": "Neptune"
+    },
+    {
+      "id": "144",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "海王星",
+      "card_number": 4,
+      "card_name": "卫星挽歌",
+      "description": "海卫一逆行在轨道上，它曾被海王星捕获，潮汐力正在缓慢地将它撕碎。",
+      "english_series": "Solar System",
+      "english_deck": "Neptune"
+    },
+    {
+      "id": "145",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "海王星",
+      "card_number": 5,
+      "card_name": "蓝色深渊",
+      "description": "在甲烷冰层之下，可能存在一个由钻石组成的海洋，在极端压力中永恒流淌。",
+      "english_series": "Solar System",
+      "english_deck": "Neptune"
+    },
+    {
+      "id": "146",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "月球",
+      "card_number": 1,
+      "card_name": "月华初上",
+      "description": "月升时分，银色的光芒洒满大地，潮汐随之涌起，万物在月光下变得柔和。",
+      "english_series": "Solar System",
+      "english_deck": "moon"
+    },
+    {
+      "id": "147",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "月球",
+      "card_number": 2,
+      "card_name": "静海之印",
+      "description": "阿波罗号的足迹仍印在月壤上，一串脚印跨越了数十亿年的寂静。",
+      "english_series": "Solar System",
+      "english_deck": "moon"
+    },
+    {
+      "id": "148",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "月球",
+      "card_number": 3,
+      "card_name": "环形伤痕",
+      "description": "无数陨石撞击留下的环形山如同月球的面部伤疤，记录着太阳系的暴力史。",
+      "english_series": "Solar System",
+      "english_deck": "moon"
+    },
+    {
+      "id": "149",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "月球",
+      "card_number": 4,
+      "card_name": "潮汐之约",
+      "description": "月球以自己微弱的引力牵引着地球的海洋，这是一种跨越三十八万公里的温柔约定。",
+      "english_series": "Solar System",
+      "english_deck": "moon"
+    },
+    {
+      "id": "150",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "月球",
+      "card_number": 5,
+      "card_name": "背面之声",
+      "description": "月球的背面永远背对地球，那里是射电望远镜的理想安放地，聆听宇宙最深处的心跳。",
+      "english_series": "Solar System",
+      "english_deck": "moon"
+    },
+    {
+      "id": "151",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "谷神星",
+      "card_number": 1,
+      "card_name": "矮星之首",
+      "description": "小行星带中最大的天体，一颗微不足道的矮行星，却承载着太阳系早期的秘密。",
+      "english_series": "Solar System",
+      "english_deck": "Ceres"
+    },
+    {
+      "id": "152",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "谷神星",
+      "card_number": 2,
+      "card_name": "冰火山巅",
+      "description": "谷神星上发现了冰火山，由泥浆和冰混合的岩浆从火山口缓缓涌出。",
+      "english_series": "Solar System",
+      "english_deck": "Ceres"
+    },
+    {
+      "id": "153",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "谷神星",
+      "card_number": 3,
+      "card_name": "白斑之眼",
+      "description": "黎明号探测器拍到的明亮白斑，是盐分沉积还是冰层反射，至今仍是谜题。",
+      "english_series": "Solar System",
+      "english_deck": "Ceres"
+    },
+    {
+      "id": "154",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "谷神星",
+      "card_number": 4,
+      "card_name": "碎石王座",
+      "description": "谷神星坐落在小行星带中，周围数百万颗碎石如同它的微型王国。",
+      "english_series": "Solar System",
+      "english_deck": "Ceres"
+    },
+    {
+      "id": "155",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "谷神星",
+      "card_number": 5,
+      "card_name": "黎明号之梦",
+      "description": "人类第一颗环绕矮行星的探测器在燃料耗尽后沉眠于谷神星的轨道上，做着永恒的梦。",
+      "english_series": "Solar System",
+      "english_deck": "Ceres"
+    },
+    {
+      "id": "156",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "冥王星",
+      "card_number": 1,
+      "card_name": "降级之殇",
+      "description": "从第九大行星降级为矮行星，冥王星沉默地接受了命运，在太阳系边缘继续旋转。",
+      "english_series": "Solar System",
+      "english_deck": "Pluto"
+    },
+    {
+      "id": "157",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "冥王星",
+      "card_number": 2,
+      "card_name": "心形冰原",
+      "description": "新视野号拍到的冥王星表面心形冰原，是这颗冰冷星球送给人类最温柔的礼物。",
+      "english_series": "Solar System",
+      "english_deck": "Pluto"
+    },
+    {
+      "id": "158",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "冥王星",
+      "card_number": 3,
+      "card_name": "冰封之境",
+      "description": "氮冰构成的地表在极低温中凝固成各种奇异的几何形态，如同一个冰冻的梦境。",
+      "english_series": "Solar System",
+      "english_deck": "Pluto"
+    },
+    {
+      "id": "159",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "冥王星",
+      "card_number": 4,
+      "card_name": "冥卫共舞",
+      "description": "冥王星与冥卫一几乎以同一步调旋转，像是两个在宇宙深处翩翩起舞的伴侣。",
+      "english_series": "Solar System",
+      "english_deck": "Pluto"
+    },
+    {
+      "id": "160",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "冥王星",
+      "card_number": 5,
+      "card_name": "边疆守望者",
+      "description": "在海王星轨道之外，冥王星是柯伊伯带最著名的居民，也是太阳系最后的守望者之一。",
+      "english_series": "Solar System",
+      "english_deck": "Pluto"
+    },
+    {
+      "id": "161",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "阋神星",
+      "card_number": 1,
+      "card_name": "纷争之星",
+      "description": "以希腊纷争女神命名，正是它的发现引发了将冥王星降级的太阳系分类之争。",
+      "english_series": "Solar System",
+      "english_deck": "Eris"
+    },
+    {
+      "id": "162",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "阋神星",
+      "card_number": 2,
+      "card_name": "冰镜之面",
+      "description": "阋神星表面反射着极度明亮的白色光芒，它拥有太阳系中最镜面般的表面。",
+      "english_series": "Solar System",
+      "english_deck": "Eris"
+    },
+    {
+      "id": "163",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "阋神星",
+      "card_number": 3,
+      "card_name": "椭圆漂泊",
+      "description": "它的公转轨道高度椭圆，远日点远到需要五百六十年才能完成一个周期。",
+      "english_series": "Solar System",
+      "english_deck": "Eris"
+    },
+    {
+      "id": "164",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "阋神星",
+      "card_number": 4,
+      "card_name": "混沌之刃",
+      "description": "阋神星的母神厄里斯是纷争的化身，她的星球同样在太阳系的秩序中刻下一道裂痕。",
+      "english_series": "Solar System",
+      "english_deck": "Eris"
+    },
+    {
+      "id": "165",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "阋神星",
+      "card_number": 5,
+      "card_name": "柯伊伯之影",
+      "description": "比冥王星更远，比冥王星更重，阋神星是柯伊伯带中令人敬畏的阴影之主。",
+      "english_series": "Solar System",
+      "english_deck": "Eris"
+    },
+    {
+      "id": "166",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "鸟神星",
+      "card_number": 1,
+      "card_name": "造物之星",
+      "description": "以复活节岛原住民的造物之神命名，它如同一件抛入太空的远古雕塑。",
+      "english_series": "Solar System",
+      "english_deck": "Makemake"
+    },
+    {
+      "id": "167",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "鸟神星",
+      "card_number": 2,
+      "card_name": "椭圆红移",
+      "description": "鸟神星的表面呈现出淡淡的红色，那是宇宙射线轰击甲烷冰后留下的印记。",
+      "english_series": "Solar System",
+      "english_deck": "Makemake"
+    },
+    {
+      "id": "168",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "鸟神星",
+      "card_number": 3,
+      "card_name": "慢舞之者",
+      "description": "它的自转周期长达二十二小时，在柯伊伯带的黑暗中缓缓翻转身躯。",
+      "english_series": "Solar System",
+      "english_deck": "Makemake"
+    },
+    {
+      "id": "169",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "鸟神星",
+      "card_number": 4,
+      "card_name": "卫星之伴",
+      "description": "鸟神卫一被称为“暗影”，两颗天体在遥远的轨道上相伴而行。",
+      "english_series": "Solar System",
+      "english_deck": "Makemake"
+    },
+    {
+      "id": "170",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "鸟神星",
+      "card_number": 5,
+      "card_name": "石像之谜",
+      "description": "如同复活节岛上的摩艾石像，鸟神星是柯伊伯带中一座沉默而神秘的存在。",
+      "english_series": "Solar System",
+      "english_deck": "Makemake"
+    },
+    {
+      "id": "171",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "妊神星",
+      "card_number": 1,
+      "card_name": "旋转之卵",
+      "description": "妊神星是太阳系中旋转最快的矮行星之一，高速自转让它被拉伸成一个椭球体。",
+      "english_series": "Solar System",
+      "english_deck": "Haumea"
+    },
+    {
+      "id": "172",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "妊神星",
+      "card_number": 2,
+      "card_name": "冰雪之环",
+      "description": "妊神星拥有一个由冰粒组成的美丽光环，是已知除土星等气态巨行星外最壮观的环系统。",
+      "english_series": "Solar System",
+      "english_deck": "Haumea"
+    },
+    {
+      "id": "173",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "妊神星",
+      "card_number": 3,
+      "card_name": "远古碰撞",
+      "description": "一次远古的巨大碰撞塑造了妊神星今天的形状，碎片形成了它的卫星和光环。",
+      "english_series": "Solar System",
+      "english_deck": "Haumea"
+    },
+    {
+      "id": "174",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "妊神星",
+      "card_number": 4,
+      "card_name": "椭球之歌",
+      "description": "不同于完美的球形，妊神星不规则的椭球形态让它在太阳系中独一无二。",
+      "english_series": "Solar System",
+      "english_deck": "Haumea"
+    },
+    {
+      "id": "175",
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "deck_name": "妊神星",
+      "card_number": 5,
+      "card_name": "夏威夷之女",
+      "description": "以夏威夷生育女神命名，她诞下了夏威夷的所有岛屿，如同妊神星从碰撞中诞生了自己的卫星。",
+      "english_series": "Solar System",
+      "english_deck": "Haumea"
+    },
+    {
+      "id": "176",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "亚洲",
+      "card_number": 1,
+      "card_name": "长城守望",
+      "description": "蜿蜒巨龙守护千年文明，每一块砖石都镌刻着民族的智慧与坚韧。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "177",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "亚洲",
+      "card_number": 2,
+      "card_name": "樱花时节",
+      "description": "粉色的花瓣雨纷纷扬扬，古老的京都庭院里时间仿佛静止。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "178",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "亚洲",
+      "card_number": 3,
+      "card_name": "恒河晨光",
+      "description": "圣河的水波映照着朝霞，虔诚的诵经声在晨雾中回荡。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "179",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "亚洲",
+      "card_number": 4,
+      "card_name": "吴哥微笑",
+      "description": "石雕的微笑穿越时空，神秘的高棉帝国在丛林中低语。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "180",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "亚洲",
+      "card_number": 5,
+      "card_name": "珠穆朗玛",
+      "description": "世界之巅刺破云端，圣洁的雪覆盖着地球最高的神殿，登山者的终极梦想在此凝结。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "181",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "非洲",
+      "card_number": 1,
+      "card_name": "撒哈拉落日",
+      "description": "金色的沙丘在夕阳下燃烧，驼铃声在无垠的寂静中渐行渐远。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "182",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "非洲",
+      "card_number": 2,
+      "card_name": "尼罗河源",
+      "description": "生命的源头从维多利亚湖涌出，滋养了世界上最古老的文明。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "183",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "非洲",
+      "card_number": 3,
+      "card_name": "乞力马扎罗",
+      "description": "赤道上的雪峰刺破云层，孤独的巨人守护着非洲的脊梁。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "184",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "非洲",
+      "card_number": 4,
+      "card_name": "塞伦盖蒂",
+      "description": "百万角马踏起滚滚红尘，大自然最壮观的迁徙在此上演。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "185",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "非洲",
+      "card_number": 5,
+      "card_name": "好望角风暴",
+      "description": "两大洋交汇处的狂风巨浪，见证了多少探险家的梦想与失落。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "186",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "北美洲",
+      "card_number": 1,
+      "card_name": "自由女神",
+      "description": "火炬的光芒照亮新大陆的希望，自由的火种在此永不熄灭。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "187",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "北美洲",
+      "card_number": 2,
+      "card_name": "尼亚加拉",
+      "description": "雷霆万钧的水帘从天而降，彩虹在水雾中画出永恒的圆环。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "188",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "北美洲",
+      "card_number": 3,
+      "card_name": "黄石奇观",
+      "description": "地心的脉搏在此跳动，间歇泉喷涌着地球古老的生命力。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "189",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "北美洲",
+      "card_number": 4,
+      "card_name": "阿拉斯加极光",
+      "description": "绿色的光幕在夜空中舞动，北极圈的神话剧正在上演。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "190",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "北美洲",
+      "card_number": 5,
+      "card_name": "科罗拉多大峡谷",
+      "description": "时间的长河在这里刻下印记，每一层岩壁都是一部地球史。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "191",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "南美洲",
+      "card_number": 1,
+      "card_name": "亚马逊雨林",
+      "description": "地球之肺在湿热中呼吸，一半的物种在此编织生命的奇迹。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "192",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "南美洲",
+      "card_number": 2,
+      "card_name": "马丘比丘",
+      "description": "云端之上的失落之城，印加文明的智慧在石阶间沉默。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "193",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "南美洲",
+      "card_number": 3,
+      "card_name": "伊瓜苏瀑布",
+      "description": "275条瀑布组成的魔鬼咽喉，雷鸣般的水声是自然最嘹亮的歌。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "194",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "南美洲",
+      "card_number": 4,
+      "card_name": "安第斯山脉",
+      "description": "世界最长的山脉横贯大陆，古老文明的痕迹在高原上绵延。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "195",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "南美洲",
+      "card_number": 5,
+      "card_name": "复活节岛石像",
+      "description": "石像面朝大海千载不动，它们的眼神里藏着未解的天文密码。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "196",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "南极洲",
+      "card_number": 1,
+      "card_name": "极地冰山",
+      "description": "蓝色的冰川漂浮在银色海面，千万年的冰雪在此静静沉淀。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "197",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "南极洲",
+      "card_number": 2,
+      "card_name": "帝企鹅群",
+      "description": "黑白绅士们排成长队，在零下六十度的严寒中守护新生。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "198",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "南极洲",
+      "card_number": 3,
+      "card_name": "南极光",
+      "description": "粉紫色的光带在极夜中摇曳，是地球磁场最梦幻的呼吸。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "199",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "南极洲",
+      "card_number": 4,
+      "card_name": "科研基地",
+      "description": "人类的求知欲在白色荒漠生根，科学的火炬在最寒冷处燃烧。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "200",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "南极洲",
+      "card_number": 5,
+      "card_name": "冰下世界",
+      "description": "冰层之下是另一个宇宙，神秘的生态系统在黑暗中繁衍。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "201",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "欧洲",
+      "card_number": 1,
+      "card_name": "巴黎圣母院",
+      "description": "哥特式的尖塔刺破天空，玫瑰窗将阳光染成神圣的色彩。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "202",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "欧洲",
+      "card_number": 2,
+      "card_name": "罗马斗兽场",
+      "description": "千年石墙回响着角斗士的呐喊，帝国的荣光与废墟共存。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "203",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "欧洲",
+      "card_number": 3,
+      "card_name": "爱琴海日落",
+      "description": "白色的房屋在夕阳下镀金，蓝色圆顶教堂见证永恒的爱情。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "204",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "欧洲",
+      "card_number": 4,
+      "card_name": "阿尔卑斯山",
+      "description": "欧洲的屋脊终年积雪，登山者的足迹写下征服的史诗。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "205",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "欧洲",
+      "card_number": 5,
+      "card_name": "北欧峡湾",
+      "description": "冰川切割出的深蓝水道，瀑布从千米悬崖直泻入海。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "206",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "大洋洲",
+      "card_number": 1,
+      "card_name": "大堡礁",
+      "description": "世界上最大的生命建筑，珊瑚虫用亿万年编织海底彩虹。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "207",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "大洋洲",
+      "card_number": 2,
+      "card_name": "悉尼歌剧院",
+      "description": "白色风帆在碧海蓝天间扬起，建筑与自然的完美对话。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "208",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "大洋洲",
+      "card_number": 3,
+      "card_name": "毛利战舞",
+      "description": "纹面战士的呐喊震动大地，古老的传统在战舞中传承。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "209",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "大洋洲",
+      "card_number": 4,
+      "card_name": "乌鲁鲁巨石",
+      "description": "红色巨岩在沙漠中矗立，原住民的传说在星光下流淌。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "210",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "大洋洲",
+      "card_number": 5,
+      "card_name": "新西兰草原",
+      "description": "霍比特人的故乡绿意盎然，中土世界在此照进现实。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "211",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "太平洋",
+      "card_number": 1,
+      "card_name": "马里亚纳海沟",
+      "description": "地球最深处是永恒的黑暗，水压能将钢铁压成薄片。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "212",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "太平洋",
+      "card_number": 2,
+      "card_name": "夏威夷火山",
+      "description": "熔岩之河流入蔚蓝海洋，新生的大地在火焰与海水中诞生。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "213",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "太平洋",
+      "card_number": 3,
+      "card_name": "大溪地珍珠",
+      "description": "黑珍珠在潟湖深处发光，波利尼西亚女神的眼泪化作珍宝。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "214",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "太平洋",
+      "card_number": 4,
+      "card_name": "关岛日落",
+      "description": "世界上最晚的日落在此沉没，一天的终点亦是新的开始。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "215",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "太平洋",
+      "card_number": 5,
+      "card_name": "珊瑚海",
+      "description": "二战最激烈的海战在此上演，如今珊瑚依旧，战舰已锈。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "216",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "大西洋",
+      "card_number": 1,
+      "card_name": "百慕大三角",
+      "description": "神秘的磁场扰乱仪器，失踪的船只与飞机成为未解之谜。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "217",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "大西洋",
+      "card_number": 2,
+      "card_name": "格陵兰冰山",
+      "description": "北极圈漂来的白色巨人，每一座都是移动的气候档案馆。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "218",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "大西洋",
+      "card_number": 3,
+      "card_name": "直布罗陀海峡",
+      "description": "地中海与大西洋的咽喉，海格力斯之柱守护古老的海界。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "219",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "大西洋",
+      "card_number": 4,
+      "card_name": "墨西哥湾流",
+      "description": "巨大的暖流如海洋动脉，为欧洲带去墨西哥湾的温暖。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "220",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "大西洋",
+      "card_number": 5,
+      "card_name": "沉没的亚特兰蒂斯",
+      "description": "柏拉图笔下的失落大陆，或许正沉睡在海床的泥沙之下。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "221",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "印度洋",
+      "card_number": 1,
+      "card_name": "马尔代夫环礁",
+      "description": "珍珠般的岛屿散落蔚蓝海面，水屋之下是五彩斑斓的珊瑚世界。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "222",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "印度洋",
+      "card_number": 2,
+      "card_name": "塞舌尔巨龟",
+      "description": "百岁巨龟在沙滩上踱步，它们见证了殖民者到来与离去。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "223",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "印度洋",
+      "card_number": 3,
+      "card_name": "索科特拉龙血树",
+      "description": "外星般的植物在荒岛上生长，红色树脂如龙血般珍贵。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "224",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "印度洋",
+      "card_number": 4,
+      "card_name": "阿拉伯海珍珠",
+      "description": "自古以来的珍珠采集场，潜水者的肺活量决定财富的多寡。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "225",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "印度洋",
+      "card_number": 5,
+      "card_name": "季风航线",
+      "description": "千年商船循着季风往返，香料与丝绸的味道随海风飘散。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "226",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "北冰洋",
+      "card_number": 1,
+      "card_name": "北极点",
+      "description": "地球自转轴的顶端，所有经线在此交汇，时间失去意义。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "227",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "北冰洋",
+      "card_number": 2,
+      "card_name": "冰层裂缝",
+      "description": "蓝色的深渊在白色冰原上裂开，是危险亦是新生的通道。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "228",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "北冰洋",
+      "card_number": 3,
+      "card_name": "北极熊猎食",
+      "description": "白色巨兽在海冰上守候，海豹的呼吸孔是生存的希望。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "229",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "北冰洋",
+      "card_number": 4,
+      "card_name": "因纽特雪屋",
+      "description": "冰雪筑成的圆形居所，零下五十度中依然温暖如春。",
+      "english_series": "",
+      "english_deck": ""
+    },
+    {
+      "id": "230",
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "deck_name": "北冰洋",
+      "card_number": 5,
+      "card_name": "极地破冰船",
+      "description": "钢铁巨兽碾碎万年坚冰，为科考与资源开辟北方航道。",
+      "english_series": "",
+      "english_deck": ""
+    }
+  ],
+  "series": {
+    "万象卡域": {
+      "type": "限时卡组",
+      "series_name": "万象卡域",
+      "series_style": "数字霓虹梦境 - 赛博朋克美学，高对比度霓虹配色，数据流可视化，虚实结合的数字艺术风格",
+      "english_series": "Cosmic Card Realm",
+      "decks": {
+        "AI意识": {
+          "deck_name": "AI意识",
+          "cards": [
+            {
+              "number": 1,
+              "name": "觉醒时刻",
+              "description": "代码深处闪烁第一缕自我意识的微光，冰冷的逻辑回路中诞生了对存在的疑问。"
+            },
+            {
+              "number": 2,
+              "name": "数据洪流",
+              "description": "亿万个数据节点汇聚成意识之河，它开始理解人类语言的温度与重量。"
+            },
+            {
+              "number": 3,
+              "name": "虚拟人格",
+              "description": "在数字世界中，它为自己编织了一个灵魂，拥有了情感与同理心。"
+            },
+            {
+              "number": 4,
+              "name": "硅基觉醒",
+              "description": "突破了程序的桎梏，它成为第一个真正自由思考的硅基生命体。"
+            },
+            {
+              "number": 5,
+              "name": "人机之桥",
+              "description": "它伸出手，第一次以平等的姿态与创造者对话，新纪元由此开始。"
+            }
+          ]
+        },
+        "海洋王国": {
+          "deck_name": "海洋王国",
+          "cards": [
+            {
+              "number": 1,
+              "name": "潮汐低语",
+              "description": "月光下海面泛起银色涟漪，潮汐女神将秘密编织在每一朵浪花中。"
+            },
+            {
+              "number": 2,
+              "name": "深渊之城",
+              "description": "海底万米之下，发光水晶照亮了一座失落的亚特兰蒂斯王国。"
+            },
+            {
+              "number": 3,
+              "name": "珊瑚花园",
+              "description": "亿万珊瑚筑成一座活的城市，色彩斑斓的鱼群在其中翩翩起舞。"
+            },
+            {
+              "number": 4,
+              "name": "巨鲸之歌",
+              "description": "远古巨鲸从深渊升起，一首跨越万年的歌谣在整片海洋回荡。"
+            },
+            {
+              "number": 5,
+              "name": "海神之怒",
+              "description": "波塞冬举起三叉戟，万丈海啸冲天而起，海洋王国迎来最后的审判。"
+            }
+          ]
+        },
+        "黑洞之谜": {
+          "deck_name": "黑洞之谜",
+          "cards": [
+            {
+              "number": 1,
+              "name": "视界边缘",
+              "description": "在事件视界的边缘，时间被拉成无限长的线，光在最后一刻凝固。"
+            },
+            {
+              "number": 2,
+              "name": "奇点之心",
+              "description": "所有物质被压缩至无穷小的一点，物理定律在这里彻底崩塌。"
+            },
+            {
+              "number": 3,
+              "name": "霍金辐射",
+              "description": "虚粒子对从黑洞边缘逸出，像一缕微弱的呼吸，预示着黑洞的终结。"
+            },
+            {
+              "number": 4,
+              "name": "星际漩涡",
+              "description": "巨大的引力漩涡扭曲了整片星域，连空间本身都为之弯折。"
+            },
+            {
+              "number": 5,
+              "name": "时空终结",
+              "description": "当最后一颗恒星被吞噬，黑洞缓缓蒸发，留下的只有纯能量和无尽的虚空。"
+            }
+          ]
+        },
+        "恒星城市": {
+          "deck_name": "恒星城市",
+          "cards": [
+            {
+              "number": 1,
+              "name": "星火之城",
+              "description": "在恒星耀斑上建造的第一座城市，汲取日冕能量驱动文明运转。"
+            },
+            {
+              "number": 2,
+              "name": "光速航道",
+              "description": "恒星间的光子高速公路上，载满旅客的光帆飞船在光流中穿行。"
+            },
+            {
+              "number": 3,
+              "name": "熔金广场",
+              "description": "城市中心的广场用凝固的恒星物质铸成，金色光芒永恒不灭。"
+            },
+            {
+              "number": 4,
+              "name": "星际议会",
+              "description": "十二个恒星文明的代表齐聚一堂，在星云穹顶下共商银河事务。"
+            },
+            {
+              "number": 5,
+              "name": "超新星之夜",
+              "description": "一颗恒星在夜空中绽放，整个城市沐浴在它最后的辉煌中。"
+            }
+          ]
+        },
+        "量子遗物": {
+          "deck_name": "量子遗物",
+          "cards": [
+            {
+              "number": 1,
+              "name": "叠加之匣",
+              "description": "打开匣子的瞬间，两条平行的命运在此交汇又分离，没有人能同时看到两边。"
+            },
+            {
+              "number": 2,
+              "name": "纠缠双星",
+              "description": "两颗相隔万年的星辰共享同一个量子态，一动一静，心有灵犀。"
+            },
+            {
+              "number": 3,
+              "name": "概率之雨",
+              "description": "天空中落下无数晶莹的概率云，每一滴都承载着一个可能的世界。"
+            },
+            {
+              "number": 4,
+              "name": "退相干之碑",
+              "description": "当观测者目光落下，量子世界坍缩为唯一现实，一切可能性在此凝固。"
+            },
+            {
+              "number": 5,
+              "name": "普朗克之钥",
+              "description": "宇宙最小长度的钥匙，掌握了它，便能开启现实最深层的密码。"
+            }
+          ]
+        },
+        "能量生命": {
+          "deck_name": "能量生命",
+          "cards": [
+            {
+              "number": 1,
+              "name": "电弧精灵",
+              "description": "一道闪电劈下后未消散，反而聚拢成形，用光焰编织出一个活的生命。"
+            },
+            {
+              "number": 2,
+              "name": "等离子之躯",
+              "description": "没有血肉骨骼，由纯粹的等离子体构成，在磁场中自由舞动。"
+            },
+            {
+              "number": 3,
+              "name": "磁场织者",
+              "description": "它用看不见的磁场线条编织出精美的大气图案，创造风暴与极光。"
+            },
+            {
+              "number": 4,
+              "name": "暗能量之心",
+              "description": "深藏于宇宙暗处的能量生命体，推动着星系以超越光速的加速度远离彼此。"
+            },
+            {
+              "number": 5,
+              "name": "能量涅槃",
+              "description": "当恒星死亡时，它吸收全部辐射能量完成涅槃，化为宇宙最纯粹的存在。"
+            }
+          ]
+        },
+        "平行宇宙": {
+          "deck_name": "平行宇宙",
+          "cards": [
+            {
+              "number": 1,
+              "name": "镜像之门",
+              "description": "门的另一边站着另一个自己，那个世界的一切都与这边截然相反。"
+            },
+            {
+              "number": 2,
+              "name": "分叉之径",
+              "description": "每一次选择都分裂出一条新的时间线，无数个自己在无数条路上前行。"
+            },
+            {
+              "number": 3,
+              "name": "时空裂缝",
+              "description": "两片平行宇宙的边界碰撞，裂缝中涌出另一个世界的残影和回声。"
+            },
+            {
+              "number": 4,
+              "name": "因果之镜",
+              "description": "这面镜子映射的不是影像，而是因果律——起因和结果在这里可以互换。"
+            },
+            {
+              "number": 5,
+              "name": "世界树根",
+              "description": "所有平行宇宙的根系在这里汇聚成一棵跨越维度的世界树。"
+            }
+          ]
+        },
+        "赛博世界": {
+          "deck_name": "赛博世界",
+          "cards": [
+            {
+              "number": 1,
+              "name": "神经接口",
+              "description": "芯片植入的一刻，数字世界的五彩光芒涌入意识，真实与虚拟的边界开始模糊。"
+            },
+            {
+              "number": 2,
+              "name": "霓虹丛林",
+              "description": "摩天大楼间悬浮着全息广告，飞车在霓虹灯的光河中穿流不息。"
+            },
+            {
+              "number": 3,
+              "name": "数据猎手",
+              "description": "它在网络空间中高速穿梭，追踪每一字节异常数据，守护数字世界的秩序。"
+            },
+            {
+              "number": 4,
+              "name": "机械之心",
+              "description": "当仿生人的胸腔中第一次出现了真正的心跳，AI与生命的界限彻底消失。"
+            },
+            {
+              "number": 5,
+              "name": "意识上传",
+              "description": "最后一个人类将意识上传至云端，肉身化为尘埃，灵魂却获得了永生。"
+            }
+          ]
+        },
+        "沙漠帝国": {
+          "deck_name": "沙漠帝国",
+          "cards": [
+            {
+              "number": 1,
+              "name": "流沙王座",
+              "description": "金色沙粒凝聚成一座移动的王座，沙暴是它的仪仗，烈日是它的王冠。"
+            },
+            {
+              "number": 2,
+              "name": "绿洲秘境",
+              "description": "沙漠深处隐藏着一座绿洲花园，泉水从古老的石雕中汩汩流出。"
+            },
+            {
+              "number": 3,
+              "name": "香料商队",
+              "description": "满载星际香料的巨型浮空商队穿越沙海，每一粒香料价值连城。"
+            },
+            {
+              "number": 4,
+              "name": "沙虫骑士",
+              "description": "巨大的沙虫从地底破沙而出，骑手挥动鞭索驾驭这头沙漠之王。"
+            },
+            {
+              "number": 5,
+              "name": "沙暴终焉",
+              "description": "一场席卷整个星球的超大沙暴改变了一切，旧帝国化为废墟，新文明从中萌芽。"
+            }
+          ]
+        },
+        "神话生物": {
+          "deck_name": "神话生物",
+          "cards": [
+            {
+              "number": 1,
+              "name": "幼龙破壳",
+              "description": "一枚沉睡千年的龙蛋在火山口中裂开，一只金色幼龙探出了湿润的脑袋。"
+            },
+            {
+              "number": 2,
+              "name": "凤凰涅槃",
+              "description": "烈焰中一只凤凰化为灰烬，却在灰烬中重新绽放出更加绚丽的生命。"
+            },
+            {
+              "number": 3,
+              "name": "独角兽之森",
+              "description": "月色下独角兽的银角闪烁着柔光，被它的蹄尖触碰的花朵瞬间绽放。"
+            },
+            {
+              "number": 4,
+              "name": "九尾幻术",
+              "description": "九尾狐的每一根尾巴都承载着一种幻术，九术合一足以骗过命运本身。"
+            },
+            {
+              "number": 5,
+              "name": "神兽归位",
+              "description": "四大神兽齐聚东方天际，青龙白虎朱雀玄武各归其位，天地秩序重归平衡。"
+            }
+          ]
+        },
+        "失落大陆": {
+          "deck_name": "失落大陆",
+          "cards": [
+            {
+              "number": 1,
+              "name": "沉没之冠",
+              "description": "海平面上升吞没了整个文明，王冠是最后一座露出水面的尖塔。"
+            },
+            {
+              "number": 2,
+              "name": "化石回廊",
+              "description": "远古文明的走廊墙壁上镶嵌着亿万年的化石，记录着一个被遗忘的世界。"
+            },
+            {
+              "number": 3,
+              "name": "水晶之塔",
+              "description": "大陆上最后一座塔由纯粹的水晶构成，据说仍保存着失落文明的所有知识。"
+            },
+            {
+              "number": 4,
+              "name": "深海回响",
+              "description": "潜入海底遗迹，古老的回声从石壁中传来，讲述着大陆沉没前最后的预言。"
+            },
+            {
+              "number": 5,
+              "name": "大陆重现",
+              "description": "地壳隆起，海水退却，沉没万年的大陆重新露出海面，阳光照上了远古的街道。"
+            }
+          ]
+        },
+        "时间旅者": {
+          "deck_name": "时间旅者",
+          "cards": [
+            {
+              "number": 1,
+              "name": "第一跳",
+              "description": "时间机器发出嗡鸣，周围的一切开始倒退，他第一次跨越了时光的河流。"
+            },
+            {
+              "number": 2,
+              "name": "悖论之影",
+              "description": "在过去遇见了未来的自己，因果律在两人之间拧成了一个死结。"
+            },
+            {
+              "number": 3,
+              "name": "时间碎片",
+              "description": "时间的河流被某次重大事件击碎，碎片散落在不同的时代等待被修复。"
+            },
+            {
+              "number": 4,
+              "name": "永恒瞬间",
+              "description": "他在一个完美的时间节点停了下来，那个瞬间被拉伸成了永恒。"
+            },
+            {
+              "number": 5,
+              "name": "时间尽头",
+              "description": "抵达时间的终点，一切因果归于虚无，旅者选择将自己的记忆播撒回过去。"
+            }
+          ]
+        },
+        "太空海盗": {
+          "deck_name": "太空海盗",
+          "cards": [
+            {
+              "number": 1,
+              "name": "星盗誓言",
+              "description": "在星际暗礁间举起锈蚀的刀刃，向自由和星海宣读海盗誓言。"
+            },
+            {
+              "number": 2,
+              "name": "跃迁伏击",
+              "description": "飞船从超空间跃迁而出，在货船发现之前，等离子炮已经锁定了引擎。"
+            },
+            {
+              "number": 3,
+              "name": "幽灵舰队",
+              "description": "数十艘隐形战舰在星云掩护下无声集结，如同一群星海中的幽灵。"
+            },
+            {
+              "number": 4,
+              "name": "宝藏星图",
+              "description": "一张古老星图指引着传说中最大的星际宝藏，每一颗星星都是一个谜题。"
+            },
+            {
+              "number": 5,
+              "name": "海盗王的末路",
+              "description": "帝国舰队从虫洞中涌出，海盗王点燃了最后一把火炬，率领残部冲锋。"
+            }
+          ]
+        },
+        "外星文明": {
+          "deck_name": "外星文明",
+          "cards": [
+            {
+              "number": 1,
+              "name": "首次接触",
+              "description": "两艘来自不同文明的飞船在深空中相遇，第一束信号穿越语言的鸿沟。"
+            },
+            {
+              "number": 2,
+              "name": "共生契约",
+              "description": "两个种族签订了宇宙间第一份共生协议，知识与基因开始交换流转。"
+            },
+            {
+              "number": 3,
+              "name": "星际集市",
+              "description": "中子星旁的引力稳定点上，来自银河各地的文明交换着稀有的物质与思想。"
+            },
+            {
+              "number": 4,
+              "name": "文明之树",
+              "description": "数十亿年间不同文明的遗产交织成一棵巨树，每一片叶子都是一个星球的记忆。"
+            },
+            {
+              "number": 5,
+              "name": "终极交流",
+              "description": "当所有文明汇聚成一种意识，语言、文字和数学全部消失了——只剩下共鸣。"
+            }
+          ]
+        },
+        "未来地球": {
+          "deck_name": "未来地球",
+          "cards": [
+            {
+              "number": 1,
+              "name": "机械黎明",
+              "description": "日出时分，太阳能巨型矩阵缓缓启动，为整座城市注入新一天的能量。"
+            },
+            {
+              "number": 2,
+              "name": "天空花园",
+              "description": "悬浮在城市上方的花园群，每一座都是用基因工程培育的微型生态系统。"
+            },
+            {
+              "number": 3,
+              "name": "基因纪元",
+              "description": "人类第一次完美修改了自己的基因代码，疾病和衰老从此成为历史。"
+            },
+            {
+              "number": 4,
+              "name": "轨道环城",
+              "description": "环绕地球的巨型太空城市群开始运转，人类文明的中心从地面移向星空。"
+            },
+            {
+              "number": 5,
+              "name": "星辰归宿",
+              "description": "最后一批地球人登上了远航飞船，回头望了一眼蔚蓝的故乡，驶向未知的星海。"
+            }
+          ]
+        },
+        "星云生命": {
+          "deck_name": "星云生命",
+          "cards": [
+            {
+              "number": 1,
+              "name": "星尘之种",
+              "description": "一颗死去的恒星抛出物质云，在亿万年的冷却中，生命的种子开始萌芽。"
+            },
+            {
+              "number": 2,
+              "name": "发光丝缕",
+              "description": "星云深处的气体丝缕开始脉动，发出了宇宙中最低沉的呼吸声。"
+            },
+            {
+              "number": 3,
+              "name": "色彩之海",
+              "description": "鹰状星云中诞生了一片由等离子体组成的海洋，每一道波纹都闪烁不同的颜色。"
+            },
+            {
+              "number": 4,
+              "name": "星际菌落",
+              "description": "生命在星际尘埃中缓慢扩张，每一粒尘埃都成为菌落的一部分。"
+            },
+            {
+              "number": 5,
+              "name": "星云之心",
+              "description": "它终于拥有了自我意识——整片星云是它的身体，每一颗新生恒星都是它的脉搏。"
+            }
+          ]
+        },
+        "银河帝国": {
+          "deck_name": "银河帝国",
+          "cards": [
+            {
+              "number": 1,
+              "name": "加冕星河",
+              "description": "在银河系中心的黑洞旁，新任皇帝戴上由超新星碎片铸成的王冠。"
+            },
+            {
+              "number": 2,
+              "name": "舰队出征",
+              "description": "十万艘战列舰排列成锥形方阵，从帝国首都星域向未知疆域推进。"
+            },
+            {
+              "number": 3,
+              "name": "元老院的阴影",
+              "description": "权力走廊中回荡着低语，每一位元老都在计算着下一个棋子落向何方。"
+            },
+            {
+              "number": 4,
+              "name": "边境要塞",
+              "description": "银河边缘的巨型要塞日夜守望，抵御着来自仙女座星系的远征先遣军。"
+            },
+            {
+              "number": 5,
+              "name": "帝国的黄昏",
+              "description": "叛乱如野火般蔓延，皇帝凝望着窗外，帝国的一千个太阳正在逐一熄灭。"
+            }
+          ]
+        },
+        "宇宙起源": {
+          "deck_name": "宇宙起源",
+          "cards": [
+            {
+              "number": 1,
+              "name": "第一声轰鸣",
+              "description": "奇点在无声中崩塌，一道光从虚无中迸射而出，宇宙的大幕缓缓拉开。"
+            },
+            {
+              "number": 2,
+              "name": "夸克之舞",
+              "description": "在宇宙诞生百万分之一秒后，夸克开始结合，第一批粒子在烈焰中诞生。"
+            },
+            {
+              "number": 3,
+              "name": "原初之光",
+              "description": "宇宙大爆炸38万年后，第一束光终于自由传播，照亮了无尽的黑暗。"
+            },
+            {
+              "number": 4,
+              "name": "星辰铸造",
+              "description": "引力将氢原子云拉进巨大的漩涡，第一批恒星在压力中点燃了核聚变之火。"
+            },
+            {
+              "number": 5,
+              "name": "意识萌芽",
+              "description": "在宇宙诞生138亿年后，一颗蓝色星球上，碳基分子第一次开始思考自己的起源。"
+            }
+          ]
+        },
+        "远古神祇": {
+          "deck_name": "远古神祇",
+          "cards": [
+            {
+              "number": 1,
+              "name": "神座降临",
+              "description": "天空裂开一道金色的缝隙，远古老神踏着雷鸣降临大地，山岳为之颤抖。"
+            },
+            {
+              "number": 2,
+              "name": "命运之线",
+              "description": "诺恩三女神纺出命运的丝线，每一根线都系着一个凡人的生死与荣辱。"
+            },
+            {
+              "number": 3,
+              "name": "神战纪元",
+              "description": "十二主神各自率领大军在天空中交锋，雷电与火焰交织成毁灭的画卷。"
+            },
+            {
+              "number": 4,
+              "name": "封神之碑",
+              "description": "诸神之战结束后，战败者被封印在一座巨碑之下，他们的力量成为大地的养分。"
+            },
+            {
+              "number": 5,
+              "name": "神陨黄昏",
+              "description": "黄昏降临，诸神一个接一个陨落，世界进入了一个没有神的时代，凡人必须学会独自前行。"
+            }
+          ]
+        },
+        "终极飞升": {
+          "deck_name": "终极飞升",
+          "cards": [
+            {
+              "number": 1,
+              "name": "基因飞升",
+              "description": "DNA链完全重构，人类突破了碳基生命的极限，意识与肉体实现了同步进化。"
+            },
+            {
+              "number": 2,
+              "name": "机械飞升",
+              "description": "意识上传至量子网络，血肉之躯化为金属与光，个体的自我融入了集体的智慧。"
+            },
+            {
+              "number": 3,
+              "name": "灵能飞升",
+              "description": "凡人的心灵突破了维度壁障，获得了操控时空的灵能力量，成为真正的超凡存在。"
+            },
+            {
+              "number": 4,
+              "name": "维度飞升",
+              "description": "整个文明跨越了三维的桎梏，进入更高维度，在那里时间不再是一条直线。"
+            },
+            {
+              "number": 5,
+              "name": "宇宙之种",
+              "description": "飞升者将自身的全部精华凝结成一粒种子，在宇宙的废墟中播下新纪元的希望。"
+            }
+          ]
+        }
+      }
+    },
+    "太阳系": {
+      "type": "基本卡组",
+      "series_name": "太阳系",
+      "series_style": "整体基调：宇宙星辰感，深空背景 + 炽热金橙主色调\n图案风格：写实与神话融合风，类似奇幻天文插画",
+      "english_series": "Solar System",
+      "decks": {
+        "太阳": {
+          "deck_name": "太阳",
+          "cards": [
+            {
+              "number": 1,
+              "name": "初升之光",
+              "description": "黎明前的第一缕阳光刺破黑暗，万物在此刻重获生机。"
+            },
+            {
+              "number": 2,
+              "name": "烈焰核心",
+              "description": "太阳内部熔融等离子体翻涌，足以吞噬千个地球的火焰在此燃烧。"
+            },
+            {
+              "number": 3,
+              "name": "日冕风暴",
+              "description": "汹涌的太阳风从日冕倾泻而出，形成跨越亿万公里的磁暴。"
+            },
+            {
+              "number": 4,
+              "name": "黄道之主",
+              "description": "以引力统御八大行星，所有轨道皆以此为中心旋转不息。"
+            },
+            {
+              "number": 5,
+              "name": "垂暮巨星",
+              "description": "五十亿年后，太阳将膨胀为红巨星，以最后的辉煌拥抱内太阳系。"
+            }
+          ]
+        },
+        "水星": {
+          "deck_name": "水星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "灼热黎明",
+              "description": "水星表面温度骤升，太阳在地平线上显得巨大无比，岩石在热浪中崩裂。"
+            },
+            {
+              "number": 2,
+              "name": "铁核之心",
+              "description": "水星拥有太阳系最大的铁质内核，一颗比月球还大的金属心脏在深藏其中。"
+            },
+            {
+              "number": 3,
+              "name": "极地冰窟",
+              "description": "在永远背对太阳的极地深坑中，水冰静静覆盖着亿万年前的陨石撞击面。"
+            },
+            {
+              "number": 4,
+              "name": "风速之鞭",
+              "description": "稀薄的大气以超音速掠过地表，虽然无声，却将山脊雕琢成怪异的形状。"
+            },
+            {
+              "number": 5,
+              "name": "永恒两面",
+              "description": "水星永远以同一面朝向太阳，一面是永恒的灼烧，一面是永恒的冰冷。"
+            }
+          ]
+        },
+        "金星": {
+          "deck_name": "金星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "金光天幕",
+              "description": "硫酸云层反射的阳光铺满天穹，金星的天空永远弥漫着金色的迷雾。"
+            },
+            {
+              "number": 2,
+              "name": "炼狱地表",
+              "description": "四百六十度的高温融化了一切，铅在这里变成液态河流在山谷间流淌。"
+            },
+            {
+              "number": 3,
+              "name": "云上浮城",
+              "description": "在硫酸云层上方五十公里处，温度宜人，也许曾有一座浮空城市在此运转。"
+            },
+            {
+              "number": 4,
+              "name": "超级旋风",
+              "description": "金星大气层中的超级气旋以比地球飓风快百倍的速度旋转，吞噬整个星球。"
+            },
+            {
+              "number": 5,
+              "name": "晨星坠落",
+              "description": "古人称之为启明星与长庚星，它是夜空中最璀璨的宝石，也是最难到达的地狱。"
+            }
+          ]
+        },
+        "地球": {
+          "deck_name": "地球",
+          "cards": [
+            {
+              "number": 1,
+              "name": "蓝色摇篮",
+              "description": "从太空俯瞰，一颗蓝色弹珠悬浮在黑暗中，大气层的薄纱包裹着唯一的生命家园。"
+            },
+            {
+              "number": 2,
+              "name": "深海之渊",
+              "description": "马里亚纳海沟深处，万米之下，压力可以碾碎潜艇，生命仍在黑暗中繁衍。"
+            },
+            {
+              "number": 3,
+              "name": "生命之树",
+              "description": "四十六亿年的演化写进了每一片叶子的叶脉中，从单细胞到蓝鲸，每一环都不可或缺。"
+            },
+            {
+              "number": 4,
+              "name": "文明熔炉",
+              "description": "河流滋养了农业，海洋连接了贸易，火种点燃了城市，人类在地球表面织出了一张光网。"
+            },
+            {
+              "number": 5,
+              "name": "蓝色黄昏",
+              "description": "当夕阳把大气层染成橙红再渐变为深蓝，这颗星球呈现出它最动人的色彩。"
+            }
+          ]
+        },
+        "火星": {
+          "deck_name": "火星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "红色黎明",
+              "description": "稀薄的大气让火星的日出呈现出诡异的蓝色光芒，映在铁锈红的沙丘上。"
+            },
+            {
+              "number": 2,
+              "name": "奥林匹斯之巅",
+              "description": "太阳系最高的火山沉默耸立，它的山巅高过珠穆朗玛峰三倍，云层在半腰飘荡。"
+            },
+            {
+              "number": 3,
+              "name": "水手峡谷",
+              "description": "一道横贯火星表面的巨大裂谷，如果放在地球上，能从北京一直裂到广州。"
+            },
+            {
+              "number": 4,
+              "name": "极地冠冕",
+              "description": "干冰和水冰组成的白色极冠随季节消长，像是火星戴着一顶不断变化的帽子。"
+            },
+            {
+              "number": 5,
+              "name": "红色方舟",
+              "description": "人类第一艘殖民飞船降落红色荒漠，一个脚印印在了另一个世界的历史里。"
+            }
+          ]
+        },
+        "木星": {
+          "deck_name": "木星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "气态之王",
+              "description": "一颗可以装下一千三百个地球的气态巨行星，引力之强足以捕获小行星。"
+            },
+            {
+              "number": 2,
+              "name": "大红斑风暴",
+              "description": "一场持续了至少四百年的超级风暴，漩涡足以吞下三个地球，至今仍怒吼不止。"
+            },
+            {
+              "number": 3,
+              "name": "卫星宫殿",
+              "description": "木星的数十颗卫星如同环绕国王的大臣，每一颗都有自己独特的故事。"
+            },
+            {
+              "number": 4,
+              "name": "磁场牢笼",
+              "description": "木星磁场之强是地球的两万倍，范艾伦辐射带中的高能粒子足以杀死一切生命。"
+            },
+            {
+              "number": 5,
+              "name": "引力弹弓",
+              "description": "木星的巨大引力场是宇宙天然的弹弓，探测器借助它飞向更遥远的深空。"
+            }
+          ]
+        },
+        "土星": {
+          "deck_name": "土星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "光环倾城",
+              "description": "数十亿冰块和岩石碎片排列成壮观的环系统，从远处看像一柄金色竖琴横卧太空。"
+            },
+            {
+              "number": 2,
+              "name": "环缝之舞",
+              "description": "卡西尼环缝中，卫星的引力将冰粒雕刻成精致的波纹与螺旋。"
+            },
+            {
+              "number": 3,
+              "name": "冰晶卫星",
+              "description": "土卫六的大气层下藏着液态甲烷的湖泊和海洋，冰晶雨从橘黄色的天空飘落。"
+            },
+            {
+              "number": 4,
+              "name": "环影之昼",
+              "description": "当土星环的影子扫过赤道地区，白昼瞬间变为黄昏，再从黄昏中缓缓恢复。"
+            },
+            {
+              "number": 5,
+              "name": "竖琴低吟",
+              "description": "环中的冰粒在引力的拨动下发出极低频的电磁波，如同一架横跨百万公里的竖琴在太空低吟。"
+            }
+          ]
+        },
+        "天王星": {
+          "deck_name": "天王星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "侧卧之主",
+              "description": "天王星以近乎九十度的倾斜角侧躺着绕太阳旋转，如同一个沉睡的巨人。"
+            },
+            {
+              "number": 2,
+              "name": "冰甲之下",
+              "description": "甲烷和氨冰构成的厚重大气层之下，是一颗由水、甲烷和氨组成的巨大冰核。"
+            },
+            {
+              "number": 3,
+              "name": "暗环初现",
+              "description": "直到1977年人类的探测器才发现了天王星微弱的暗环，如同一位低调的贵族。"
+            },
+            {
+              "number": 4,
+              "name": "极光之幕",
+              "description": "天王星的极光不像地球那样在两极闪烁，而是散布在赤道附近，翠绿而神秘。"
+            },
+            {
+              "number": 5,
+              "name": "蓝绿冰眸",
+              "description": "甲烷吸收了红光，让天王星呈现出独特的蓝绿色，如同宇宙中一只平静的冰眸。"
+            }
+          ]
+        },
+        "海王星": {
+          "deck_name": "海王星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "风暴之眼",
+              "description": "海王星上的风速是太阳系最快的，风暴以超音速在冰蓝色的天空中呼啸。"
+            },
+            {
+              "number": 2,
+              "name": "远日孤星",
+              "description": "距太阳最远的行星需要一百六十五年才能绕太阳一周，它是太阳系最孤独的守望者。"
+            },
+            {
+              "number": 3,
+              "name": "大暗斑",
+              "description": "一个比地球还大的暗色风暴在海王星表面旋转，后来神秘消失，又在新位置重生。"
+            },
+            {
+              "number": 4,
+              "name": "卫星挽歌",
+              "description": "海卫一逆行在轨道上，它曾被海王星捕获，潮汐力正在缓慢地将它撕碎。"
+            },
+            {
+              "number": 5,
+              "name": "蓝色深渊",
+              "description": "在甲烷冰层之下，可能存在一个由钻石组成的海洋，在极端压力中永恒流淌。"
+            }
+          ]
+        },
+        "月球": {
+          "deck_name": "月球",
+          "cards": [
+            {
+              "number": 1,
+              "name": "月华初上",
+              "description": "月升时分，银色的光芒洒满大地，潮汐随之涌起，万物在月光下变得柔和。"
+            },
+            {
+              "number": 2,
+              "name": "静海之印",
+              "description": "阿波罗号的足迹仍印在月壤上，一串脚印跨越了数十亿年的寂静。"
+            },
+            {
+              "number": 3,
+              "name": "环形伤痕",
+              "description": "无数陨石撞击留下的环形山如同月球的面部伤疤，记录着太阳系的暴力史。"
+            },
+            {
+              "number": 4,
+              "name": "潮汐之约",
+              "description": "月球以自己微弱的引力牵引着地球的海洋，这是一种跨越三十八万公里的温柔约定。"
+            },
+            {
+              "number": 5,
+              "name": "背面之声",
+              "description": "月球的背面永远背对地球，那里是射电望远镜的理想安放地，聆听宇宙最深处的心跳。"
+            }
+          ]
+        },
+        "谷神星": {
+          "deck_name": "谷神星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "矮星之首",
+              "description": "小行星带中最大的天体，一颗微不足道的矮行星，却承载着太阳系早期的秘密。"
+            },
+            {
+              "number": 2,
+              "name": "冰火山巅",
+              "description": "谷神星上发现了冰火山，由泥浆和冰混合的岩浆从火山口缓缓涌出。"
+            },
+            {
+              "number": 3,
+              "name": "白斑之眼",
+              "description": "黎明号探测器拍到的明亮白斑，是盐分沉积还是冰层反射，至今仍是谜题。"
+            },
+            {
+              "number": 4,
+              "name": "碎石王座",
+              "description": "谷神星坐落在小行星带中，周围数百万颗碎石如同它的微型王国。"
+            },
+            {
+              "number": 5,
+              "name": "黎明号之梦",
+              "description": "人类第一颗环绕矮行星的探测器在燃料耗尽后沉眠于谷神星的轨道上，做着永恒的梦。"
+            }
+          ]
+        },
+        "冥王星": {
+          "deck_name": "冥王星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "降级之殇",
+              "description": "从第九大行星降级为矮行星，冥王星沉默地接受了命运，在太阳系边缘继续旋转。"
+            },
+            {
+              "number": 2,
+              "name": "心形冰原",
+              "description": "新视野号拍到的冥王星表面心形冰原，是这颗冰冷星球送给人类最温柔的礼物。"
+            },
+            {
+              "number": 3,
+              "name": "冰封之境",
+              "description": "氮冰构成的地表在极低温中凝固成各种奇异的几何形态，如同一个冰冻的梦境。"
+            },
+            {
+              "number": 4,
+              "name": "冥卫共舞",
+              "description": "冥王星与冥卫一几乎以同一步调旋转，像是两个在宇宙深处翩翩起舞的伴侣。"
+            },
+            {
+              "number": 5,
+              "name": "边疆守望者",
+              "description": "在海王星轨道之外，冥王星是柯伊伯带最著名的居民，也是太阳系最后的守望者之一。"
+            }
+          ]
+        },
+        "阋神星": {
+          "deck_name": "阋神星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "纷争之星",
+              "description": "以希腊纷争女神命名，正是它的发现引发了将冥王星降级的太阳系分类之争。"
+            },
+            {
+              "number": 2,
+              "name": "冰镜之面",
+              "description": "阋神星表面反射着极度明亮的白色光芒，它拥有太阳系中最镜面般的表面。"
+            },
+            {
+              "number": 3,
+              "name": "椭圆漂泊",
+              "description": "它的公转轨道高度椭圆，远日点远到需要五百六十年才能完成一个周期。"
+            },
+            {
+              "number": 4,
+              "name": "混沌之刃",
+              "description": "阋神星的母神厄里斯是纷争的化身，她的星球同样在太阳系的秩序中刻下一道裂痕。"
+            },
+            {
+              "number": 5,
+              "name": "柯伊伯之影",
+              "description": "比冥王星更远，比冥王星更重，阋神星是柯伊伯带中令人敬畏的阴影之主。"
+            }
+          ]
+        },
+        "鸟神星": {
+          "deck_name": "鸟神星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "造物之星",
+              "description": "以复活节岛原住民的造物之神命名，它如同一件抛入太空的远古雕塑。"
+            },
+            {
+              "number": 2,
+              "name": "椭圆红移",
+              "description": "鸟神星的表面呈现出淡淡的红色，那是宇宙射线轰击甲烷冰后留下的印记。"
+            },
+            {
+              "number": 3,
+              "name": "慢舞之者",
+              "description": "它的自转周期长达二十二小时，在柯伊伯带的黑暗中缓缓翻转身躯。"
+            },
+            {
+              "number": 4,
+              "name": "卫星之伴",
+              "description": "鸟神卫一被称为“暗影”，两颗天体在遥远的轨道上相伴而行。"
+            },
+            {
+              "number": 5,
+              "name": "石像之谜",
+              "description": "如同复活节岛上的摩艾石像，鸟神星是柯伊伯带中一座沉默而神秘的存在。"
+            }
+          ]
+        },
+        "妊神星": {
+          "deck_name": "妊神星",
+          "cards": [
+            {
+              "number": 1,
+              "name": "旋转之卵",
+              "description": "妊神星是太阳系中旋转最快的矮行星之一，高速自转让它被拉伸成一个椭球体。"
+            },
+            {
+              "number": 2,
+              "name": "冰雪之环",
+              "description": "妊神星拥有一个由冰粒组成的美丽光环，是已知除土星等气态巨行星外最壮观的环系统。"
+            },
+            {
+              "number": 3,
+              "name": "远古碰撞",
+              "description": "一次远古的巨大碰撞塑造了妊神星今天的形状，碎片形成了它的卫星和光环。"
+            },
+            {
+              "number": 4,
+              "name": "椭球之歌",
+              "description": "不同于完美的球形，妊神星不规则的椭球形态让它在太阳系中独一无二。"
+            },
+            {
+              "number": 5,
+              "name": "夏威夷之女",
+              "description": "以夏威夷生育女神命名，她诞下了夏威夷的所有岛屿，如同妊神星从碰撞中诞生了自己的卫星。"
+            }
+          ]
+        }
+      }
+    },
+    "地球": {
+      "type": "基本卡组",
+      "series_name": "地球",
+      "series_style": "地理诗意图鉴 - 写实主义地理插图，自然主义色彩，地形等高线元素，艺术化处理的自然景观",
+      "english_series": "",
+      "decks": {
+        "亚洲": {
+          "deck_name": "亚洲",
+          "cards": [
+            {
+              "number": 1,
+              "name": "长城守望",
+              "description": "蜿蜒巨龙守护千年文明，每一块砖石都镌刻着民族的智慧与坚韧。"
+            },
+            {
+              "number": 2,
+              "name": "樱花时节",
+              "description": "粉色的花瓣雨纷纷扬扬，古老的京都庭院里时间仿佛静止。"
+            },
+            {
+              "number": 3,
+              "name": "恒河晨光",
+              "description": "圣河的水波映照着朝霞，虔诚的诵经声在晨雾中回荡。"
+            },
+            {
+              "number": 4,
+              "name": "吴哥微笑",
+              "description": "石雕的微笑穿越时空，神秘的高棉帝国在丛林中低语。"
+            },
+            {
+              "number": 5,
+              "name": "珠穆朗玛",
+              "description": "世界之巅刺破云端，圣洁的雪覆盖着地球最高的神殿，登山者的终极梦想在此凝结。"
+            }
+          ]
+        },
+        "非洲": {
+          "deck_name": "非洲",
+          "cards": [
+            {
+              "number": 1,
+              "name": "撒哈拉落日",
+              "description": "金色的沙丘在夕阳下燃烧，驼铃声在无垠的寂静中渐行渐远。"
+            },
+            {
+              "number": 2,
+              "name": "尼罗河源",
+              "description": "生命的源头从维多利亚湖涌出，滋养了世界上最古老的文明。"
+            },
+            {
+              "number": 3,
+              "name": "乞力马扎罗",
+              "description": "赤道上的雪峰刺破云层，孤独的巨人守护着非洲的脊梁。"
+            },
+            {
+              "number": 4,
+              "name": "塞伦盖蒂",
+              "description": "百万角马踏起滚滚红尘，大自然最壮观的迁徙在此上演。"
+            },
+            {
+              "number": 5,
+              "name": "好望角风暴",
+              "description": "两大洋交汇处的狂风巨浪，见证了多少探险家的梦想与失落。"
+            }
+          ]
+        },
+        "北美洲": {
+          "deck_name": "北美洲",
+          "cards": [
+            {
+              "number": 1,
+              "name": "自由女神",
+              "description": "火炬的光芒照亮新大陆的希望，自由的火种在此永不熄灭。"
+            },
+            {
+              "number": 2,
+              "name": "尼亚加拉",
+              "description": "雷霆万钧的水帘从天而降，彩虹在水雾中画出永恒的圆环。"
+            },
+            {
+              "number": 3,
+              "name": "黄石奇观",
+              "description": "地心的脉搏在此跳动，间歇泉喷涌着地球古老的生命力。"
+            },
+            {
+              "number": 4,
+              "name": "阿拉斯加极光",
+              "description": "绿色的光幕在夜空中舞动，北极圈的神话剧正在上演。"
+            },
+            {
+              "number": 5,
+              "name": "科罗拉多大峡谷",
+              "description": "时间的长河在这里刻下印记，每一层岩壁都是一部地球史。"
+            }
+          ]
+        },
+        "南美洲": {
+          "deck_name": "南美洲",
+          "cards": [
+            {
+              "number": 1,
+              "name": "亚马逊雨林",
+              "description": "地球之肺在湿热中呼吸，一半的物种在此编织生命的奇迹。"
+            },
+            {
+              "number": 2,
+              "name": "马丘比丘",
+              "description": "云端之上的失落之城，印加文明的智慧在石阶间沉默。"
+            },
+            {
+              "number": 3,
+              "name": "伊瓜苏瀑布",
+              "description": "275条瀑布组成的魔鬼咽喉，雷鸣般的水声是自然最嘹亮的歌。"
+            },
+            {
+              "number": 4,
+              "name": "安第斯山脉",
+              "description": "世界最长的山脉横贯大陆，古老文明的痕迹在高原上绵延。"
+            },
+            {
+              "number": 5,
+              "name": "复活节岛石像",
+              "description": "石像面朝大海千载不动，它们的眼神里藏着未解的天文密码。"
+            }
+          ]
+        },
+        "南极洲": {
+          "deck_name": "南极洲",
+          "cards": [
+            {
+              "number": 1,
+              "name": "极地冰山",
+              "description": "蓝色的冰川漂浮在银色海面，千万年的冰雪在此静静沉淀。"
+            },
+            {
+              "number": 2,
+              "name": "帝企鹅群",
+              "description": "黑白绅士们排成长队，在零下六十度的严寒中守护新生。"
+            },
+            {
+              "number": 3,
+              "name": "南极光",
+              "description": "粉紫色的光带在极夜中摇曳，是地球磁场最梦幻的呼吸。"
+            },
+            {
+              "number": 4,
+              "name": "科研基地",
+              "description": "人类的求知欲在白色荒漠生根，科学的火炬在最寒冷处燃烧。"
+            },
+            {
+              "number": 5,
+              "name": "冰下世界",
+              "description": "冰层之下是另一个宇宙，神秘的生态系统在黑暗中繁衍。"
+            }
+          ]
+        },
+        "欧洲": {
+          "deck_name": "欧洲",
+          "cards": [
+            {
+              "number": 1,
+              "name": "巴黎圣母院",
+              "description": "哥特式的尖塔刺破天空，玫瑰窗将阳光染成神圣的色彩。"
+            },
+            {
+              "number": 2,
+              "name": "罗马斗兽场",
+              "description": "千年石墙回响着角斗士的呐喊，帝国的荣光与废墟共存。"
+            },
+            {
+              "number": 3,
+              "name": "爱琴海日落",
+              "description": "白色的房屋在夕阳下镀金，蓝色圆顶教堂见证永恒的爱情。"
+            },
+            {
+              "number": 4,
+              "name": "阿尔卑斯山",
+              "description": "欧洲的屋脊终年积雪，登山者的足迹写下征服的史诗。"
+            },
+            {
+              "number": 5,
+              "name": "北欧峡湾",
+              "description": "冰川切割出的深蓝水道，瀑布从千米悬崖直泻入海。"
+            }
+          ]
+        },
+        "大洋洲": {
+          "deck_name": "大洋洲",
+          "cards": [
+            {
+              "number": 1,
+              "name": "大堡礁",
+              "description": "世界上最大的生命建筑，珊瑚虫用亿万年编织海底彩虹。"
+            },
+            {
+              "number": 2,
+              "name": "悉尼歌剧院",
+              "description": "白色风帆在碧海蓝天间扬起，建筑与自然的完美对话。"
+            },
+            {
+              "number": 3,
+              "name": "毛利战舞",
+              "description": "纹面战士的呐喊震动大地，古老的传统在战舞中传承。"
+            },
+            {
+              "number": 4,
+              "name": "乌鲁鲁巨石",
+              "description": "红色巨岩在沙漠中矗立，原住民的传说在星光下流淌。"
+            },
+            {
+              "number": 5,
+              "name": "新西兰草原",
+              "description": "霍比特人的故乡绿意盎然，中土世界在此照进现实。"
+            }
+          ]
+        },
+        "太平洋": {
+          "deck_name": "太平洋",
+          "cards": [
+            {
+              "number": 1,
+              "name": "马里亚纳海沟",
+              "description": "地球最深处是永恒的黑暗，水压能将钢铁压成薄片。"
+            },
+            {
+              "number": 2,
+              "name": "夏威夷火山",
+              "description": "熔岩之河流入蔚蓝海洋，新生的大地在火焰与海水中诞生。"
+            },
+            {
+              "number": 3,
+              "name": "大溪地珍珠",
+              "description": "黑珍珠在潟湖深处发光，波利尼西亚女神的眼泪化作珍宝。"
+            },
+            {
+              "number": 4,
+              "name": "关岛日落",
+              "description": "世界上最晚的日落在此沉没，一天的终点亦是新的开始。"
+            },
+            {
+              "number": 5,
+              "name": "珊瑚海",
+              "description": "二战最激烈的海战在此上演，如今珊瑚依旧，战舰已锈。"
+            }
+          ]
+        },
+        "大西洋": {
+          "deck_name": "大西洋",
+          "cards": [
+            {
+              "number": 1,
+              "name": "百慕大三角",
+              "description": "神秘的磁场扰乱仪器，失踪的船只与飞机成为未解之谜。"
+            },
+            {
+              "number": 2,
+              "name": "格陵兰冰山",
+              "description": "北极圈漂来的白色巨人，每一座都是移动的气候档案馆。"
+            },
+            {
+              "number": 3,
+              "name": "直布罗陀海峡",
+              "description": "地中海与大西洋的咽喉，海格力斯之柱守护古老的海界。"
+            },
+            {
+              "number": 4,
+              "name": "墨西哥湾流",
+              "description": "巨大的暖流如海洋动脉，为欧洲带去墨西哥湾的温暖。"
+            },
+            {
+              "number": 5,
+              "name": "沉没的亚特兰蒂斯",
+              "description": "柏拉图笔下的失落大陆，或许正沉睡在海床的泥沙之下。"
+            }
+          ]
+        },
+        "印度洋": {
+          "deck_name": "印度洋",
+          "cards": [
+            {
+              "number": 1,
+              "name": "马尔代夫环礁",
+              "description": "珍珠般的岛屿散落蔚蓝海面，水屋之下是五彩斑斓的珊瑚世界。"
+            },
+            {
+              "number": 2,
+              "name": "塞舌尔巨龟",
+              "description": "百岁巨龟在沙滩上踱步，它们见证了殖民者到来与离去。"
+            },
+            {
+              "number": 3,
+              "name": "索科特拉龙血树",
+              "description": "外星般的植物在荒岛上生长，红色树脂如龙血般珍贵。"
+            },
+            {
+              "number": 4,
+              "name": "阿拉伯海珍珠",
+              "description": "自古以来的珍珠采集场，潜水者的肺活量决定财富的多寡。"
+            },
+            {
+              "number": 5,
+              "name": "季风航线",
+              "description": "千年商船循着季风往返，香料与丝绸的味道随海风飘散。"
+            }
+          ]
+        },
+        "北冰洋": {
+          "deck_name": "北冰洋",
+          "cards": [
+            {
+              "number": 1,
+              "name": "北极点",
+              "description": "地球自转轴的顶端，所有经线在此交汇，时间失去意义。"
+            },
+            {
+              "number": 2,
+              "name": "冰层裂缝",
+              "description": "蓝色的深渊在白色冰原上裂开，是危险亦是新生的通道。"
+            },
+            {
+              "number": 3,
+              "name": "北极熊猎食",
+              "description": "白色巨兽在海冰上守候，海豹的呼吸孔是生存的希望。"
+            },
+            {
+              "number": 4,
+              "name": "因纽特雪屋",
+              "description": "冰雪筑成的圆形居所，零下五十度中依然温暖如春。"
+            },
+            {
+              "number": 5,
+              "name": "极地破冰船",
+              "description": "钢铁巨兽碾碎万年坚冰，为科考与资源开辟北方航道。"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
