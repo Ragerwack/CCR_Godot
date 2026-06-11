@@ -139,6 +139,9 @@ func refresh_pool(refresh_type: String = "free") -> void:
 		var cards_data: Array = data.get("cards", [])
 		current_pool = ApiClient.card_slots_to_array_sorted(cards_data)
 		GameManager.player_data.pool_cards = current_pool.duplicate()
+		var hand_data = data.get("hand", null)
+		if hand_data is Array:
+			GameManager.player_data.hand_cards = ApiClient.card_slots_to_array_sorted(hand_data)
 
 		if data.get("profile", {}) is Dictionary:
 			GameManager.apply_profile(data["profile"])

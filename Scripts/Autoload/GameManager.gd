@@ -337,7 +337,11 @@ func sync_pool_hand_layout() -> Dictionary:
 
 	var resp := await ApiClient.sync_pool_hand_layout(pool_cards, player_data.hand_cards)
 	if not resp.get("success", false):
-		FileLogger.warn("卡池/手牌布局同步失败: " + resp.get("error", ""))
+		var error := str(resp.get("error", ""))
+		FileLogger.warn("卡池/手牌布局同步失败: " + error)
+		if error.contains("临时布局与服务端卡牌集合不一致"):
+			FileLogger.warn("检测到本地卡池/手牌缓存与服务端不一致，正在回源同步")
+			await sync_initial_card_pool_from_server()
 	return resp
 
 func sync_pool_hand_layout_background(reason: String = "scene_switch") -> void:
