@@ -31,7 +31,7 @@ func setup_ui() -> void:
 	_title_label.position = Vector2(0, 10)
 	_title_label.size = Vector2(400, 30)
 	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_label.text = "合成套牌 [选择5张同系列/同卡组/同色卡牌]"
+	_title_label.text = Localization.t("ui.synthesis.title")
 	add_child(_title_label)
 
 	# 合成按钮
@@ -39,7 +39,7 @@ func setup_ui() -> void:
 	_synthesize_button.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_synthesize_button.position = Vector2(-60, -60)
 	_synthesize_button.size = Vector2(120, 40)
-	_synthesize_button.text = "合成 (0/5)"
+	_synthesize_button.text = Localization.t("ui.synthesis.button.count", [0])
 	_synthesize_button.disabled = true
 	_synthesize_button.pressed.connect(_on_synthesize_pressed)
 	add_child(_synthesize_button)
@@ -49,7 +49,7 @@ func setup_ui() -> void:
 	_select_all_button.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_select_all_button.position = Vector2(70, -60)
 	_select_all_button.size = Vector2(120, 40)
-	_select_all_button.text = "快速选择"
+	_select_all_button.text = Localization.t("ui.synthesis.quick_select")
 	_select_all_button.pressed.connect(_on_select_all_pressed)
 	add_child(_select_all_button)
 
@@ -58,7 +58,7 @@ func setup_ui() -> void:
 	_back_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_back_button.position = Vector2(10, 10)
 	_back_button.size = Vector2(60, 30)
-	_back_button.text = "< 返回"
+	_back_button.text = "< " + Localization.t("ui.button.back")
 	_back_button.pressed.connect(_on_back_pressed)
 	add_child(_back_button)
 
@@ -176,18 +176,18 @@ func _on_slot_clicked(idx: int) -> void:
 
 func update_button_state() -> void:
 	var count = _selected_indices.size()
-	_synthesize_button.text = "合成 (%d/5)" % count
+	_synthesize_button.text = Localization.t("ui.synthesis.button.count", [count])
 	_synthesize_button.disabled = (count != 5)
 
 	if count == 5:
 		# 检查是否满足合成条件
 		var valid = _validate_selection()
 		if valid:
-			_synthesize_button.text = "合成 (5/5) ✓"
+			_synthesize_button.text = Localization.t("ui.synthesis.button.valid")
 			_error_label.text = ""
 		else:
-			_synthesize_button.text = "合成 (5/5) ✗"
-			_error_label.text = "选中的卡牌不符合合成条件"
+			_synthesize_button.text = Localization.t("ui.synthesis.button.invalid")
+			_error_label.text = Localization.t("ui.synthesis.invalid_selected")
 	else:
 		_error_label.text = ""
 
@@ -236,7 +236,7 @@ func _on_select_all_pressed() -> void:
 	else:
 		# 清除选择
 		_selected_indices.clear()
-		_status_label.text = "未找到可合成组合"
+		_status_label.text = Localization.t("ui.synthesis.no_combo")
 		await get_tree().create_timer(2.0).timeout
 		_status_label.text = ""
 	refresh_display()
@@ -272,21 +272,21 @@ func _on_synthesize_pressed() -> void:
 		return
 
 	if not _validate_selection():
-		_error_label.text = "选中的卡牌不符合合成条件: 需要同系列、同卡组、同色、编号1-5"
+		_error_label.text = Localization.t("ui.synthesis.invalid_detail")
 		return
 
 	_synthesize_button.disabled = true
-	_synthesize_button.text = "合成中..."
-	_status_label.text = "正在合成..."
+	_synthesize_button.text = Localization.t("ui.synthesis.crafting")
+	_status_label.text = Localization.t("ui.synthesis.crafting_status")
 	_error_label.text = ""
 
 	# 调用合成系统（请求后端API，从手牌合成）
 	SynthesisSystem.synthesize(_selected_indices.duplicate(), "hand")
 
 func _on_synthesis_succeeded(result: Dictionary) -> void:
-	_status_label.text = "合成成功! 奖励金币: %d" % result.get("gold_reward", 0)
+	_status_label.text = Localization.t("ui.synthesis.success_gold", [result.get("gold_reward", 0)])
 	_synthesize_button.disabled = true
-	_synthesize_button.text = "已合成"
+	_synthesize_button.text = Localization.t("ui.synthesis.done")
 
 	# 更新本地数据 — 从高到低移除避免索引偏移
 	var consumed = result.get("consumed_slots", [])
@@ -318,7 +318,7 @@ func _on_synthesis_succeeded(result: Dictionary) -> void:
 
 func _on_synthesis_failed(reason: String) -> void:
 	_status_label.text = ""
-	_error_label.text = "合成失败: " + reason
+	_error_label.text = Localization.t("ui.synthesis.failed", [reason])
 	_synthesize_button.disabled = _selected_indices.size() != 5
 	update_button_state()
 

@@ -22,6 +22,12 @@ func synthesize(slot_indices: Array, source_type: String = "hand") -> void:
 
 	synthesis_requested.emit(slot_indices, source_type)
 
+	if source_type == "hand":
+		var sync_resp := await GameManager.sync_pool_hand_layout()
+		if not sync_resp.get("success", false):
+			synthesis_failed.emit("卡牌位置同步失败: " + sync_resp.get("error", ""))
+			return
+
 	# 通过 ApiClient 调用服务端
 	var resp = await ApiClient.synthesize(slot_indices, source_type)
 	if resp["success"]:

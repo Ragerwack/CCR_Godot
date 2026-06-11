@@ -7,14 +7,18 @@ var _fill_bar: ColorRect  # 经验进度条（亮色）
 var _glow: ColorRect      # 微光扫过层
 var _label: Label         # 经验数值
 var _glow_tween: Tween    # 微光动画（独立管理）
+var _current_ratio: float = 0.0
 
-const BAR_HEIGHT_RATIO: float = 0.05    # 占屏幕高度 5%
+const BAR_HEIGHT_RATIO: float = 0.024
+const MIN_BAR_HEIGHT: int = 16
+const MAX_BAR_HEIGHT: int = 24
+const BAR_PADDING: int = 2
 const GLOW_DURATION: float = 3.0        # 微光循环时间
 
 func _ready() -> void:
 	# 全宽底部锚定
 	var vp = get_viewport_rect().size
-	var bar_h = int(vp.y * BAR_HEIGHT_RATIO)
+	var bar_h = clampi(int(vp.y * BAR_HEIGHT_RATIO), MIN_BAR_HEIGHT, MAX_BAR_HEIGHT)
 	anchor_left = 0.0
 	anchor_top = 1.0
 	anchor_right = 1.0
@@ -26,6 +30,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	setup_ui()
+	_update_layout()
 	_start_glow_animation()
 
 	GameManager.player_data.changed.connect(_on_player_data_changed)
@@ -42,41 +47,51 @@ func setup_ui() -> void:
 
 	# ── 前景填充条（深色底，作为经验条的槽位） ──
 	_fill_fg = ColorRect.new()
-	_fill_fg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_fill_fg.position = Vector2(4, 4)
-	_fill_fg.size = Vector2(-8, -8)  # 内边距
+	_fill_fg.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_fill_fg.color = Color(0.12, 0.12, 0.18, 1.0)
 	add_child(_fill_fg)
 
 	# ── 经验进度条（紫色渐变，WoW 风格） ──
 	_fill_bar = ColorRect.new()
 	_fill_bar.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_fill_bar.position = Vector2(4, 4)
-	_fill_bar.size = Vector2(0, -8)
 	# 使用 shader material 做渐变，这里用纯色 + 后续 tween 模拟
 	_fill_bar.color = Color(0.35, 0.15, 0.7, 1.0)  # 紫色
 	add_child(_fill_bar)
 
 	# ── 微光覆盖层 ──
 	_glow = ColorRect.new()
-	_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_glow.position = Vector2(4, 4)
-	_glow.size = Vector2(-8, -8)
+	_glow.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_glow.color = Color(1, 1, 1, 0)
 	_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_glow)
 
 	# ── 经验数值标签 ──
 	_label = Label.new()
-	_label.set_anchors_preset(Control.PRESET_CENTER)
-	_label.size = Vector2(300, 24)
+	_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_label.add_theme_font_size_override("font_size", 12)
+	_label.add_theme_font_size_override("font_size", 11)
 	_label.add_theme_color_override("font_color", Color(1, 0.95, 0.7, 1.0))  # 金色文字
 	_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
 	_label.add_theme_constant_override("outline_size", 2)
 	add_child(_label)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		_update_layout()
+
+func _update_layout() -> void:
+	if _fill_fg == null or _fill_bar == null or _glow == null:
+		return
+	var inner_w = maxf(size.x - BAR_PADDING * 2.0, 0.0)
+	var inner_h = maxf(size.y - BAR_PADDING * 2.0, 1.0)
+	var inner_pos = Vector2(BAR_PADDING, BAR_PADDING)
+	_fill_fg.position = inner_pos
+	_fill_fg.size = Vector2(inner_w, inner_h)
+	_fill_bar.position = inner_pos
+	_fill_bar.size = Vector2(inner_w * _current_ratio, inner_h)
+	_glow.position = inner_pos
+	_glow.size = Vector2(inner_w, inner_h)
 
 func _start_glow_animation() -> void:
 	if _glow_tween != null and _glow_tween.is_valid():
@@ -100,6 +115,7 @@ func _on_player_data_changed() -> void:
 
 	var ratio = float(exp_in_level) / float(exp_for_next) if exp_for_next > 0 else 0.0
 	ratio = clampf(ratio, 0.0, 1.0)
+	_current_ratio = ratio
 
 	var bar_width = _fill_fg.size.x * ratio
 	var bar_tween = create_tween()

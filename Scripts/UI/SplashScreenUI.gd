@@ -23,6 +23,25 @@ var _email_input: LineEdit
 var _submit_button: Button
 var _switch_button: Button
 var _loading_label: Label
+var _progress_ui = null
+var _step_started_at: Dictionary = {}
+var _last_submit: Dictionary = {}
+var _login_flow_running: bool = false
+
+const PREP_STEPS: Array[Dictionary] = [
+	{"id": "connect", "label": "ui.login.prepare.step.connect"},
+	{"id": "auth", "label": "ui.login.prepare.step.auth"},
+	{"id": "session", "label": "ui.login.prepare.step.session"},
+	{"id": "profile", "label": "ui.login.prepare.step.profile"},
+	{"id": "config", "label": "ui.login.prepare.step.config"},
+	{"id": "collection", "label": "ui.login.prepare.step.collection"},
+	{"id": "daily", "label": "ui.login.prepare.step.daily"},
+	{"id": "ui", "label": "ui.login.prepare.step.ui"},
+]
+const PREP_STATUS_PENDING := "pending"
+const PREP_STATUS_RUNNING := "running"
+const PREP_STATUS_SUCCESS := "success"
+const PREP_STATUS_FAILED := "failed"
 
 # ══════════════════════════════════════════════════
 #  生命周期
@@ -85,13 +104,13 @@ func _setup_ui() -> void:
 
 	# ── 用户名 / 邮箱 ──
 	_username_input = LineEdit.new()
-	_username_input.placeholder_text = "邮箱"
+	_username_input.placeholder_text = Localization.t("ui.login.email")
 	_username_input.custom_minimum_size = Vector2(0, 36)
 	vbox.add_child(_username_input)
 
 	# ── 密码 ──
 	_password_input = LineEdit.new()
-	_password_input.placeholder_text = "密码"
+	_password_input.placeholder_text = Localization.t("ui.login.password")
 	_password_input.secret = true
 	_password_input.custom_minimum_size = Vector2(0, 36)
 	_password_input.text_submitted.connect(_on_submit)
@@ -99,7 +118,7 @@ func _setup_ui() -> void:
 
 	# ── 邮箱（仅注册模式显示）──
 	_email_input = LineEdit.new()
-	_email_input.placeholder_text = "邮箱"
+	_email_input.placeholder_text = Localization.t("ui.login.email")
 	_email_input.custom_minimum_size = Vector2(0, 36)
 	_email_input.text_submitted.connect(_on_submit)
 	vbox.add_child(_email_input)
@@ -113,7 +132,7 @@ func _setup_ui() -> void:
 
 	# ── 加载指示 ──
 	_loading_label = Label.new()
-	_loading_label.text = "加载中…"
+	_loading_label.text = Localization.t("ui.login.loading")
 	_loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_loading_label.visible = false
 	vbox.add_child(_loading_label)
@@ -141,17 +160,17 @@ func _setup_ui() -> void:
 func _update_mode() -> void:
 	_error_label.visible = false
 	if _mode == "login":
-		_title.text = "登录"
-		_username_input.placeholder_text = "邮箱"
+		_title.text = Localization.t("ui.login.title.login")
+		_username_input.placeholder_text = Localization.t("ui.login.email")
 		_email_input.visible = false
-		_submit_button.text = "登录"
-		_switch_button.text = "没有账号？注册"
+		_submit_button.text = Localization.t("ui.login.submit.login")
+		_switch_button.text = Localization.t("ui.login.switch.to_register")
 		_panel.size.y = 350
 	else:
-		_title.text = "注册"
+		_title.text = Localization.t("ui.login.title.register")
 		_email_input.visible = true
-		_submit_button.text = "注册"
-		_switch_button.text = "已有账号？登录"
+		_submit_button.text = Localization.t("ui.login.submit.register")
+		_switch_button.text = Localization.t("ui.login.switch.to_login")
 		_panel.size.y = 400
 
 	# 重新居中
@@ -171,17 +190,19 @@ func _on_switch_mode() -> void:
 # ══════════════════════════════════════════════════
 
 func _on_submit(_unused: String = "") -> void:
+	if _login_flow_running:
+		return
 	var username := _username_input.text.strip_edges()
 	var password := _password_input.text
 
 	if username == "" or password == "":
-		_show_error("用户名和密码不能为空")
+		_show_error(Localization.t("ui.login.error.missing_username_password"))
 		return
 
 	if _mode == "register":
 		var email := _email_input.text.strip_edges()
 		if email == "":
-			_show_error("邮箱不能为空")
+			_show_error(Localization.t("ui.login.error.missing_email"))
 			return
 		_do_register(username, password, email)
 	else:
@@ -192,43 +213,188 @@ func _on_submit(_unused: String = "") -> void:
 # ══════════════════════════════════════════════════
 
 func _do_login(username: String, password: String) -> void:
-	FileLogger.log("手动登录: 发送登录请求 username=" + username)
-	_set_loading(true)
-	var resp := await ApiClient.login(username, password)
-	_set_loading(false)
-
-	if resp["success"]:
-		FileLogger.log("手动登录: 登录成功")
-		var data: Dictionary = resp["data"]
-		GameManager.apply_login_user(data)
-		_loading_label.text = "同步数据中…"
-		_loading_label.visible = true
-		FileLogger.log("手动登录: 开始同步数据")
-		await GameManager.sync_all_from_server()
-		_loading_label.visible = false
-		FileLogger.log("手动登录: 全部完成，进入游戏")
-		login_completed.emit()
-		_close()
-	else:
-		FileLogger.warn("手动登录失败: " + resp.get("error", ""))
-		_show_error(resp["error"])
+	_last_submit = {"mode": "login", "username": username, "password": password, "email": ""}
+	await _run_login_preparation(_last_submit)
 
 func _do_register(username: String, password: String, email: String) -> void:
-	_set_loading(true)
-	var resp := await ApiClient.register(username, password, email)
-	_set_loading(false)
+	_last_submit = {"mode": "register", "username": username, "password": password, "email": email}
+	await _run_login_preparation(_last_submit)
 
-	if resp["success"]:
-		var data: Dictionary = resp["data"]
-		GameManager.apply_login_user(data)
-		_loading_label.text = "同步数据中…"
-		_loading_label.visible = true
-		await GameManager.sync_all_from_server()
-		_loading_label.visible = false
-		login_completed.emit()
-		_close()
+func _run_login_preparation(payload: Dictionary) -> void:
+	_login_flow_running = true
+	_set_loading(true)
+	await _show_progress_ui()
+	FileLogger.perf("login_prepare_start", {"mode": payload.get("mode", "login")})
+
+	_start_step("connect", Localization.t("ui.login.prepare.current.connect"))
+	_start_step("auth", Localization.t("ui.login.prepare.current.auth"))
+
+	var auth_started := Time.get_ticks_msec()
+	var auth_resp: Dictionary
+	if payload.get("mode", "login") == "register":
+		auth_resp = await ApiClient.register(payload["username"], payload["password"], payload["email"])
 	else:
-		_show_error(resp["error"])
+		auth_resp = await ApiClient.login(payload["username"], payload["password"])
+	var auth_ms := Time.get_ticks_msec() - auth_started
+	FileLogger.perf("login_prepare_auth_done", {
+		"mode": payload.get("mode", "login"),
+		"success": auth_resp.get("success", false),
+		"error_type": auth_resp.get("error_type", ""),
+		"total_ms": auth_ms,
+	})
+
+	if not auth_resp.get("success", false):
+		var is_network_error := str(auth_resp.get("error_type", "")) == "network"
+		_finish_step("connect", PREP_STATUS_FAILED if is_network_error else PREP_STATUS_SUCCESS, auth_resp.get("error", ""))
+		_finish_step("auth", PREP_STATUS_FAILED, auth_resp.get("error", ""))
+		_fail_preparation(auth_resp.get("error", Localization.t("ui.login.prepare.retry_hint")))
+		return
+
+	_finish_step("connect", PREP_STATUS_SUCCESS)
+	_finish_step("auth", PREP_STATUS_SUCCESS)
+
+	var data: Dictionary = auth_resp["data"]
+	if data.has("user") and data["user"] is Dictionary:
+		GameManager.apply_login_user(data["user"])
+	if data.has("draw_key") and data["draw_key"] is Dictionary:
+		GameManager.apply_draw_key(data["draw_key"])
+
+	_start_step("session", Localization.t("ui.login.prepare.current.session"))
+	_finish_step("session", PREP_STATUS_SUCCESS, Localization.t("ui.login.prepare.detail.session_saved"))
+	_start_step("profile")
+	_start_step("collection")
+
+	var batch_started := Time.get_ticks_msec()
+	var base := ApiClient.get_api_base_url()
+	var results := await ApiClient.batch_request([
+		{"key": "profile", "url": base + "/user/profile", "timeout": 45.0},
+		{"key": "level", "url": base + "/player/level", "timeout": 45.0},
+		{"key": "pool", "url": base + "/game/cards?type=pool", "timeout": 45.0},
+		{"key": "hand", "url": base + "/game/cards?type=hand", "timeout": 45.0},
+	])
+	FileLogger.perf("login_prepare_parallel_done", {"total_ms": Time.get_ticks_msec() - batch_started})
+
+	var failed_messages: Array[String] = []
+	_apply_critical_login_results(results, failed_messages)
+
+	if not failed_messages.is_empty():
+		_fail_preparation(failed_messages[0])
+		return
+
+	_start_step("config")
+	_finish_step("config", PREP_STATUS_SUCCESS, Localization.t("ui.login.prepare.detail.background"))
+	_start_step("daily")
+	_finish_step("daily", PREP_STATUS_SUCCESS, Localization.t("ui.login.prepare.detail.background"))
+
+	_start_step("ui", Localization.t("ui.login.prepare.current.ui"))
+	var ui_started := Time.get_ticks_msec()
+	await get_tree().process_frame
+	_finish_step("ui", PREP_STATUS_SUCCESS)
+	FileLogger.perf("login_prepare_ui_done", {"ui_render_ms": Time.get_ticks_msec() - ui_started})
+
+	if _progress_ui != null:
+		_progress_ui.show_success()
+	FileLogger.perf("login_prepare_done", {"success": true})
+	GameManager.sync_optional_login_data_background.call_deferred(true)
+	await get_tree().create_timer(0.35).timeout
+	login_completed.emit()
+	_close()
+
+func _apply_critical_login_results(results: Dictionary, failed_messages: Array[String]) -> void:
+	var profile_resp: Dictionary = results.get("profile", {})
+	var level_resp: Dictionary = results.get("level", {})
+	if profile_resp.get("success", false):
+		GameManager.apply_profile(profile_resp["data"])
+	if level_resp.get("success", false):
+		GameManager._apply_level_info(level_resp["data"])
+	if profile_resp.get("success", false) and level_resp.get("success", false):
+		_finish_step("profile", PREP_STATUS_SUCCESS)
+	else:
+		var resp := profile_resp if not profile_resp.get("success", false) else level_resp
+		_finish_step("profile", PREP_STATUS_FAILED, resp.get("error", ""))
+		failed_messages.append(_step_error_text("profile", resp))
+
+	var collection_keys := ["pool", "hand"]
+	var collection_ok := true
+	var collection_error := ""
+	for key in collection_keys:
+		var resp: Dictionary = results.get(key, {})
+		if not resp.get("success", false):
+			collection_ok = false
+			if collection_error == "":
+				collection_error = resp.get("error", "")
+			continue
+		GameManager._apply_card_slots(key, resp["data"])
+	if collection_ok:
+		_finish_step("collection", PREP_STATUS_SUCCESS)
+	else:
+		_finish_step("collection", PREP_STATUS_FAILED, collection_error)
+		failed_messages.append(Localization.t("ui.login.prepare.step.collection") + ": " + collection_error)
+
+func _step_error_text(step_id: String, resp: Dictionary) -> String:
+	return _step_label(step_id) + ": " + str(resp.get("error", "未知错误"))
+
+func _show_progress_ui() -> void:
+	_panel.visible = false
+	if _progress_ui == null:
+		_progress_ui = Control.new()
+		_progress_ui.set_script(load("res://Scripts/UI/LoginPreparationUI.gd"))
+		_progress_ui.connect("retry_requested", _on_progress_retry)
+		_progress_ui.connect("back_requested", _on_progress_back)
+		add_child(_progress_ui)
+	_progress_ui.visible = true
+	var steps: Array[Dictionary] = []
+	for step in PREP_STEPS:
+		steps.append({"id": step["id"], "label": Localization.t(step["label"])})
+	_progress_ui.set_steps(steps)
+
+func _start_step(step_id: String, current_text: String = "") -> void:
+	_step_started_at[step_id] = Time.get_ticks_msec()
+	if _progress_ui != null:
+		_progress_ui.set_step(step_id, PREP_STATUS_RUNNING)
+		if current_text != "":
+			_progress_ui.set_current(current_text)
+	FileLogger.perf("login_prepare_step_start", {"step": step_id})
+
+func _finish_step(step_id: String, status: String, detail: String = "") -> void:
+	var elapsed := Time.get_ticks_msec() - int(_step_started_at.get(step_id, Time.get_ticks_msec()))
+	if _progress_ui != null:
+		_progress_ui.set_step(step_id, status, elapsed, detail)
+	FileLogger.perf("login_prepare_step_done", {
+		"step": step_id,
+		"status": status,
+		"total_ms": elapsed,
+		"detail": detail,
+	})
+
+func _fail_preparation(message: String) -> void:
+	_login_flow_running = false
+	_set_loading(false)
+	FileLogger.perf("login_prepare_done", {"success": false, "error": message})
+	if _progress_ui != null:
+		var hint := message
+		if hint == "":
+			hint = Localization.t("ui.login.prepare.retry_hint")
+		_progress_ui.show_failure(hint)
+
+func _on_progress_retry() -> void:
+	if _login_flow_running or _last_submit.is_empty():
+		return
+	await _run_login_preparation(_last_submit)
+
+func _on_progress_back() -> void:
+	_login_flow_running = false
+	_set_loading(false)
+	if _progress_ui != null:
+		_progress_ui.visible = false
+	_panel.visible = true
+	_error_label.visible = false
+
+func _step_label(step_id: String) -> String:
+	for step in PREP_STEPS:
+		if step["id"] == step_id:
+			return Localization.t(step["label"])
+	return step_id
 
 # ══════════════════════════════════════════════════
 #  UI 状态控制

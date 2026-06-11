@@ -205,6 +205,18 @@ static func http(method: String, url: String, status_code: int = 0, body_summary
 	if inst:
 		inst._write(LOG_LEVEL_INFO, "[HTTP]", msg)
 
+## 专门记录性能埋点
+static func perf(event: String, fields: Dictionary = {}) -> void:
+	var parts: Array[String] = []
+	for key in fields.keys():
+		parts.append(str(key) + "=" + str(fields[key]))
+	var msg := event
+	if not parts.is_empty():
+		msg += " | " + ", ".join(parts)
+	var inst = _get_instance()
+	if inst:
+		inst._write(LOG_LEVEL_INFO, "[PERF]", msg)
+
 ## 获取日志目录的绝对路径
 static func get_log_path() -> String:
 	var inst = _get_instance()
@@ -217,9 +229,11 @@ static func get_log_path() -> String:
 # ══════════════════════════════════════════════════
 
 static func _get_instance() -> FileLogger:
-	# 通过 Autoload 获取自身
-	if Engine.has_singleton("FileLogger"):
-		return Engine.get_singleton("FileLogger") as FileLogger
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree != null:
+		var node := tree.root.get_node_or_null("FileLogger")
+		if node is FileLogger:
+			return node
 	return null
 
 # ══════════════════════════════════════════════════

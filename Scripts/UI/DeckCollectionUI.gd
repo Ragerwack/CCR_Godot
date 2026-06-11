@@ -36,7 +36,7 @@ func setup_ui() -> void:
 	title.position = Vector2(0, 10)
 	title.size = Vector2(400, 32)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.text = "🏆 已合成套牌"
+	title.text = Localization.t("ui.deck_collection.title")
 	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0, 1.0))  # 金色
 	title.name = "MuseumTitle"
@@ -48,7 +48,7 @@ func setup_ui() -> void:
 	_empty_label.position = Vector2(0, 20)
 	_empty_label.size = Vector2(400, 40)
 	_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_empty_label.text = "集齐5张同系列卡牌自动合成"
+	_empty_label.text = Localization.t("ui.deck_collection.empty")
 	_empty_label.add_theme_font_size_override("font_size", 16)
 	_empty_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 1.0))
 	_empty_label.visible = false
@@ -70,6 +70,8 @@ func setup_ui() -> void:
 	_scroll_container.add_child(_content)
 
 func render_decks() -> void:
+	var render_started := Time.get_ticks_msec()
+	FileLogger.perf("ui_render_start", {"page": "deck_panel", "component": "deck_grid"})
 	# 清空内容
 	for child in _content.get_children():
 		_content.remove_child(child)
@@ -80,6 +82,7 @@ func render_decks() -> void:
 		_empty_label.visible = true
 		if _scroll_container:
 			_scroll_container.visible = false
+		FileLogger.perf("ui_render_done", {"page": "deck_panel", "component": "deck_grid", "count": 0, "total_ms": Time.get_ticks_msec() - render_started})
 		return
 
 	_empty_label.visible = false
@@ -114,6 +117,7 @@ func render_decks() -> void:
 		section.add_child(grid)
 
 		_content.add_child(section)
+	FileLogger.perf("ui_render_done", {"page": "deck_panel", "component": "deck_grid", "count": all_decks.size(), "total_ms": Time.get_ticks_msec() - render_started})
 
 func _create_color_header(color_type: int, count: int) -> Control:
 	var hdr = HBoxContainer.new()

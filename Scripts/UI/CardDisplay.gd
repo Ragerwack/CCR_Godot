@@ -19,17 +19,45 @@ var drag_source: String = ""   # "pool" / "hand" / "vault"
 var is_draggable: bool = true   # 锁定时为 false
 
 var _card_bg: ColorRect
+var _art_image: TextureRect
 var _card_name_label: Label
 var _deck_name_label: Label
+var _description_panel: Panel
 var _description_label: Label
 var _color_border: TextureRect
 var _color_image_map: Dictionary = {}
 var _fallback_color_rect: ColorRect
+var _number_badge: Panel
 var _number_label: Label
 var _color_bar: ColorRect
+var _series_tag_label: Label
+var _hovered: bool = false
+var _dragging_preview: bool = false
+var _drop_targeted: bool = false
+var _drag_anchor_ratio: Vector2 = Vector2(0.5, 0.5)
+var _has_drag_anchor: bool = false
+var _scale_tween: Tween = null
+var hover_uses_slot_bounds: bool = true
+
+static var CARD_SIZE: Vector2 = Vector2(107, 149)
+static var _shared_color_image_map: Dictionary = {}
+static var _texture_cache: Dictionary = {}
+const HOVER_SCALE: float = 2.0
+const DROP_TARGET_SCALE: float = 1.08
+const HOVER_TRANSITION_DURATION: float = 0.3
+const CARD_CANVAS_SIZE: Vector2 = Vector2(1000, 1400)
+const FRAME_SOURCE_SIZE: Vector2 = Vector2(1060, 1484)
+const CANVAS_SOURCE_OFFSET: Vector2 = Vector2(30, 42)
+const ART_PATH_PREFIX: String = "res://Resources/Cards/"
+const CARD_TEXT_COLOR: Color = Color(0.294118, 0.333333, 0.388235, 1.0)
+const INFO_PANEL_BORDER_COLOR: Color = Color(0.850980, 0.866667, 0.898039, 1.0)
+const INFO_PANEL_BG_COLOR: Color = Color(0.972549, 0.976471, 0.984314, 1.0)
+
+static func configure_card_size(card_size: Vector2) -> void:
+	CARD_SIZE = card_size
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(97, 135)   # 与 CardSlotUI 槽位尺寸一致
+	custom_minimum_size = CARD_SIZE
 	setup_ui()
 
 func setup_ui() -> void:
@@ -53,82 +81,221 @@ func setup_ui() -> void:
 
 	_load_color_images()
 
-	# ═══ 88×123 紧凑布局 ═══
-	# 顶部留 2px 边距，卡组名 14px
-	# 卡名区域居中，最多 50px
-	# 描述 30px
-	# 颜色条 + 序号底部 4px 边距
-	# 总计: 2+14+2+50+2+30+2+6+4+4+2+5 = 123
+	_art_image = TextureRect.new()
+	_art_image.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	_art_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_art_image.clip_contents = true
+	_art_image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_art_image)
 
-	# --- 卡组名（顶部，黄金色）---
 	_deck_name_label = Label.new()
-	_deck_name_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_deck_name_label.position = Vector2(2, 2)
-	_deck_name_label.size = Vector2(-4, 16)
 	_deck_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_deck_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_deck_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_deck_name_label.clip_contents = true
-	_deck_name_label.add_theme_font_size_override("font_size", 9)
-	_deck_name_label.add_theme_color_override("font_color", Color(1, 0.9, 0.5, 0.85))
+	_deck_name_label.add_theme_color_override("font_color", CARD_TEXT_COLOR)
 	add_child(_deck_name_label)
 
-	# --- 子卡名（中部大字）---
+	_number_badge = Panel.new()
+	_number_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var badge_style := StyleBoxFlat.new()
+	badge_style.bg_color = INFO_PANEL_BG_COLOR
+	badge_style.border_color = INFO_PANEL_BORDER_COLOR
+	badge_style.set_border_width_all(3)
+	badge_style.corner_radius_top_left = 999
+	badge_style.corner_radius_top_right = 999
+	badge_style.corner_radius_bottom_left = 999
+	badge_style.corner_radius_bottom_right = 999
+	_number_badge.add_theme_stylebox_override("panel", badge_style)
+	add_child(_number_badge)
+
+	_number_label = Label.new()
+	_number_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_number_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_number_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_number_label.clip_contents = true
+	_number_label.add_theme_color_override("font_color", CARD_TEXT_COLOR)
+	_number_badge.add_child(_number_label)
+
 	_card_name_label = Label.new()
-	_card_name_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_card_name_label.position = Vector2(3, 20)
-	_card_name_label.size = Vector2(-6, 48)
 	_card_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_card_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_card_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_card_name_label.clip_contents = true
-	_card_name_label.add_theme_font_size_override("font_size", 12)
+	_card_name_label.add_theme_color_override("font_color", CARD_TEXT_COLOR)
 	add_child(_card_name_label)
 
-	# --- 描述文字（中部下方，较小字体）---
+	_description_panel = Panel.new()
+	_description_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var desc_style := StyleBoxFlat.new()
+	desc_style.bg_color = INFO_PANEL_BG_COLOR
+	desc_style.border_color = INFO_PANEL_BORDER_COLOR
+	desc_style.set_border_width_all(2)
+	desc_style.corner_radius_top_left = 4
+	desc_style.corner_radius_top_right = 4
+	desc_style.corner_radius_bottom_left = 4
+	desc_style.corner_radius_bottom_right = 4
+	_description_panel.add_theme_stylebox_override("panel", desc_style)
+	add_child(_description_panel)
+
 	_description_label = Label.new()
-	_description_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_description_label.position = Vector2(3, 72)
-	_description_label.size = Vector2(-6, 28)
 	_description_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_description_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	_description_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_description_label.add_theme_font_size_override("font_size", 7)
-	_description_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.45))
+	_description_label.add_theme_color_override("font_color", CARD_TEXT_COLOR)
 	_description_label.clip_contents = true
 	add_child(_description_label)
 
-	# --- 颜色条（底部 4px 边距内）---
-	# 底部宽锚点，position.y 从底部向上偏移
-	# 颜色条底部距卡片底部 4px，颜色条高 5px → 顶部距底部 9px
-	# 所以 position.y = 9 (从底部向上 9px)
+	_series_tag_label = Label.new()
+	_series_tag_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_series_tag_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_series_tag_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_series_tag_label.clip_contents = true
+	_series_tag_label.add_theme_color_override("font_color", CARD_TEXT_COLOR)
+	add_child(_series_tag_label)
+
 	_color_bar = ColorRect.new()
-	_color_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_color_bar.position = Vector2(6, 9)
-	_color_bar.size = Vector2(-12, 5)
 	_color_bar.color = Color.WHITE
+	_color_bar.visible = false
 	add_child(_color_bar)
 
-	# --- 序号（叠在颜色条上方）---
-	# 底部锚点，position.y = 5 表示从底部向上 5px，叠在颜色条内容区域
-	_number_label = Label.new()
-	_number_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_number_label.position = Vector2(0, 7)
-	_number_label.size = Vector2(0, 12)
-	_number_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_number_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_number_label.clip_contents = true
-	_number_label.add_theme_font_size_override("font_size", 9)
-	_number_label.add_theme_color_override("font_color", Color(0, 0, 0, 0.85))
-	add_child(_number_label)
-
 	mouse_filter = MOUSE_FILTER_STOP
+	_apply_card_layout()
 
 	gui_input.connect(_on_gui_input)
+	mouse_entered.connect(_on_mouse_entered)
+	mouse_exited.connect(_on_mouse_exited)
+	if DragSystem != null:
+		DragSystem.drag_started.connect(_on_global_drag_started)
+		DragSystem.drag_ended.connect(_on_global_drag_ended)
+		DragSystem.drag_cancelled.connect(_on_global_drag_cancelled)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		pivot_offset = size * 0.5
+		_apply_card_layout()
+	elif what == NOTIFICATION_DRAG_END:
+		_dragging_preview = false
+		_apply_hover_transform()
+		# 通知父级 CardSlotUI 清理拖出遮罩
+		card_drag_ended.emit(card, card_index)
+		# Godot 原生拖拽取消时（未落在有效 drop target），_drop_data 不会被调用
+		# 而 signal drag_ended 不会被 DragSystem 记录，所以需要通知 DragSystem
+		# is_dragging() 只有在 DragSystem.start_drag 被调用后才为 true
+		# 这里直接从父级（CardSlotUI）获取需要的信息
+		if DragSystem != null and DragSystem.is_dragging():
+			DragSystem.cancel_drag()
+
+func _on_mouse_entered() -> void:
+	if hover_uses_slot_bounds:
+		var parent = get_parent()
+		if parent != null and parent.has_method("set_slot_hovered"):
+			parent.set_slot_hovered(true)
+		return
+	if card == null:
+		return
+	_hovered = true
+	_apply_hover_transform()
+
+func _on_mouse_exited() -> void:
+	if hover_uses_slot_bounds:
+		var parent = get_parent()
+		if parent != null and parent.has_method("set_slot_hovered"):
+			parent.set_slot_hovered(false)
+		return
+	_hovered = false
+	_apply_hover_transform()
+
+func _apply_hover_transform() -> void:
+	var global_dragging := DragSystem != null and DragSystem.is_dragging()
+	if _hovered and not _dragging_preview and not global_dragging and card != null:
+		pivot_offset = size * 0.5
+		_tween_visual_scale(Vector2(HOVER_SCALE, HOVER_SCALE), 100)
+	elif _drop_targeted and not _dragging_preview and card != null:
+		pivot_offset = size * 0.5
+		_tween_visual_scale(Vector2(DROP_TARGET_SCALE, DROP_TARGET_SCALE), 90)
+	else:
+		_tween_visual_scale(Vector2.ONE, 0)
+
+
+func _tween_visual_scale(target_scale: Vector2, target_z_index: int) -> void:
+	if _scale_tween != null and _scale_tween.is_valid():
+		_scale_tween.kill()
+
+	if target_z_index > 0:
+		z_index = target_z_index
+
+	if not is_inside_tree():
+		scale = target_scale
+		z_index = target_z_index
+		return
+
+	_scale_tween = create_tween()
+	_scale_tween.tween_property(self, "scale", target_scale, HOVER_TRANSITION_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_scale_tween.finished.connect(func():
+		if target_z_index == 0 and not _hovered and not _drop_targeted:
+			z_index = 0
+	)
+
+func _on_global_drag_started(_card: CardInfo, _from: String) -> void:
+	_apply_hover_transform()
+
+func _on_global_drag_ended(_card: CardInfo, _from: String, _to: String) -> void:
+	_dragging_preview = false
+	_apply_hover_transform()
+
+func _on_global_drag_cancelled() -> void:
+	_dragging_preview = false
+	_apply_hover_transform()
 
 const FRAME_PATH_PREFIX: String = "res://Resources/Themes/card_frames/"
 
+func _canvas_rect(x: float, y: float, w: float, h: float) -> Rect2:
+	return Rect2(
+		Vector2(size.x * (x + CANVAS_SOURCE_OFFSET.x) / FRAME_SOURCE_SIZE.x, size.y * (y + CANVAS_SOURCE_OFFSET.y) / FRAME_SOURCE_SIZE.y),
+		Vector2(size.x * w / FRAME_SOURCE_SIZE.x, size.y * h / FRAME_SOURCE_SIZE.y)
+	)
+
+func _canvas_rect_for(target_size: Vector2, x: float, y: float, w: float, h: float) -> Rect2:
+	return Rect2(
+		Vector2(target_size.x * (x + CANVAS_SOURCE_OFFSET.x) / FRAME_SOURCE_SIZE.x, target_size.y * (y + CANVAS_SOURCE_OFFSET.y) / FRAME_SOURCE_SIZE.y),
+		Vector2(target_size.x * w / FRAME_SOURCE_SIZE.x, target_size.y * h / FRAME_SOURCE_SIZE.y)
+	)
+
+func _font_size(canvas_px: float, minimum: int = 6) -> int:
+	return maxi(minimum, int(round(size.y * canvas_px / CARD_CANVAS_SIZE.y)))
+
+func _apply_rect(node: Control, rect: Rect2) -> void:
+	node.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	node.position = rect.position
+	node.size = rect.size
+
+func _apply_card_layout() -> void:
+	if _art_image == null or _deck_name_label == null or _number_badge == null or _card_name_label == null or _description_panel == null or _description_label == null or _series_tag_label == null:
+		return
+
+	if size.x <= 0 or size.y <= 0:
+		size = CARD_SIZE
+
+	_apply_rect(_art_image, _canvas_rect(90, 190, 820, 740))
+	_apply_rect(_deck_name_label, _canvas_rect(90, 40, 720, 120))
+	_apply_rect(_number_badge, _canvas_rect(900, -90, 190, 190))
+	_apply_rect(_card_name_label, _canvas_rect(150, 900, 700, 90))
+	var desc_rect := _canvas_rect(140, 1010, 720, 260)
+	_apply_rect(_description_panel, desc_rect)
+	_apply_rect(_description_label, desc_rect.grow(-maxf(2.0, size.x * 16.0 / FRAME_SOURCE_SIZE.x)))
+	_apply_rect(_series_tag_label, _canvas_rect(300, 1320, 400, 60))
+
+	_deck_name_label.add_theme_font_size_override("font_size", _font_size(64, 8))
+	_number_label.add_theme_font_size_override("font_size", _font_size(104, 10))
+	_card_name_label.add_theme_font_size_override("font_size", _font_size(54, 8))
+	_description_label.add_theme_font_size_override("font_size", _font_size(34, 6))
+	_series_tag_label.add_theme_font_size_override("font_size", _font_size(28, 6))
+
 func _load_color_images() -> void:
+	if not _shared_color_image_map.is_empty():
+		_color_image_map = _shared_color_image_map
+		return
 	var color_map = {
 		CardColor.ColorType.WHITE: "frame_white.png",
 		CardColor.ColorType.GREEN: "frame_green.png",
@@ -140,10 +307,12 @@ func _load_color_images() -> void:
 	}
 	for color_type in color_map:
 		var path = FRAME_PATH_PREFIX + color_map[color_type]
-		if ResourceLoader.exists(path, "Texture2D"):
-			_color_image_map[color_type] = ResourceLoader.load(path)
+		var tex = _load_texture_cached(path)
+		if tex != null:
+			_color_image_map[color_type] = tex
 		else:
 			push_warning("[CardDisplay] 纹理缺失: " + path)
+	_shared_color_image_map = _color_image_map
 
 func _apply_color_border(ct: CardColor.ColorType) -> void:
 	if _color_image_map.has(ct):
@@ -164,10 +333,15 @@ func set_card(c: CardInfo, idx: int = -1) -> void:
 func clear() -> void:
 	card = null
 	card_index = -1
+	_hovered = false
+	_dragging_preview = false
+	_apply_hover_transform()
 	_card_name_label.text = ""
 	_deck_name_label.text = ""
 	_description_label.text = ""
 	_number_label.text = ""
+	_series_tag_label.text = ""
+	_art_image.texture = null
 	_color_bar.color = Color(0.2, 0.2, 0.25, 1.0)
 
 func _update_display() -> void:
@@ -190,13 +364,56 @@ func _update_display() -> void:
 	# 描述文字
 	_description_label.text = card.description
 
-	# 序号（底部）
-	_number_label.text = "#%d" % card.card_number
+	# 子卡编号圆环
+	_number_label.text = "%d" % card.card_number
+	_series_tag_label.text = card.series_name
+	_apply_card_art(card)
 
 	# 颜色条 + 边框
 	if show_color_border:
 		_apply_color_border(card.color)
 	_color_bar.color = _get_color_by_card_color(card.color)
+
+func _apply_card_art(card_info: CardInfo) -> void:
+	_art_image.texture = null
+	var explicit_path := _normalize_art_path(card_info.image_path)
+	var explicit_tex = _load_texture_cached(explicit_path)
+	if explicit_tex != null:
+		_art_image.texture = explicit_tex
+		return
+	var card_id := int(card_info.id)
+	if card_id <= 0:
+		return
+	var base: String = "card_%03d" % card_id
+	for ext: String in [".jpg", ".png", ".webp", ".jpeg"]:
+		var path: String = ART_PATH_PREFIX + base + ext
+		var tex = _load_texture_cached(path)
+		if tex != null:
+			_art_image.texture = tex
+			return
+
+static func _load_texture_cached(path: String):
+	if path == "":
+		return null
+	if _texture_cache.has(path):
+		return _texture_cache[path]
+	if not ResourceLoader.exists(path, "Texture2D"):
+		return null
+	var tex = ResourceLoader.load(path)
+	if tex != null:
+		_texture_cache[path] = tex
+	return tex
+
+func _normalize_art_path(raw_path: String) -> String:
+	var p := raw_path.strip_edges()
+	if p == "":
+		return ""
+	if p.begins_with("res://"):
+		return p
+	var file_name := p.get_file()
+	if file_name == "":
+		return ""
+	return ART_PATH_PREFIX + file_name
 
 func _get_color_by_card_color(c: CardColor.ColorType) -> Color:
 	match c:
@@ -216,6 +433,18 @@ func set_selected(s: bool) -> void:
 	else:
 		_card_bg.color = Color(0.2, 0.2, 0.25, 1.0)
 
+
+func set_drop_targeted(active: bool) -> void:
+	_drop_targeted = active
+	_apply_hover_transform()
+
+
+func set_slot_hovered(active: bool) -> void:
+	if card == null:
+		active = false
+	_hovered = active
+	_apply_hover_transform()
+
 var _double_click_timer: float = 0.0
 var _click_count: int = 0
 
@@ -223,6 +452,8 @@ func _on_gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb = event as InputEventMouseButton
 		if mb.pressed:
+			_drag_anchor_ratio = _position_to_anchor_ratio(mb.position)
+			_has_drag_anchor = true
 			if mb.double_click:
 				_click_count += 1
 				if _click_count >= 2:
@@ -240,39 +471,26 @@ func _on_gui_input(event: InputEvent) -> void:
 #  原生拖拽（Godot 4 DnD）
 # ══════════════════════════════════════════════════
 
-## 原生拖拽结束通知（包括取消和成功）
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_DRAG_END:
-		# 通知父级 CardSlotUI 清理拖出遮罩
-		card_drag_ended.emit(card, card_index)
-		# Godot 原生拖拽取消时（未落在有效 drop target），_drop_data 不会被调用
-		# 而 signal drag_ended 不会被 DragSystem 记录，所以需要通知 DragSystem
-		# is_dragging() 只有在 DragSystem.start_drag 被调用后才为 true
-		# 这里直接从父级（CardSlotUI）获取需要的信息
-		if DragSystem != null and DragSystem.is_dragging():
-			DragSystem.cancel_drag()
-
-
 func _get_drag_data(at_position: Vector2) -> Variant:
 	# 没有卡牌、不可拖拽、或锁定时不允许拖拽
 	if card == null or not is_draggable:
 		return null
 
+	var ratio := _drag_anchor_ratio
+	if not _has_drag_anchor:
+		ratio = _position_to_anchor_ratio(at_position)
+	_has_drag_anchor = false
+	var card_offset := Vector2(CARD_SIZE.x * ratio.x, CARD_SIZE.y * ratio.y)
+
+	_dragging_preview = true
+	_apply_hover_transform()
+
 	# 通知 DragSystem 开始拖拽（用于后续取消逻辑追踪）
 	if DragSystem != null:
-		DragSystem.start_drag(card, drag_source, card_index)
+		DragSystem.start_drag(card, drag_source, card_index, card_offset)
 
-	# 创建半透明拖拽预览
-	var preview = _create_drag_preview()
-
-	# 关键修复：强制预览用 TOP_LEFT 锚点并设固定大小，避免锚点偏移
-	preview.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	preview.size = Vector2(97, 135)
-
-	# 偏移：鼠标在预览中的相对位置不变
-	# at_position 是鼠标在 CardDisplay 内的本地坐标
-	# 取负值后，鼠标会定位在 preview 的 at_position 处
-	preview.position = -at_position
+	# 创建半透明拖拽预览。Godot 会接管 preview 根节点位置，因此偏移必须放在子节点上。
+	var preview = _create_drag_preview(card_offset)
 
 	set_drag_preview(preview)
 
@@ -287,58 +505,145 @@ func _get_drag_data(at_position: Vector2) -> Variant:
 	}
 
 
+func _position_to_anchor_ratio(pos: Vector2) -> Vector2:
+	return Vector2(
+		clampf(pos.x / maxf(size.x, 1.0), 0.0, 1.0),
+		clampf(pos.y / maxf(size.y, 1.0), 0.0, 1.0)
+	)
+
+
 ## 创建拖拽时的半透明预览副本
-func _create_drag_preview() -> Control:
+func _create_drag_preview(card_offset: Vector2) -> Control:
 	var preview = Control.new()
-	# 不设 custom_minimum_size，由调用者设 size
+	preview.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	preview.size = Vector2(1, 1)
+	preview.z_index = 4096
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var card_layer = Control.new()
+	card_layer.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	card_layer.position = -card_offset
+	card_layer.size = CARD_SIZE
+	card_layer.z_index = 4096
+	card_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	preview.add_child(card_layer)
 
 	# 背景 — 不设锚点，手动设 size
 	var bg = ColorRect.new()
 	bg.position = Vector2(0, 0)
-	bg.size = Vector2(97, 135)
-	bg.color = Color(0.2, 0.2, 0.25, 0.6)  # 半透明
-	preview.add_child(bg)
+	bg.size = CARD_SIZE
+	bg.color = Color(0.2, 0.2, 0.25, 1.0)
+	card_layer.add_child(bg)
+
+	if _art_image.texture != null:
+		var art_rect := _canvas_rect_for(CARD_SIZE, 90, 190, 820, 740)
+		var art = TextureRect.new()
+		art.position = art_rect.position
+		art.size = art_rect.size
+		art.texture = _art_image.texture
+		art.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		art.clip_contents = true
+		card_layer.add_child(art)
 
 	# 复制颜色边框
 	if _color_border.visible and _color_border.texture != null:
 		var border = TextureRect.new()
 		border.position = Vector2(0, 0)
-		border.size = Vector2(97, 135)
+		border.size = CARD_SIZE
 		border.texture = _color_border.texture
 		border.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 		border.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		border.modulate = Color(1, 1, 1, 0.7)
-		preview.add_child(border)
+		border.modulate = Color(1, 1, 1, 1)
+		card_layer.add_child(border)
 
 	# 复制卡组名
+	var deck_rect := _canvas_rect_for(CARD_SIZE, 90, 40, 720, 120)
 	var deck_lbl = Label.new()
-	deck_lbl.position = Vector2(2, 2)
-	deck_lbl.size = Vector2(93, 16)
+	deck_lbl.position = deck_rect.position
+	deck_lbl.size = deck_rect.size
 	deck_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	deck_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	deck_lbl.text = _deck_name_label.text
-	deck_lbl.add_theme_font_size_override("font_size", 9)
-	deck_lbl.add_theme_color_override("font_color", Color(1, 0.9, 0.5, 0.6))
-	preview.add_child(deck_lbl)
+	deck_lbl.add_theme_font_size_override("font_size", _font_size(64, 8))
+	deck_lbl.add_theme_color_override("font_color", CARD_TEXT_COLOR)
+	card_layer.add_child(deck_lbl)
+
+	var badge_rect := _canvas_rect_for(CARD_SIZE, 900, -90, 190, 190)
+	var badge = Panel.new()
+	badge.position = badge_rect.position
+	badge.size = badge_rect.size
+	var badge_style := StyleBoxFlat.new()
+	badge_style.bg_color = INFO_PANEL_BG_COLOR
+	badge_style.border_color = INFO_PANEL_BORDER_COLOR
+	badge_style.set_border_width_all(3)
+	badge_style.corner_radius_top_left = 999
+	badge_style.corner_radius_top_right = 999
+	badge_style.corner_radius_bottom_left = 999
+	badge_style.corner_radius_bottom_right = 999
+	badge.add_theme_stylebox_override("panel", badge_style)
+	card_layer.add_child(badge)
+
+	var number_lbl = Label.new()
+	number_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	number_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	number_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	number_lbl.text = _number_label.text
+	number_lbl.add_theme_font_size_override("font_size", _font_size(104, 10))
+	number_lbl.add_theme_color_override("font_color", CARD_TEXT_COLOR)
+	badge.add_child(number_lbl)
 
 	# 复制卡名
+	var name_rect := _canvas_rect_for(CARD_SIZE, 150, 900, 700, 90)
 	var name_lbl = Label.new()
-	name_lbl.position = Vector2(3, 20)
-	name_lbl.size = Vector2(91, 48)
+	name_lbl.position = name_rect.position
+	name_lbl.size = name_rect.size
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_lbl.text = _card_name_label.text
-	name_lbl.add_theme_font_size_override("font_size", 12)
-	name_lbl.modulate = Color(1, 1, 1, 0.8)
-	preview.add_child(name_lbl)
+	name_lbl.add_theme_font_size_override("font_size", _font_size(54, 8))
+	name_lbl.add_theme_color_override("font_color", CARD_TEXT_COLOR)
+	card_layer.add_child(name_lbl)
 
-	# 复制颜色条
-	var bar = ColorRect.new()
-	bar.position = Vector2(6, 121)  # 135 - 5 - 9 = 121
-	bar.size = Vector2(85, 5)
-	bar.color = _color_bar.color
-	bar.modulate = Color(1, 1, 1, 0.7)
-	preview.add_child(bar)
+	var desc_rect := _canvas_rect_for(CARD_SIZE, 140, 1010, 720, 260)
+	var desc_panel = Panel.new()
+	desc_panel.position = desc_rect.position
+	desc_panel.size = desc_rect.size
+	var desc_style := StyleBoxFlat.new()
+	desc_style.bg_color = INFO_PANEL_BG_COLOR
+	desc_style.border_color = INFO_PANEL_BORDER_COLOR
+	desc_style.set_border_width_all(2)
+	desc_style.corner_radius_top_left = 4
+	desc_style.corner_radius_top_right = 4
+	desc_style.corner_radius_bottom_left = 4
+	desc_style.corner_radius_bottom_right = 4
+	desc_panel.add_theme_stylebox_override("panel", desc_style)
+	card_layer.add_child(desc_panel)
+
+	var desc_lbl = Label.new()
+	var desc_inset := maxf(2.0, CARD_SIZE.x * 16.0 / FRAME_SOURCE_SIZE.x)
+	var desc_inner := desc_rect.grow(-desc_inset)
+	desc_lbl.position = desc_inner.position
+	desc_lbl.size = desc_inner.size
+	desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	desc_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_lbl.text = _description_label.text
+	desc_lbl.add_theme_font_size_override("font_size", _font_size(34, 6))
+	desc_lbl.add_theme_color_override("font_color", CARD_TEXT_COLOR)
+	desc_lbl.clip_contents = true
+	card_layer.add_child(desc_lbl)
+
+	var series_rect := _canvas_rect_for(CARD_SIZE, 300, 1320, 400, 60)
+	var series_lbl = Label.new()
+	series_lbl.position = series_rect.position
+	series_lbl.size = series_rect.size
+	series_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	series_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	series_lbl.text = _series_tag_label.text
+	series_lbl.add_theme_font_size_override("font_size", _font_size(28, 6))
+	series_lbl.add_theme_color_override("font_color", CARD_TEXT_COLOR)
+	card_layer.add_child(series_lbl)
 
 	return preview
 

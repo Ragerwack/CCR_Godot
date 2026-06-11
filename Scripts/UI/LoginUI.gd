@@ -74,13 +74,13 @@ func _setup_ui() -> void:
 
 	# ── 用户名 ──
 	_username_input = LineEdit.new()
-	_username_input.placeholder_text = "用户名"
+	_username_input.placeholder_text = Localization.t("ui.login.username")
 	_username_input.custom_minimum_size = Vector2(0, 36)
 	vbox.add_child(_username_input)
 
 	# ── 密码 ──
 	_password_input = LineEdit.new()
-	_password_input.placeholder_text = "密码"
+	_password_input.placeholder_text = Localization.t("ui.login.password")
 	_password_input.secret = true
 	_password_input.custom_minimum_size = Vector2(0, 36)
 	_password_input.text_submitted.connect(_on_submit)
@@ -88,7 +88,7 @@ func _setup_ui() -> void:
 
 	# ── 邮箱（仅注册模式显示）──
 	_email_input = LineEdit.new()
-	_email_input.placeholder_text = "邮箱"
+	_email_input.placeholder_text = Localization.t("ui.login.email")
 	_email_input.custom_minimum_size = Vector2(0, 36)
 	_email_input.text_submitted.connect(_on_submit)
 	vbox.add_child(_email_input)
@@ -102,7 +102,7 @@ func _setup_ui() -> void:
 
 	# ── 加载指示 ──
 	_loading_label = Label.new()
-	_loading_label.text = "加载中…"
+	_loading_label.text = Localization.t("ui.login.loading")
 	_loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_loading_label.visible = false
 	vbox.add_child(_loading_label)
@@ -130,17 +130,17 @@ func _setup_ui() -> void:
 func _update_mode() -> void:
 	_error_label.visible = false
 	if _mode == "login":
-		_title.text = "登录"
-		_username_input.placeholder_text = "邮箱"
+		_title.text = Localization.t("ui.login.title.login")
+		_username_input.placeholder_text = Localization.t("ui.login.email")
 		_email_input.visible = false
-		_submit_button.text = "登录"
-		_switch_button.text = "没有账号？注册"
+		_submit_button.text = Localization.t("ui.login.submit.login")
+		_switch_button.text = Localization.t("ui.login.switch.to_register")
 		_panel.size.y = 350
 	else:
-		_title.text = "注册"
+		_title.text = Localization.t("ui.login.title.register")
 		_email_input.visible = true
-		_submit_button.text = "注册"
-		_switch_button.text = "已有账号？登录"
+		_submit_button.text = Localization.t("ui.login.submit.register")
+		_switch_button.text = Localization.t("ui.login.switch.to_login")
 		_panel.size.y = 400
 
 	# 重新居中
@@ -164,13 +164,13 @@ func _on_submit(_unused: String = "") -> void:
 	var password := _password_input.text
 
 	if username == "" or password == "":
-		_show_error("用户名和密码不能为空")
+		_show_error(Localization.t("ui.login.error.missing_username_password"))
 		return
 
 	if _mode == "register":
 		var email := _email_input.text.strip_edges()
 		if email == "":
-			_show_error("邮箱不能为空")
+			_show_error(Localization.t("ui.login.error.missing_email"))
 			return
 		_do_register(username, password, email)
 	else:
@@ -189,9 +189,11 @@ func _do_login(username: String, password: String) -> void:
 		var data: Dictionary = resp["data"]
 		if data.has("user") and data["user"] is Dictionary:
 			GameManager.apply_login_user(data["user"])
-		_loading_label.text = "同步数据中…"
+		if data.has("draw_key") and data["draw_key"] is Dictionary:
+			GameManager.apply_draw_key(data["draw_key"])
+		_loading_label.text = Localization.t("ui.login.syncing")
 		_loading_label.visible = true
-		await GameManager.sync_all_from_server()
+		await GameManager.sync_initial_card_pool_from_server()
 		_loading_label.visible = false
 		login_completed.emit()
 		_close()
@@ -207,9 +209,11 @@ func _do_register(username: String, password: String, email: String) -> void:
 		var data: Dictionary = resp["data"]
 		if data.has("user") and data["user"] is Dictionary:
 			GameManager.apply_login_user(data["user"])
-		_loading_label.text = "同步数据中…"
+		if data.has("draw_key") and data["draw_key"] is Dictionary:
+			GameManager.apply_draw_key(data["draw_key"])
+		_loading_label.text = Localization.t("ui.login.syncing")
 		_loading_label.visible = true
-		await GameManager.sync_all_from_server()
+		await GameManager.sync_initial_card_pool_from_server()
 		_loading_label.visible = false
 		login_completed.emit()
 		_close()

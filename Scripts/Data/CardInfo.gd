@@ -9,6 +9,7 @@ var card_number: int       # 1-5
 var color: CardColor.ColorType
 var card_name: String
 var description: String
+var image_path: String
 var type: String           # "基本卡组" or "限时卡组"
 var series_style: String
 
@@ -25,6 +26,7 @@ func _init(data: Dictionary = {}):
 		color = CardColor.from_string(str(color_str))
 	card_name = data.get("card_name", "")
 	description = data.get("description", "")
+	image_path = data.get("image_path", data.get("image", data.get("image_url", "")))
 	type = data.get("type", "限时卡组")
 	series_style = data.get("series_style", "")
 
@@ -38,6 +40,7 @@ func to_dict() -> Dictionary:
 		"color": color,
 		"card_name": card_name,
 		"description": description,
+		"image_path": image_path,
 		"type": type,
 		"series_style": series_style,
 	}

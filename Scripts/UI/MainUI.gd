@@ -5,7 +5,10 @@ class_name MainUI
 
 const LEFT_PANEL_WIDTH: int = 120
 const TOP_BAR_HEIGHT: int = 90
-const EXP_BAR_RATIO: float = 0.06   # 底部经验条占屏比
+const EXP_BAR_RATIO: float = 0.024   # 接近 MMORPG 底部细经验条的屏占比
+const EXP_BAR_MIN_HEIGHT: int = 16
+const EXP_BAR_MAX_HEIGHT: int = 24
+const CARD_SLOT_HEIGHT_RATIO: float = 0.21
 
 var _player_info: PlayerInfoUI
 var _currency: CurrencyUI
@@ -41,8 +44,9 @@ func _show_splash_screen() -> void:
 	# 隐藏所有游戏UI组件（导航栏、PlayerInfo、经验条等）
 	_set_game_ui_visible(false)
 
-	var splash = SplashScreenUI.new()
-	splash.login_completed.connect(_on_splash_completed)
+	var splash := Control.new()
+	splash.set_script(load("res://Scripts/UI/SplashScreenUI.gd"))
+	splash.connect("login_completed", _on_splash_completed)
 	add_child(splash)
 
 func _set_game_ui_visible(visible: bool) -> void:
@@ -54,8 +58,9 @@ func _set_game_ui_visible(visible: bool) -> void:
 func _on_splash_completed() -> void:
 	# 显示游戏UI，进入主界面
 	_set_game_ui_visible(true)
+	SessionManager.start_session()
 	_initialize_card_pool.call_deferred()
-	call_deferred("_deferred_server_sync")
+	refresh_current_view.call_deferred()
 
 func _deferred_server_sync() -> void:
 	_show_loading_light(true)
@@ -142,26 +147,30 @@ func _show_loading_light(show: bool) -> void:
 # ══════════════════════════════════════════════════
 
 func _show_login() -> void:
-	var login_ui := LoginUI.new()
-	login_ui.login_completed.connect(_on_login_completed)
+	var login_ui := Control.new()
+	login_ui.set_script(load("res://Scripts/UI/LoginUI.gd"))
+	login_ui.connect("login_completed", _on_login_completed)
 	login_ui.name = "LoginUI"
 	get_tree().root.call_deferred("add_child", login_ui)
 
 func _on_login_completed() -> void:
-	_show_loading(true)
-	await GameManager.sync_all_from_server()
-	_show_loading(false)
+	_set_game_ui_visible(true)
+	SessionManager.start_session()
 	_initialize_card_pool()
 	refresh_current_view()
 
 func _on_auth_expired() -> void:
+	SessionManager.stop_session()
 	_show_login()
 
 func _on_logout_pressed() -> void:
+	SessionManager.stop_session()
 	ApiClient.logout()
 	GameManager.player_data = PlayerData.new()
 	GameManager.free_refresh_count = 1
 	GameManager.free_refresh_cooldown = 0.0
+	GameManager.newbie_free_refresh_count = 0
+	GameManager.last_free_refresh_time_unix = 0.0
 	CardPoolSystem.current_pool.clear()
 	_show_login()
 
@@ -171,7 +180,8 @@ func _on_logout_pressed() -> void:
 
 func setup_ui() -> void:
 	var vp_size = get_viewport_rect().size
-	var exp_bar_h = int(vp_size.y * EXP_BAR_RATIO)
+	var exp_bar_h = clampi(int(vp_size.y * EXP_BAR_RATIO), EXP_BAR_MIN_HEIGHT, EXP_BAR_MAX_HEIGHT)
+	_configure_card_slot_size(vp_size)
 
 	# ── 顶部栏：PlayerInfo（左上）+ Currency（右上贴边） ──
 	_player_info = PlayerInfoUI.new()
@@ -215,8 +225,8 @@ func setup_ui() -> void:
 	# ── 中央内容区（无右侧面板，全宽） ──
 	_center_area = Control.new()
 	_center_area.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_center_area.position = Vector2(LEFT_PANEL_WIDTH, TOP_BAR_HEIGHT)
-	_center_area.size = Vector2(vp_size.x - LEFT_PANEL_WIDTH, vp_size.y - TOP_BAR_HEIGHT - exp_bar_h)
+	_center_area.position = Vector2(LEFT_PANEL_WIDTH, 0)
+	_center_area.size = Vector2(vp_size.x - LEFT_PANEL_WIDTH, vp_size.y - exp_bar_h)
 	_center_area.name = "CenterArea"
 	add_child(_center_area)
 
@@ -230,18 +240,34 @@ func setup_ui() -> void:
 	if enable_debug:
 		_setup_debug_panel()
 
+
+func _configure_card_slot_size(vp_size: Vector2) -> void:
+	var slot_h := maxf(1.0, vp_size.y * CARD_SLOT_HEIGHT_RATIO)
+	var aspect := CardSlotUI.SLOT_SIZE.x / CardSlotUI.SLOT_SIZE.y
+	var slot_size := Vector2(roundf(slot_h * aspect), roundf(slot_h))
+	CardSlotUI.configure_slot_size(slot_size)
+
 # ══════════════════════════════════════════════════
 #  导航
 # ══════════════════════════════════════════════════
 
-func _on_nav_button(label: String) -> void:
-	match label:
-		"抽卡":      _show_card_pool()
-		"保险箱":    _show_vault()
-		"博物馆":    _show_deck_collection()
-		"拍卖行":    _show_message("拍卖行")
-		"天梯榜":    _show_message("天梯榜")
-		"邮箱":      _show_message("邮箱")
+func _on_nav_button(id: String) -> void:
+	var switch_started := Time.get_ticks_msec()
+	FileLogger.perf("scene_switch_start", {"target": id})
+	if id != "card_pool" and (_card_pool_ui != null or _hand_area_ui != null):
+		GameManager.sync_pool_hand_layout_background("leave_card_pool_to_" + id)
+
+	FileLogger.perf("ui_render_start", {"target": id})
+	match id:
+		"card_pool": _show_card_pool()
+		"vault": _show_vault()
+		"deck_panel": _show_deck_collection()
+		"auction": _show_message(Localization.t("ui.nav.auction"))
+		"ladder": _show_message(Localization.t("ui.nav.ladder"))
+		"mail": _show_message(Localization.t("ui.nav.mail"))
+	FileLogger.perf("ui_render_done", {"target": id})
+	FileLogger.perf("scene_switch_done", {"target": id, "total_ms": Time.get_ticks_msec() - switch_started})
+	_refresh_page_data_background.call_deferred(id)
 
 # ══════════════════════════════════════════════════
 #  中央视图切换
@@ -260,47 +286,36 @@ func _show_card_pool() -> void:
 	_hand_area_ui.vault_save_requested.connect(_on_hand_save_to_vault)
 	_hand_area_ui.card_double_clicked.connect(_on_hand_double_click)
 
-	# 计算卡槽总高度（用于垂直居中）
-	var slot_h = 135
+	# 计算卡槽总高度：卡池顶部、两区间距、手牌底部到经验条顶部三段等距
+	var slot_h = int(CardSlotUI.SLOT_SIZE.y)
 	var slot_spacing = 8
-	var pool_start_y = 24
-	var hand_start_y = 12
-	var pool_total_h = pool_start_y + 2 * (slot_h + slot_spacing) - slot_spacing  # 302
-	var hand_total_h = hand_start_y + 2 * (slot_h + slot_spacing) - slot_spacing  # 290
-	var sep_h = 4
-	var total_h = pool_total_h + sep_h + hand_total_h  # 596
-
-	# 垂直居中：卡池+手牌整体在中央区域居中
-	var vbox = VBoxContainer.new()
-	vbox.name = "CardPoolHandVBox"
-	var vy = maxi(0, int((_center_area.size.y - total_h) / 2))
-	vbox.position = Vector2(0, vy)
-	vbox.size = Vector2(_center_area.size.x, total_h)
-	vbox.add_theme_constant_override("separation", 0)
-	_center_area.add_child(vbox)
+	var pool_total_h = 2 * slot_h + slot_spacing
+	var hand_total_h = 2 * slot_h + slot_spacing
+	var vertical_gap = maxf(0.0, (_center_area.size.y - pool_total_h - hand_total_h) / 3.0)
 
 	# 卡池区（上半固定高度，不拉伸）
 	var pool_container = Control.new()
-	pool_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pool_container.custom_minimum_size = Vector2(0, pool_total_h)
-	vbox.add_child(pool_container)
+	pool_container.position = Vector2(0, vertical_gap)
+	pool_container.size = Vector2(_center_area.size.x, pool_total_h)
+	_center_area.add_child(pool_container)
 
 	_card_pool_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	pool_container.add_child(_card_pool_ui)
 
-	# 分隔线
-	var sep = HSeparator.new()
-	vbox.add_child(sep)
-
 	# 手牌区（下半固定高度，不拉伸）
 	var hand_container = Control.new()
-	hand_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hand_container.custom_minimum_size = Vector2(0, hand_total_h)
-	vbox.add_child(hand_container)
+	hand_container.position = Vector2(0, vertical_gap * 2.0 + pool_total_h)
+	hand_container.size = Vector2(_center_area.size.x, hand_total_h)
+	_center_area.add_child(hand_container)
 
 	_hand_area_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hand_container.add_child(_hand_area_ui)
 	_hand_area_ui.refresh_display()
+
+func _sync_before_leaving_card_pool() -> Dictionary:
+	if _card_pool_ui == null and _hand_area_ui == null:
+		return {"success": true}
+	return await GameManager.sync_pool_hand_layout()
 
 func _show_vault() -> void:
 	_clear_center()
@@ -313,7 +328,19 @@ func _show_deck_collection() -> void:
 	_deck_collection_ui = DeckCollectionUI.new()
 	_deck_collection_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_center_area.add_child(_deck_collection_ui)
-	_deck_collection_ui.refresh()
+
+func _refresh_page_data_background(id: String) -> void:
+	match id:
+		"vault":
+			if ApiClient.is_logged_in():
+				await GameManager.sync_vault_from_server()
+				if is_instance_valid(_vault_ui):
+					_vault_ui.refresh_display()
+		"deck_panel":
+			if ApiClient.is_logged_in():
+				await GameManager.sync_decks_from_server()
+				if is_instance_valid(_deck_collection_ui):
+					_deck_collection_ui.render_decks()
 
 func _show_synthesis_panel() -> void:
 	_clear_center()
@@ -353,22 +380,22 @@ func _build_menu_panel() -> Control:
 	panel.add_child(vbox)
 
 	var title = Label.new()
-	title.text = "菜单"
+	title.text = Localization.t("ui.menu.title")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 24)
 	vbox.add_child(title)
 
-	var music_row = _make_slider_row("音乐音量", AudioManager.bgm_volume, func(v): AudioManager.set_bgm_volume(v))
+	var music_row = _make_slider_row(Localization.t("ui.menu.music_volume"), AudioManager.bgm_volume, func(v): AudioManager.set_bgm_volume(v))
 	vbox.add_child(music_row)
 
-	var sfx_row = _make_slider_row("音效音量", AudioManager.sfx_volume, func(v): AudioManager.set_sfx_volume(v))
+	var sfx_row = _make_slider_row(Localization.t("ui.menu.sfx_volume"), AudioManager.sfx_volume, func(v): AudioManager.set_sfx_volume(v))
 	vbox.add_child(sfx_row)
 
 	var mute_btn = Button.new()
-	mute_btn.text = "🔊 静音" if not AudioManager.is_muted else "🔇 已静音"
+	mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
 	mute_btn.pressed.connect(func():
 		AudioManager.toggle_mute()
-		mute_btn.text = "🔊 静音" if not AudioManager.is_muted else "🔇 已静音"
+		mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
 	)
 	vbox.add_child(mute_btn)
 
@@ -376,12 +403,12 @@ func _build_menu_panel() -> Control:
 	vbox.add_child(sep)
 
 	var logout_btn = Button.new()
-	logout_btn.text = "🚪 登出"
+	logout_btn.text = Localization.t("ui.menu.logout")
 	logout_btn.pressed.connect(_on_logout_pressed)
 	vbox.add_child(logout_btn)
 
 	var back_btn = Button.new()
-	back_btn.text = "返回"
+	back_btn.text = Localization.t("ui.button.back")
 	back_btn.pressed.connect(func(): _show_card_pool())
 	vbox.add_child(back_btn)
 
@@ -409,73 +436,102 @@ func _make_slider_row(label_text: String, default_val: float, callback: Callable
 # ══════════════════════════════════════════════════
 
 func _on_hand_synthesize() -> void:
-	_show_synthesis_panel()
-
-func _on_hand_discard() -> void:
-	var hand_cards = GameManager.player_data.hand_cards
-	if hand_cards.size() == 0:
+	if not is_instance_valid(_hand_area_ui):
+		return
+	var selected_indices := _hand_area_ui.get_selected_synthesis_indices()
+	if selected_indices.size() != 5:
 		return
 
-	# 找最后一张非空手牌
-	var idx = -1
-	for i in range(hand_cards.size() - 1, -1, -1):
-		if hand_cards[i] != null:
-			idx = i
-			break
+	_show_loading(true)
+	var sync_resp := await GameManager.sync_pool_hand_layout()
+	if not sync_resp.get("success", false):
+		push_error("合成前同步失败: ", sync_resp.get("error", ""))
+		_show_loading(false)
+		return
+
+	var resp := await ApiClient.synthesize(selected_indices, "hand")
+	if resp.get("success", false):
+		_apply_hand_synthesis_result(resp.get("data", {}), selected_indices)
+		var profile_resp := await ApiClient.get_profile()
+		if profile_resp.get("success", false):
+			GameManager.apply_profile(profile_resp["data"])
+		await GameManager.sync_decks_from_server()
+		if is_instance_valid(_hand_area_ui):
+			_hand_area_ui.clear_selection()
+			_hand_area_ui.refresh_display()
+	else:
+		push_error("合成失败: ", resp.get("error", ""))
+	_show_loading(false)
+
+func _on_hand_discard() -> void:
+	if not is_instance_valid(_hand_area_ui):
+		return
+	var idx := _hand_area_ui.get_selected_hand_index()
 	if idx < 0:
+		return
+	var hand_cards = GameManager.player_data.hand_cards
+	if idx >= hand_cards.size() or hand_cards[idx] == null:
+		_hand_area_ui.clear_selection()
 		return
 
 	if not ApiClient.is_logged_in():
-		hand_cards.remove_at(idx)
+		hand_cards[idx] = null
 		GameManager.player_data.changed.emit()
 		if is_instance_valid(_hand_area_ui):
+			_hand_area_ui.clear_selection()
 			_hand_area_ui.refresh_display()
 		return
 
 	_show_loading(true)
+	var sync_resp := await GameManager.sync_pool_hand_layout()
+	if not sync_resp.get("success", false):
+		push_error("丢弃前同步失败: ", sync_resp.get("error", ""))
+		_show_loading(false)
+		return
+
 	var resp = await ApiClient.discard_card("hand", idx)
 	if resp["success"]:
 		if idx < hand_cards.size():
-			hand_cards.remove_at(idx)
+			hand_cards[idx] = null
 		GameManager.player_data.changed.emit()
 		if is_instance_valid(_hand_area_ui):
+			_hand_area_ui.clear_selection()
 			_hand_area_ui.refresh_display()
 	else:
 		push_error("丢弃失败: ", resp["error"])
 	_show_loading(false)
 
 func _on_hand_save_to_vault() -> void:
-	var hand_cards = GameManager.player_data.hand_cards
-	if hand_cards.size() == 0:
+	if not is_instance_valid(_hand_area_ui):
 		return
-
-	# 找第一张非空手牌
-	var source_idx = -1
-	var card = null
-	for i in range(hand_cards.size()):
-		if hand_cards[i] != null:
-			source_idx = i
-			card = hand_cards[i]
-			break
+	var source_idx := _hand_area_ui.get_selected_hand_index()
 	if source_idx < 0:
 		return
+	var hand_cards = GameManager.player_data.hand_cards
+	if source_idx >= hand_cards.size() or hand_cards[source_idx] == null:
+		_hand_area_ui.clear_selection()
+		return
 
-	# 找第一个空保险箱槽
+	var card = hand_cards[source_idx]
+
 	var vault_cards = GameManager.player_data.vault_cards
 	var vault_idx = -1
-	for i in range(GameManager.player_data.vault_slots):
-		if i >= vault_cards.size() or vault_cards[i] == null:
-			vault_idx = i
-			break
-	if vault_idx < 0:
-		print("保险箱已满")
-		return
 
 	_show_loading(true)
 
 	if not ApiClient.is_logged_in():
+		# 找第一个空保险箱槽
+		for i in range(GameManager.player_data.vault_slots):
+			if i >= vault_cards.size() or vault_cards[i] == null:
+				vault_idx = i
+				break
+		if vault_idx < 0:
+			print("保险箱已满")
+			_show_loading(false)
+			return
+
 		# 离线模式：直接本地移动
-		hand_cards.remove_at(source_idx)
+		hand_cards[source_idx] = null
 		while vault_cards.size() < vault_idx:
 			vault_cards.append(null)
 		if vault_idx < vault_cards.size():
@@ -484,7 +540,38 @@ func _on_hand_save_to_vault() -> void:
 			vault_cards.append(card)
 		GameManager.player_data.changed.emit()
 		if is_instance_valid(_hand_area_ui):
+			_hand_area_ui.clear_selection()
 			_hand_area_ui.refresh_display()
+		_show_loading(false)
+		return
+
+	var sync_resp := await GameManager.sync_pool_hand_layout()
+	if not sync_resp.get("success", false):
+		print("保存前同步失败: ", sync_resp.get("error", ""))
+		_show_loading(false)
+		return
+
+	var vault_resp := await ApiClient.get_cards("vault")
+	if not vault_resp.get("success", false):
+		print("获取保险箱槽位失败: ", vault_resp.get("error", ""))
+		_show_loading(false)
+		return
+
+	var raw_vault_slots: Array = vault_resp["data"] as Array
+	vault_cards = ApiClient.card_slots_to_array_sorted(raw_vault_slots)
+	GameManager.player_data.vault_cards = vault_cards
+	GameManager.player_data.vault_slots = vault_cards.size()
+	for raw in raw_vault_slots:
+		if not (raw is Dictionary):
+			continue
+		if not raw.get("unlocked", false):
+			continue
+		var idx := int(raw.get("slot_index", -1))
+		if idx >= 0 and (idx >= vault_cards.size() or vault_cards[idx] == null):
+			vault_idx = idx
+			break
+	if vault_idx < 0:
+		print("保险箱已满，请先购买保险箱槽位")
 		_show_loading(false)
 		return
 
@@ -492,11 +579,11 @@ func _on_hand_save_to_vault() -> void:
 	if resp["success"]:
 		var result_data: Dictionary = resp["data"]
 		var cd = ApiClient.card_slot_to_cardinfo(result_data)
-		if card != null:
+		if cd != null and card != null:
 			cd.id = card.id
 
 		if source_idx < hand_cards.size():
-			hand_cards.remove_at(source_idx)
+			hand_cards[source_idx] = null
 
 		while vault_cards.size() < vault_idx:
 			vault_cards.append(null)
@@ -508,11 +595,37 @@ func _on_hand_save_to_vault() -> void:
 		GameManager.player_data.changed.emit()
 
 		if is_instance_valid(_hand_area_ui):
+			_hand_area_ui.clear_selection()
 			_hand_area_ui.refresh_display()
 	else:
 		print("保存失败: ", resp["error"])
 
 	_show_loading(false)
+
+func _apply_hand_synthesis_result(result: Dictionary, fallback_indices: Array[int]) -> void:
+	var consumed = result.get("consumed_slots", [])
+	var indices_to_remove: Array[int] = []
+	for slot in consumed:
+		if slot is Dictionary:
+			var idx := int(slot.get("slot_index", -1))
+			if idx >= 0:
+				indices_to_remove.append(idx)
+	if indices_to_remove.is_empty():
+		indices_to_remove = fallback_indices.duplicate()
+
+	indices_to_remove.sort()
+	for i in range(indices_to_remove.size() - 1, -1, -1):
+		GameManager.player_data.remove_from_hand_at(indices_to_remove[i])
+
+	var gold := int(result.get("gold_reward", 0))
+	if gold > 0:
+		GameManager.player_data.add_gold(gold)
+
+	var deck_data: Dictionary = result.get("deck", {})
+	if not deck_data.is_empty():
+		DeckSystem.add_synthesized_deck(deck_data)
+
+	GameManager.player_data.changed.emit()
 
 # ══════════════════════════════════════════════════
 #  卡池双击 → 移入手牌

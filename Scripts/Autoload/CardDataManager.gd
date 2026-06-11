@@ -81,6 +81,7 @@ func _parse_series_format(series_array: Array) -> void:
 					"color": "白",  # 默认白色，抽卡时随机分配
 					"card_name": card_data.get("name_zh", ""),
 					"description": card_data.get("desc_zh", ""),
+					"image_path": card_data.get("image", ""),
 					"type": cat,
 					"series_style": sen,
 				})
