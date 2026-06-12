@@ -28,6 +28,7 @@ func start_session() -> void:
 	_set_status("online")
 	if _timer != null and _timer.is_stopped():
 		_timer.start()
+	_send_heartbeat.call_deferred()
 
 func stop_session() -> void:
 	_running = false
@@ -55,6 +56,21 @@ func _send_heartbeat() -> void:
 		_failure_count = 0
 		_set_status(resp["data"].get("session_status", "online"))
 		FileLogger.perf("heartbeat_done", {"success": true, "status": _last_status})
+		return
+
+	if resp.get("error_type", "") == "auth" and ApiClient.has_refresh_token():
+		FileLogger.warn("心跳发现 access token 失效，尝试刷新会话")
+		var refresh_resp: Dictionary = await ApiClient.refresh_session()
+		if refresh_resp.get("success", false):
+			_failure_count = 0
+			_set_status("online")
+			FileLogger.perf("heartbeat_refresh_session_done", {"success": true})
+			return
+		FileLogger.perf("heartbeat_refresh_session_done", {
+			"success": false,
+			"reason": refresh_resp.get("error", ""),
+		})
+		ApiClient.auth_expired.emit()
 		return
 
 	_failure_count += 1

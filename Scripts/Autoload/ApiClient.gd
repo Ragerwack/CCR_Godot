@@ -62,6 +62,7 @@ signal auth_expired()
 const DEFAULT_API_BASE_URL: String = "https://ccrgame.com/api"
 const API_BASE_URL_ENV: String = "CCR_API_BASE_URL"
 const AUTH_TOKEN_KEY: String = "ccr_auth_token"
+const REFRESH_TOKEN_KEY: String = "ccr_refresh_token"
 const HTTP_TIMEOUT_SECONDS: float = 30.0
 const AUTH_TIMEOUT_SECONDS: float = 45.0
 
@@ -77,6 +78,7 @@ const _METHOD_NAMES: Dictionary = {
 }
 
 var _auth_token: String = ""
+var _refresh_token: String = ""
 var _api_base_url: String = DEFAULT_API_BASE_URL
 
 # ══════════════════════════════════════════════════
@@ -90,12 +92,22 @@ func _ready() -> void:
 	if saved != null and saved is String and saved != "":
 		_auth_token = saved
 		FileLogger.log("ApiClient 初始化, token=" + (_auth_token.left(10) + "..." if _auth_token.length() > 10 else _auth_token))
+	var saved_refresh = Config.get_value("auth", "refresh_token", "")
+	if saved_refresh != null and saved_refresh is String and saved_refresh != "":
+		_refresh_token = saved_refresh
+		FileLogger.log("ApiClient 初始化, 已加载 refresh token")
 
 func is_logged_in() -> bool:
 	return _auth_token != ""
 
 func get_auth_token() -> String:
 	return _auth_token
+
+func has_refresh_token() -> bool:
+	return _refresh_token != ""
+
+func get_refresh_token() -> String:
+	return _refresh_token
 
 func get_api_base_url() -> String:
 	return _api_base_url
@@ -295,7 +307,8 @@ func _parse_response(result_arr: Array, _url: String = "") -> Dictionary:
 		# 认证过期 — 清除 token 并通知
 		_auth_token = ""
 		Config.set_value("auth", "token", "")
-		auth_expired.emit()
+		if not _url.ends_with("/auth/refresh") and not _url.ends_with("/auth/heartbeat"):
+			auth_expired.emit()
 		return {"success": false, "error": err, "error_type": "auth", "status_code": code}
 
 	return {"success": false, "error": err, "error_type": "business", "status_code": code}
@@ -311,9 +324,8 @@ func login(username: String, password: String) -> Dictionary:
 
 	if resp["success"]:
 		var data: Dictionary = resp["data"]
-		if data.has("token"):
-			_auth_token = data["token"]
-			Config.set_value("auth", "token", _auth_token)
+		if data.has("token") or data.has("access_token"):
+			_store_login_tokens(data)
 			login_succeeded.emit(data)
 		else:
 			login_failed.emit("登录响应缺少 token")
@@ -329,9 +341,8 @@ func register(username: String, password: String, email: String) -> Dictionary:
 
 	if resp["success"]:
 		var data: Dictionary = resp["data"]
-		if data.has("token"):
-			_auth_token = data["token"]
-			Config.set_value("auth", "token", _auth_token)
+		if data.has("token") or data.has("access_token"):
+			_store_login_tokens(data)
 		register_succeeded.emit(data)
 	else:
 		register_failed.emit(resp["error"])
@@ -340,7 +351,32 @@ func register(username: String, password: String, email: String) -> Dictionary:
 ## 登出
 func logout() -> void:
 	_auth_token = ""
+	_refresh_token = ""
 	Config.set_value("auth", "token", "")
+	Config.set_value("auth", "refresh_token", "")
+
+func refresh_session() -> Dictionary:
+	if _refresh_token == "":
+		return {"success": false, "error": "本地没有可恢复会话", "error_type": "auth", "status_code": 0}
+	var body := JSON.stringify({"refresh_token": _refresh_token})
+	var resp := await _request(_api_url("/auth/refresh"), HTTPClient.METHOD_POST, body, AUTH_TIMEOUT_SECONDS)
+	if resp.get("success", false):
+		_store_login_tokens(resp["data"])
+	else:
+		if resp.get("error_type", "") == "auth":
+			_refresh_token = ""
+			Config.set_value("auth", "refresh_token", "")
+	return resp
+
+func _store_login_tokens(data: Dictionary) -> void:
+	var access_token := str(data.get("access_token", data.get("token", "")))
+	if access_token != "":
+		_auth_token = access_token
+		Config.set_value("auth", "token", _auth_token)
+	var refresh := str(data.get("refresh_token", ""))
+	if refresh != "":
+		_refresh_token = refresh
+		Config.set_value("auth", "refresh_token", _refresh_token)
 
 func heartbeat(user_id: int = 0) -> Dictionary:
 	var body := JSON.stringify({

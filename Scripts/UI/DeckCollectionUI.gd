@@ -1,12 +1,12 @@
 extends Control
 class_name DeckCollectionUI
 
-# 博物馆 — 展示所有已合成套牌，按颜色分组
+# 博物馆 — 展示所有已合成圣物，按颜色分组
 
 const CARDS_PER_ROW: int = 6
-const CARD_WIDTH: float = 130.0
-const CARD_HEIGHT: float = 175.0   # 宽高比 ≈ 3:4
-const CARD_SPACING: float = 12.0
+const CARD_WIDTH: float = 150.0
+const CARD_HEIGHT: float = 200.0
+const CARD_SPACING: float = 24.0
 const SECTION_SPACING: float = 20.0
 const HEADER_HEIGHT: float = 32.0
 
@@ -89,35 +89,64 @@ func render_decks() -> void:
 	if _scroll_container:
 		_scroll_container.visible = true
 
-	# 按颜色分组
-	var groups: Dictionary = {}  # CardColor.ColorType -> Array[Deck]
-	for d in all_decks:
-		if not groups.has(d.color):
-			groups[d.color] = []
-		groups[d.color].append(d)
+	var relics := _aggregate_relics(all_decks)
+	var groups: Dictionary = {}  # CardColor.ColorType -> Array[Dictionary]
+	for relic in relics:
+		var color_type: int = int(relic.get("color", CardColor.ColorType.WHITE))
+		if not groups.has(color_type):
+			groups[color_type] = []
+		groups[color_type].append(relic)
+
+	for color_type in groups.keys():
+		groups[color_type].sort_custom(_sort_relics_by_name)
 
 	# 按颜色顺序渲染
 	for color_type in COLOR_ORDER:
 		if not groups.has(color_type):
 			continue
-		var decks_in_group: Array[Deck] = groups[color_type]
-		if decks_in_group.is_empty():
+		var relics_in_group: Array = groups[color_type]
+		if relics_in_group.is_empty():
 			continue
 
-		# 颜色组区域
 		var section = VBoxContainer.new()
 		section.add_theme_constant_override("separation", 6)
 
-		# 标题行
-		var header = _create_color_header(color_type, decks_in_group.size())
+		var header = _create_color_header(color_type, relics_in_group.size())
 		section.add_child(header)
 
-		# 卡片网格（每行最多 CARDS_PER_ROW 张）
-		var grid = _create_card_grid(decks_in_group)
+		var grid = _create_card_grid(relics_in_group)
 		section.add_child(grid)
 
 		_content.add_child(section)
-	FileLogger.perf("ui_render_done", {"page": "deck_panel", "component": "deck_grid", "count": all_decks.size(), "total_ms": Time.get_ticks_msec() - render_started})
+	FileLogger.perf("ui_render_done", {"page": "deck_panel", "component": "relic_grid", "count": all_decks.size(), "display_count": relics.size(), "total_ms": Time.get_ticks_msec() - render_started})
+
+func _aggregate_relics(decks: Array[Deck]) -> Array[Dictionary]:
+	var by_key: Dictionary = {}
+	for d in decks:
+		var key := "%s|%s|%d" % [d.series_name, d.deck_name, int(d.color)]
+		if not by_key.has(key):
+			by_key[key] = {
+				"id": d.id,
+				"series_name": d.series_name,
+				"deck_name": d.deck_name,
+				"color": int(d.color),
+				"count": 0,
+				"combat_power": d.combat_power,
+			}
+		by_key[key]["count"] = int(by_key[key]["count"]) + 1
+		by_key[key]["combat_power"] = max(int(by_key[key]["combat_power"]), d.combat_power)
+
+	var relics: Array[Dictionary] = []
+	for key in by_key.keys():
+		relics.append(by_key[key])
+	return relics
+
+func _sort_relics_by_name(a: Dictionary, b: Dictionary) -> bool:
+	var a_series := str(a.get("series_name", ""))
+	var b_series := str(b.get("series_name", ""))
+	if a_series == b_series:
+		return str(a.get("deck_name", "")) < str(b.get("deck_name", ""))
+	return a_series < b_series
 
 func _create_color_header(color_type: int, count: int) -> Control:
 	var hdr = HBoxContainer.new()
@@ -126,7 +155,7 @@ func _create_color_header(color_type: int, count: int) -> Control:
 
 	var color_name = CardColor.get_name(color_type)
 	var color_label = Label.new()
-	color_label.text = "■ " + color_name + " 卡组"
+	color_label.text = "■ " + Localization.t("ui.deck_collection.color_header", [color_name])
 	color_label.add_theme_font_size_override("font_size", 16)
 	# 粗体设置 — Godot 中无法直接用 bool 设置 bold，改用 add_theme_font_size_override 即可
 	color_label.add_theme_color_override("font_color", _get_color_text(color_type))
@@ -135,7 +164,7 @@ func _create_color_header(color_type: int, count: int) -> Control:
 
 	# 计数
 	var count_label = Label.new()
-	count_label.text = " (%d 套)" % count
+	count_label.text = Localization.t("ui.deck_collection.kind_count", [count])
 	count_label.add_theme_font_size_override("font_size", 13)
 	count_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1.0))
 	hdr.add_child(count_label)
@@ -147,122 +176,98 @@ func _create_color_header(color_type: int, count: int) -> Control:
 
 	return hdr
 
-func _create_card_grid(decks: Array[Deck]) -> Container:
+func _create_card_grid(relics: Array) -> Container:
 	# 用 FlowContainer 自动换行
 	var flow = FlowContainer.new()
 	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	flow.add_theme_constant_override("h_separation", CARD_SPACING)
+	flow.add_theme_constant_override("v_separation", CARD_SPACING)
 
-	for deck in decks:
-		var card = _create_deck_card(deck)
+	for relic in relics:
+		var card = _create_relic_card(relic)
 		flow.add_child(card)
 
 	return flow
 
-func _create_deck_card(deck: Deck) -> Control:
+func _create_relic_card(relic: Dictionary) -> Control:
 	var card_container = Control.new()
 	card_container.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
 	card_container.size = Vector2(CARD_WIDTH, CARD_HEIGHT)
+	var color_type := int(relic.get("color", CardColor.ColorType.WHITE))
 
-	# 渐变背景
+	# 当前暂无圣物专有图片，先用颜色矩形占位；后续美术图实装时替换这一层。
 	var bg = ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = _get_card_bg_color(deck.color)
-	bg.name = "DeckCardBg"
+	bg.color = _get_card_bg_color(color_type)
+	bg.name = "RelicCardBg"
 
-	# 圆角效果 — 用边框模拟
 	var border_rect = ColorRect.new()
 	border_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	border_rect.position = Vector2(1, 1)
 	border_rect.size = Vector2(CARD_WIDTH - 2, CARD_HEIGHT - 2)
-	border_rect.color = _get_color_text(deck.color)
-	border_rect.modulate = Color(1, 1, 1, 0.15)
-	border_rect.name = "DeckCardBorder"
+	border_rect.color = _get_color_text(color_type)
+	border_rect.modulate = Color(1, 1, 1, 0.18)
+	border_rect.name = "RelicCardBorder"
 
 	card_container.add_child(bg)
 	card_container.add_child(border_rect)
 
-	# 顶部渐变 overlay
 	var grad_overlay = ColorRect.new()
 	grad_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	grad_overlay.color = Color(1, 1, 1, 0.05)
 	grad_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	grad_overlay.name = "DeckCardOverlay"
+	grad_overlay.name = "RelicCardOverlay"
 	card_container.add_child(grad_overlay)
 
-	# 系列名称（上部）
 	var series_label = Label.new()
 	series_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	series_label.position = Vector2(8, 12)
-	series_label.size = Vector2(-16, 24)
+	series_label.position = Vector2(10, 18)
+	series_label.size = Vector2(-20, 28)
 	series_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	series_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	series_label.text = deck.series_name
-	series_label.add_theme_font_size_override("font_size", 11)
+	series_label.text = str(relic.get("series_name", ""))
+	series_label.add_theme_font_size_override("font_size", 14)
 	series_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.8))
 	series_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	series_label.name = "DeckCardSeries"
+	series_label.name = "RelicCardSeries"
 	card_container.add_child(series_label)
 
-	# 卡组名称（中部大字）
-	var deck_label = Label.new()
-	deck_label.set_anchors_preset(Control.PRESET_CENTER)
-	deck_label.position = Vector2(0, -12)
-	deck_label.size = Vector2(CARD_WIDTH - 16, 40)
-	deck_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	deck_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	deck_label.text = deck.deck_name
-	deck_label.add_theme_font_size_override("font_size", 16)
-	deck_label.add_theme_color_override("font_color", Color(1, 1, 1, 1.0))
-	deck_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	deck_label.name = "DeckCardName"
-	card_container.add_child(deck_label)
+	var name_label = Label.new()
+	name_label.set_anchors_preset(Control.PRESET_CENTER)
+	name_label.position = Vector2(0, -18)
+	name_label.size = Vector2(CARD_WIDTH - 20, 58)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.text = str(relic.get("deck_name", ""))
+	name_label.add_theme_font_size_override("font_size", 24)
+	name_label.add_theme_color_override("font_color", Color(1, 1, 1, 1.0))
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_label.name = "RelicCardName"
+	card_container.add_child(name_label)
 
 	# 编号标识 — 小字显示 1-5（代表集齐）
 	var num_label = Label.new()
 	num_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	num_label.position = Vector2(8, 42)
-	num_label.size = Vector2(-16, 20)
+	num_label.position = Vector2(10, 54)
+	num_label.size = Vector2(-20, 20)
 	num_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	num_label.text = "1 2 3 4 5"
 	num_label.add_theme_font_size_override("font_size", 10)
 	num_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.5))
-	num_label.name = "DeckCardNumbers"
+	num_label.name = "RelicCardSlots"
 	card_container.add_child(num_label)
 
-	# 底部信息 — 已合成数量
-	var info_bg = ColorRect.new()
-	info_bg.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	info_bg.position = Vector2(0, 0)
-	info_bg.size = Vector2(0, 28)
-	info_bg.color = Color(0, 0, 0, 0.35)
-	info_bg.name = "DeckCardInfoBg"
-	card_container.add_child(info_bg)
-
-	# 合成数量标签
-	var info_label = Label.new()
-	info_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	info_label.position = Vector2(0, 3)
-	info_label.size = Vector2(0, 22)
-	info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	info_label.text = "已合成 %d 套" % deck.card_count
-	info_label.add_theme_font_size_override("font_size", 11)
-	info_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
-	info_label.name = "DeckCardInfo"
-	card_container.add_child(info_label)
-
-	# 战斗力（右上角小标）
-	var cp_label = Label.new()
-	cp_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	cp_label.position = Vector2(-8, 8)
-	cp_label.size = Vector2(60, 18)
-	cp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	cp_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	cp_label.text = "⚔ %d" % deck.combat_power
-	cp_label.add_theme_font_size_override("font_size", 10)
-	cp_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0, 0.8))
-	cp_label.name = "DeckCardCombatPower"
-	card_container.add_child(cp_label)
+	var count_label = Label.new()
+	count_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	count_label.position = Vector2(0, 6)
+	count_label.size = Vector2(0, 24)
+	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	count_label.text = Localization.t("ui.deck_collection.relic_count", [int(relic.get("count", 1))])
+	count_label.add_theme_font_size_override("font_size", 14)
+	count_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0, 1.0))
+	count_label.name = "RelicCardCount"
+	card_container.add_child(count_label)
 
 	return card_container
 

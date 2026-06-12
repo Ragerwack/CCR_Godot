@@ -56,6 +56,9 @@ const NAV_BUTTONS: Array[Dictionary] = [
 
 func _ready() -> void:
 	player_data = PlayerData.new()
+	var cached_draw_key = Config.get_value("cache", "draw_key", {})
+	if cached_draw_key is Dictionary and not cached_draw_key.is_empty():
+		apply_draw_key(cached_draw_key)
 
 	var timer = Timer.new()
 	timer.name = "FreeRefreshTimer"
@@ -96,6 +99,7 @@ func apply_login_user(user_data: Dictionary) -> void:
 func apply_draw_key(key_data: Dictionary) -> void:
 	draw_key = key_data.duplicate(true)
 	draw_key_version = int(draw_key.get("version", 0))
+	Config.set_value("cache", "draw_key", draw_key)
 
 	## 从 profile 响应同步完整数据
 func apply_profile(profile: Dictionary) -> void:
@@ -246,6 +250,8 @@ func sync_optional_login_data_background(include_config: bool = true) -> void:
 
 	var base := ApiClient.get_api_base_url()
 	var requests: Array[Dictionary] = [
+		{"key": "profile", "url": base + "/user/profile", "timeout": 20.0},
+		{"key": "level", "url": base + "/player/level", "timeout": 20.0},
 		{"key": "vault", "url": base + "/game/cards?type=vault", "timeout": 20.0},
 		{"key": "decks", "url": base + "/game/decks", "timeout": 20.0},
 		{"key": "daily", "url": base + "/signin", "method": HTTPClient.METHOD_POST, "body": "{}", "timeout": 20.0},
@@ -254,6 +260,18 @@ func sync_optional_login_data_background(include_config: bool = true) -> void:
 		requests.append({"key": "config", "url": base + "/game/config", "timeout": 20.0})
 
 	var results := await ApiClient.batch_request(requests)
+
+	var profile_resp: Dictionary = results.get("profile", {})
+	if profile_resp.get("success", false):
+		apply_profile(profile_resp["data"])
+	else:
+		FileLogger.warn("登录后台 profile 同步失败: " + profile_resp.get("error", ""))
+
+	var level_resp: Dictionary = results.get("level", {})
+	if level_resp.get("success", false):
+		_apply_level_info(level_resp["data"])
+	else:
+		FileLogger.warn("登录后台等级同步失败: " + level_resp.get("error", ""))
 
 	var vault_resp: Dictionary = results.get("vault", {})
 	if vault_resp.get("success", false):
@@ -290,6 +308,8 @@ func sync_optional_login_data_background(include_config: bool = true) -> void:
 		"vault": vault_resp.get("success", false),
 		"decks": decks_resp.get("success", false),
 		"daily": daily_resp.get("success", false) or daily_error.find("今日已签到") >= 0,
+		"profile": profile_resp.get("success", false),
+		"level": level_resp.get("success", false),
 		"config": results.get("config", {}).get("success", false) if include_config else null,
 	})
 	data_synced.emit()

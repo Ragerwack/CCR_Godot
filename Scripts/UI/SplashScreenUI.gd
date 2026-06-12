@@ -27,17 +27,20 @@ var _progress_ui = null
 var _step_started_at: Dictionary = {}
 var _last_submit: Dictionary = {}
 var _login_flow_running: bool = false
+const AUTH_RETRY_DELAY_SECONDS := 1.0
 
 const PREP_STEPS: Array[Dictionary] = [
-	{"id": "connect", "label": "ui.login.prepare.step.connect"},
-	{"id": "auth", "label": "ui.login.prepare.step.auth"},
-	{"id": "session", "label": "ui.login.prepare.step.session"},
-	{"id": "profile", "label": "ui.login.prepare.step.profile"},
-	{"id": "config", "label": "ui.login.prepare.step.config"},
-	{"id": "collection", "label": "ui.login.prepare.step.collection"},
-	{"id": "daily", "label": "ui.login.prepare.step.daily"},
-	{"id": "ui", "label": "ui.login.prepare.step.ui"},
+	{"id": "INIT_LOCAL_CONFIG", "label": "ui.login.prepare.step.init_local_config"},
+	{"id": "CHECK_CLIENT_VERSION", "label": "ui.login.prepare.step.check_client_version"},
+	{"id": "LOAD_LOCAL_TOKEN", "label": "ui.login.prepare.step.load_local_token"},
+	{"id": "AUTH_REFRESH_OR_LOGIN", "label": "ui.login.prepare.step.auth_refresh_or_login"},
+	{"id": "CREATE_GAME_SESSION", "label": "ui.login.prepare.step.create_game_session"},
+	{"id": "LOAD_PLAYER_BOOTSTRAP", "label": "ui.login.prepare.step.load_player_bootstrap"},
+	{"id": "LOAD_TODAY_CATALOG", "label": "ui.login.prepare.step.load_today_catalog"},
+	{"id": "CONNECT_REALTIME_OR_HEARTBEAT", "label": "ui.login.prepare.step.connect_realtime_or_heartbeat"},
+	{"id": "ENTER_MAIN_MENU", "label": "ui.login.prepare.step.enter_main_menu"},
 ]
+const FAILED_WITH_REASON := "FAILED_WITH_REASON"
 const PREP_STATUS_PENDING := "pending"
 const PREP_STATUS_RUNNING := "running"
 const PREP_STATUS_SUCCESS := "success"
@@ -51,8 +54,11 @@ func _ready() -> void:
 	FileLogger.log("SplashScreenUI 启动")
 	_setup_ui()
 	_update_mode()
-	# 跳过自动登录，每次都显示登录表单
-	FileLogger.log("等待用户输入")
+	if ApiClient.has_refresh_token():
+		FileLogger.log("检测到本地 refresh token，尝试自动恢复会话")
+		_try_auto_session_resume.call_deferred()
+	else:
+		FileLogger.log("本地没有 refresh token，等待用户输入")
 
 
 # ══════════════════════════════════════════════════
@@ -220,85 +226,130 @@ func _do_register(username: String, password: String, email: String) -> void:
 	_last_submit = {"mode": "register", "username": username, "password": password, "email": email}
 	await _run_login_preparation(_last_submit)
 
+func _try_auto_session_resume() -> void:
+	if _login_flow_running:
+		return
+	_last_submit = {"mode": "refresh", "username": "", "password": "", "email": ""}
+	await _run_login_preparation(_last_submit)
+
 func _run_login_preparation(payload: Dictionary) -> void:
 	_login_flow_running = true
 	_set_loading(true)
 	await _show_progress_ui()
-	FileLogger.perf("login_prepare_start", {"mode": payload.get("mode", "login")})
+	var failed_stage := ""
+	FileLogger.perf("login_state_machine_start", {"mode": payload.get("mode", "login")})
 
-	_start_step("connect", Localization.t("ui.login.prepare.current.connect"))
-	_start_step("auth", Localization.t("ui.login.prepare.current.auth"))
+	_start_step("INIT_LOCAL_CONFIG", Localization.t("ui.login.prepare.current.init_local_config"))
+	_finish_step("INIT_LOCAL_CONFIG", PREP_STATUS_SUCCESS)
+
+	_start_step("CHECK_CLIENT_VERSION", Localization.t("ui.login.prepare.current.check_client_version"))
+	_finish_step("CHECK_CLIENT_VERSION", PREP_STATUS_SUCCESS)
+
+	_start_step("LOAD_LOCAL_TOKEN", Localization.t("ui.login.prepare.current.load_local_token"))
+	var mode := str(payload.get("mode", "login"))
+	if mode == "refresh" and not ApiClient.has_refresh_token():
+		_finish_step("LOAD_LOCAL_TOKEN", PREP_STATUS_FAILED, Localization.t("ui.login.prepare.detail.no_saved_session"))
+		_fail_preparation(Localization.t("ui.login.prepare.detail.no_saved_session"), "LOAD_LOCAL_TOKEN")
+		return
+	_finish_step("LOAD_LOCAL_TOKEN", PREP_STATUS_SUCCESS)
+
+	_start_step("AUTH_REFRESH_OR_LOGIN", Localization.t("ui.login.prepare.current.auth_refresh_or_login"))
 
 	var auth_started := Time.get_ticks_msec()
-	var auth_resp: Dictionary
-	if payload.get("mode", "login") == "register":
-		auth_resp = await ApiClient.register(payload["username"], payload["password"], payload["email"])
-	else:
-		auth_resp = await ApiClient.login(payload["username"], payload["password"])
+	var auth_resp := await _authenticate_with_retry(payload)
 	var auth_ms := Time.get_ticks_msec() - auth_started
-	FileLogger.perf("login_prepare_auth_done", {
+	FileLogger.perf("login_state_auth_done", {
 		"mode": payload.get("mode", "login"),
 		"success": auth_resp.get("success", false),
 		"error_type": auth_resp.get("error_type", ""),
+		"status_code": auth_resp.get("status_code", 0),
 		"total_ms": auth_ms,
 	})
 
 	if not auth_resp.get("success", false):
-		var is_network_error := str(auth_resp.get("error_type", "")) == "network"
-		_finish_step("connect", PREP_STATUS_FAILED if is_network_error else PREP_STATUS_SUCCESS, auth_resp.get("error", ""))
-		_finish_step("auth", PREP_STATUS_FAILED, auth_resp.get("error", ""))
-		_fail_preparation(auth_resp.get("error", Localization.t("ui.login.prepare.retry_hint")))
+		failed_stage = "AUTH_REFRESH_OR_LOGIN"
+		_finish_step(failed_stage, PREP_STATUS_FAILED, _format_error_detail(auth_resp))
+		_fail_preparation(_format_stage_failure(failed_stage, auth_resp), failed_stage)
 		return
 
-	_finish_step("connect", PREP_STATUS_SUCCESS)
-	_finish_step("auth", PREP_STATUS_SUCCESS)
+	_finish_step("AUTH_REFRESH_OR_LOGIN", PREP_STATUS_SUCCESS)
 
+	_start_step("CREATE_GAME_SESSION", Localization.t("ui.login.prepare.current.create_game_session"))
+	_finish_step("CREATE_GAME_SESSION", PREP_STATUS_SUCCESS, Localization.t("ui.login.prepare.detail.session_saved"))
+
+	_start_step("LOAD_PLAYER_BOOTSTRAP", Localization.t("ui.login.prepare.current.load_player_bootstrap"))
 	var data: Dictionary = auth_resp["data"]
 	if data.has("user") and data["user"] is Dictionary:
 		GameManager.apply_login_user(data["user"])
 	if data.has("draw_key") and data["draw_key"] is Dictionary:
 		GameManager.apply_draw_key(data["draw_key"])
+	_finish_step("LOAD_PLAYER_BOOTSTRAP", PREP_STATUS_SUCCESS)
 
-	_start_step("session", Localization.t("ui.login.prepare.current.session"))
-	_finish_step("session", PREP_STATUS_SUCCESS, Localization.t("ui.login.prepare.detail.session_saved"))
-	_start_step("profile")
-	_start_step("collection")
+	_start_step("LOAD_TODAY_CATALOG", Localization.t("ui.login.prepare.current.load_today_catalog"))
 
 	var batch_started := Time.get_ticks_msec()
 	var base := ApiClient.get_api_base_url()
 	var results := await ApiClient.batch_request([
-		{"key": "profile", "url": base + "/user/profile", "timeout": 45.0},
-		{"key": "level", "url": base + "/player/level", "timeout": 45.0},
-		{"key": "pool", "url": base + "/game/cards?type=pool", "timeout": 45.0},
-		{"key": "hand", "url": base + "/game/cards?type=hand", "timeout": 45.0},
+		{"key": "pool", "url": base + "/game/cards?type=pool", "timeout": 20.0},
+		{"key": "hand", "url": base + "/game/cards?type=hand", "timeout": 20.0},
 	])
-	FileLogger.perf("login_prepare_parallel_done", {"total_ms": Time.get_ticks_msec() - batch_started})
+	FileLogger.perf("login_state_catalog_done", {"total_ms": Time.get_ticks_msec() - batch_started})
 
 	var failed_messages: Array[String] = []
 	_apply_critical_login_results(results, failed_messages)
 
 	if not failed_messages.is_empty():
-		_fail_preparation(failed_messages[0])
+		failed_stage = "LOAD_TODAY_CATALOG"
+		_fail_preparation(failed_messages[0], failed_stage)
 		return
 
-	_start_step("config")
-	_finish_step("config", PREP_STATUS_SUCCESS, Localization.t("ui.login.prepare.detail.background"))
-	_start_step("daily")
-	_finish_step("daily", PREP_STATUS_SUCCESS, Localization.t("ui.login.prepare.detail.background"))
+	_start_step("CONNECT_REALTIME_OR_HEARTBEAT", Localization.t("ui.login.prepare.current.connect_realtime_or_heartbeat"))
+	SessionManager.start_session()
+	_finish_step("CONNECT_REALTIME_OR_HEARTBEAT", PREP_STATUS_SUCCESS)
 
-	_start_step("ui", Localization.t("ui.login.prepare.current.ui"))
+	_start_step("ENTER_MAIN_MENU", Localization.t("ui.login.prepare.current.enter_main_menu"))
 	var ui_started := Time.get_ticks_msec()
 	await get_tree().process_frame
-	_finish_step("ui", PREP_STATUS_SUCCESS)
-	FileLogger.perf("login_prepare_ui_done", {"ui_render_ms": Time.get_ticks_msec() - ui_started})
+	_finish_step("ENTER_MAIN_MENU", PREP_STATUS_SUCCESS)
+	FileLogger.perf("login_state_enter_main_menu_done", {"ui_render_ms": Time.get_ticks_msec() - ui_started})
 
 	if _progress_ui != null:
 		_progress_ui.show_success()
-	FileLogger.perf("login_prepare_done", {"success": true})
+	FileLogger.perf("login_state_machine_done", {"success": true})
 	GameManager.sync_optional_login_data_background.call_deferred(true)
 	await get_tree().create_timer(0.35).timeout
+	_last_submit = {}
+	_password_input.text = ""
 	login_completed.emit()
 	_close()
+
+func _authenticate_with_retry(payload: Dictionary) -> Dictionary:
+	var mode := str(payload.get("mode", "login"))
+	var resp := await _authenticate_once(payload)
+	if resp.get("success", false) or str(resp.get("error_type", "")) != "network":
+		return resp
+
+	FileLogger.warn("登录认证网络失败，准备自动重试一次: " + str(resp.get("error", "")))
+	if _progress_ui != null:
+		_progress_ui.set_current(Localization.t("ui.login.prepare.current.auth_refresh_or_login"))
+	await get_tree().create_timer(AUTH_RETRY_DELAY_SECONDS).timeout
+
+	var retry_started := Time.get_ticks_msec()
+	resp = await _authenticate_once(payload)
+	FileLogger.perf("login_prepare_auth_retry_done", {
+		"mode": mode,
+		"success": resp.get("success", false),
+		"error_type": resp.get("error_type", ""),
+		"total_ms": Time.get_ticks_msec() - retry_started,
+	})
+	return resp
+
+func _authenticate_once(payload: Dictionary) -> Dictionary:
+	if payload.get("mode", "login") == "register":
+		return await ApiClient.register(payload["username"], payload["password"], payload["email"])
+	if payload.get("mode", "login") == "refresh":
+		return await ApiClient.refresh_session()
+	return await ApiClient.login(payload["username"], payload["password"])
 
 func _apply_critical_login_results(results: Dictionary, failed_messages: Array[String]) -> void:
 	var profile_resp: Dictionary = results.get("profile", {})
@@ -307,12 +358,6 @@ func _apply_critical_login_results(results: Dictionary, failed_messages: Array[S
 		GameManager.apply_profile(profile_resp["data"])
 	if level_resp.get("success", false):
 		GameManager._apply_level_info(level_resp["data"])
-	if profile_resp.get("success", false) and level_resp.get("success", false):
-		_finish_step("profile", PREP_STATUS_SUCCESS)
-	else:
-		var resp := profile_resp if not profile_resp.get("success", false) else level_resp
-		_finish_step("profile", PREP_STATUS_FAILED, resp.get("error", ""))
-		failed_messages.append(_step_error_text("profile", resp))
 
 	var collection_keys := ["pool", "hand"]
 	var collection_ok := true
@@ -326,10 +371,10 @@ func _apply_critical_login_results(results: Dictionary, failed_messages: Array[S
 			continue
 		GameManager._apply_card_slots(key, resp["data"])
 	if collection_ok:
-		_finish_step("collection", PREP_STATUS_SUCCESS)
+		_finish_step("LOAD_TODAY_CATALOG", PREP_STATUS_SUCCESS)
 	else:
-		_finish_step("collection", PREP_STATUS_FAILED, collection_error)
-		failed_messages.append(Localization.t("ui.login.prepare.step.collection") + ": " + collection_error)
+		_finish_step("LOAD_TODAY_CATALOG", PREP_STATUS_FAILED, collection_error)
+		failed_messages.append(Localization.t("ui.login.prepare.step.load_today_catalog") + ": " + collection_error)
 
 func _step_error_text(step_id: String, resp: Dictionary) -> String:
 	return _step_label(step_id) + ": " + str(resp.get("error", "未知错误"))
@@ -367,10 +412,14 @@ func _finish_step(step_id: String, status: String, detail: String = "") -> void:
 		"detail": detail,
 	})
 
-func _fail_preparation(message: String) -> void:
+func _fail_preparation(message: String, failed_stage: String = FAILED_WITH_REASON) -> void:
 	_login_flow_running = false
 	_set_loading(false)
-	FileLogger.perf("login_prepare_done", {"success": false, "error": message})
+	FileLogger.perf("login_state_machine_done", {
+		"success": false,
+		"failed_stage": failed_stage,
+		"error": message,
+	})
 	if _progress_ui != null:
 		var hint := message
 		if hint == "":
@@ -395,6 +444,25 @@ func _step_label(step_id: String) -> String:
 		if step["id"] == step_id:
 			return Localization.t(step["label"])
 	return step_id
+
+func _format_error_detail(resp: Dictionary) -> String:
+	var parts: Array[String] = []
+	var status_code := int(resp.get("status_code", 0))
+	if status_code > 0:
+		parts.append("HTTP " + str(status_code))
+	var error_type := str(resp.get("error_type", ""))
+	if error_type != "":
+		parts.append(error_type)
+	var error_text := str(resp.get("error", ""))
+	if error_text != "":
+		parts.append(error_text)
+	return " / ".join(parts)
+
+func _format_stage_failure(stage_id: String, resp: Dictionary) -> String:
+	var detail := _format_error_detail(resp)
+	if detail == "":
+		detail = Localization.t("ui.login.prepare.retry_hint")
+	return _step_label(stage_id) + " [" + stage_id + "] " + detail
 
 # ══════════════════════════════════════════════════
 #  UI 状态控制

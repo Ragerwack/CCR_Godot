@@ -161,7 +161,7 @@ func _on_login_completed() -> void:
 
 func _on_auth_expired() -> void:
 	SessionManager.stop_session()
-	_show_login()
+	_show_splash_screen()
 
 func _on_logout_pressed() -> void:
 	SessionManager.stop_session()
@@ -172,7 +172,7 @@ func _on_logout_pressed() -> void:
 	GameManager.newbie_free_refresh_count = 0
 	GameManager.last_free_refresh_time_unix = 0.0
 	CardPoolSystem.current_pool.clear()
-	_show_login()
+	_show_splash_screen()
 
 # ══════════════════════════════════════════════════
 #  UI 搭建
