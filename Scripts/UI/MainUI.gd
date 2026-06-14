@@ -192,9 +192,8 @@ func setup_ui() -> void:
 
 	_currency = CurrencyUI.new()
 	_currency.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	# 金币+宝石并排显示，位于菜单按钮左侧（菜单 btn offset_left=-50）
-	# CurrencyUI 宽 ~130px，右侧留 5px 间距给菜单按钮
-	_currency.offset_left = -185   # -(130 宽 + 50 菜单宽 + 5 间距)
+	# 体力、金币、宝石并排显示，位于菜单按钮左侧。
+	_currency.offset_left = -285
 	_currency.offset_right = -55   # -(50 菜单宽 + 5 间距)
 	_currency.offset_top = 10
 	_currency.offset_bottom = 46   # 10 + 36 高（单行）

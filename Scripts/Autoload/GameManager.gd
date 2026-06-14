@@ -121,7 +121,7 @@ func apply_profile(profile: Dictionary) -> void:
 	var last_free_time = profile.get("lastFreeRefreshTime", null)
 	if last_free_time is String:
 		last_free_refresh_time_unix = _parse_server_time_unix(last_free_time)
-	free_refresh_max_count = mini(player_data.level, 40)
+	_update_free_refresh_max()
 	_update_free_refresh_cooldown_from_state()
 
 	player_data.changed.emit()
@@ -138,6 +138,8 @@ func _apply_level_info(level_info: Dictionary) -> void:
 	player_data.exp = exp
 	player_data.exp_in_level = exp_in_level
 	player_data.exp_for_next = exp_for_next
+	_update_free_refresh_max()
+	_update_free_refresh_cooldown_from_state()
 	player_data.changed.emit()
 	_cache_loaded["level"] = true
 
@@ -434,7 +436,7 @@ func switch_scene(scene_name: String) -> void:
 # ══════════════════════════════════════════════════
 
 func _update_free_refresh_max() -> void:
-	free_refresh_max_count = mini(player_data.level, 40)
+	free_refresh_max_count = maxi(player_data.level, 1)
 
 func _on_free_refresh_timer() -> void:
 	pass
@@ -495,6 +497,12 @@ func rollback_gold_refresh_attempt() -> void:
 func get_free_refresh_remaining() -> int:
 	return newbie_free_refresh_count if newbie_free_refresh_count > 0 else free_refresh_count
 
+func get_stamina_display_current() -> int:
+	return get_free_refresh_remaining()
+
+func get_stamina_display_max() -> int:
+	return maxi(player_data.level, 1)
+
 func is_using_newbie_free_refreshes() -> bool:
 	return newbie_free_refresh_count > 0
 
@@ -508,7 +516,7 @@ func _update_free_refresh_cooldown_from_state() -> void:
 	if last_free_refresh_time_unix <= 0.0:
 		free_refresh_cooldown = 0.0
 		return
-	var next_refresh_unix := last_free_refresh_time_unix + 60.0
+	var next_refresh_unix := last_free_refresh_time_unix + _stamina_recovery_seconds()
 	free_refresh_cooldown = maxf(0.0, next_refresh_unix - Time.get_unix_time_from_system())
 
 func _recover_one_free_refresh_local() -> void:
@@ -519,6 +527,9 @@ func _recover_one_free_refresh_local() -> void:
 	_update_free_refresh_cooldown_from_state()
 	free_refresh_ready.emit()
 	free_refresh_cooldown_updated.emit(free_refresh_cooldown)
+
+func _stamina_recovery_seconds() -> float:
+	return float(maxi(1, ceili(float(maxi(player_data.level, 1)) / 5.0)) * 60)
 
 func _parse_server_time_unix(value: String) -> float:
 	var normalized := value.strip_edges()

@@ -35,6 +35,7 @@ var _slot_hover_active: bool = false
 var _return_animation_running: bool = false
 var _transfer_animation_running: bool = false
 var slot_data_index: int = -1
+var _hover_preview: CardDisplay = null
 
 const DRAG_OUT_COLOR: Color = Color(0.1, 0.1, 0.12, 0.5)
 static var SLOT_SIZE: Vector2 = Vector2(107, 149)
@@ -166,9 +167,9 @@ func setup_ui() -> void:
 	_selected_highlight.visible = false
 	_selected_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var selected_style = StyleBoxFlat.new()
-	selected_style.bg_color = Color(1.0, 0.78, 0.18, 0.08)
+	selected_style.bg_color = Color(1.0, 0.78, 0.18, 0.0)
 	selected_style.border_color = Color(1.0, 0.82, 0.22, 1.0)
-	selected_style.set_border_width_all(4)
+	selected_style.set_border_width_all(3)
 	selected_style.corner_radius_top_left = 7
 	selected_style.corner_radius_top_right = 7
 	selected_style.corner_radius_bottom_left = 7
@@ -184,6 +185,9 @@ func setup_ui() -> void:
 
 	# 初始化锁定状态
 	_set_lock_visible()
+
+func _exit_tree() -> void:
+	_hide_hover_preview()
 
 func set_card(card: CardInfo, idx: int = -1) -> void:
 	if idx >= 0:
@@ -205,6 +209,7 @@ func set_card(card: CardInfo, idx: int = -1) -> void:
 
 func clear_slot() -> void:
 	_stop_drop_in_animation()
+	_hide_hover_preview()
 	if _glow_effect:
 		_glow_effect.visible = false
 	set_selected(false)
@@ -338,9 +343,50 @@ func set_slot_hovered(active: bool) -> void:
 	if active and (not is_occupied or card_display == null or not card_display.visible):
 		active = false
 	_slot_hover_active = active
-	if card_display != null:
-		card_display.set_slot_hovered(active)
+	if active:
+		_show_hover_preview()
+	else:
+		_hide_hover_preview()
 	_update_process_state()
+
+func _show_hover_preview() -> void:
+	if area_type != "pool":
+		return
+	if card_display == null or card_display.card == null:
+		return
+	if DragSystem != null and DragSystem.is_dragging():
+		return
+	if get_tree() == null:
+		return
+	_hide_hover_preview()
+
+	var viewport_size := get_viewport_rect().size
+	var preview_height := viewport_size.y * 0.5
+	var preview_width := preview_height * (SLOT_SIZE.x / SLOT_SIZE.y)
+	var mid_x := viewport_size.x * 0.5
+	var col := slot_index % 8
+	var preview_x := 0.0
+	if col < 4:
+		preview_x = mid_x + maxf(0.0, (mid_x - preview_width) * 0.5)
+	else:
+		preview_x = maxf(0.0, (mid_x - preview_width) * 0.5)
+	var preview_y := maxf(0.0, (viewport_size.y - preview_height) * 0.5)
+
+	_hover_preview = CardDisplay.new()
+	_hover_preview.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_hover_preview.position = Vector2(preview_x, preview_y)
+	_hover_preview.size = Vector2(preview_width, preview_height)
+	_hover_preview.custom_minimum_size = _hover_preview.size
+	_hover_preview.z_index = 4090
+	_hover_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	get_tree().root.add_child(_hover_preview)
+	_hover_preview.set_card(card_display.card, slot_data_index)
+	_hover_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func _hide_hover_preview() -> void:
+	if _hover_preview != null:
+		_hover_preview.queue_free()
+	_hover_preview = null
 
 
 func _update_process_state() -> void:
