@@ -442,26 +442,72 @@ func _on_hand_synthesize() -> void:
 	if selected_indices.size() != 5:
 		return
 
-	_show_loading(true)
-	var sync_resp := await GameManager.sync_pool_hand_layout()
+	var old_pool_cards: Array = CardPoolSystem.current_pool.duplicate()
+	if old_pool_cards.is_empty() and not GameManager.player_data.pool_cards.is_empty():
+		old_pool_cards = GameManager.player_data.pool_cards.duplicate()
+	var old_hand_cards: Array = GameManager.player_data.hand_cards.duplicate()
+
+	_apply_hand_synthesis_pending_removal(selected_indices)
+	if is_instance_valid(_hand_area_ui):
+		_hand_area_ui.clear_selection()
+		_hand_area_ui.refresh_display()
+
+	_confirm_hand_synthesis_background(
+		selected_indices.duplicate(),
+		old_pool_cards,
+		old_hand_cards
+	)
+
+func _confirm_hand_synthesis_background(selected_indices: Array, old_pool_cards: Array, old_hand_cards: Array) -> void:
+	var sync_resp := await ApiClient.sync_pool_hand_layout(old_pool_cards, old_hand_cards)
 	if not sync_resp.get("success", false):
 		push_error("合成前同步失败: ", sync_resp.get("error", ""))
-		_show_loading(false)
+		await _recover_after_synthesis_failure()
 		return
 
 	var resp := await ApiClient.synthesize(selected_indices, "hand")
 	if resp.get("success", false):
-		_apply_hand_synthesis_result(resp.get("data", {}), selected_indices)
-		var profile_resp := await ApiClient.get_profile()
-		if profile_resp.get("success", false):
-			GameManager.apply_profile(profile_resp["data"])
-		await GameManager.sync_decks_from_server()
-		if is_instance_valid(_hand_area_ui):
-			_hand_area_ui.clear_selection()
-			_hand_area_ui.refresh_display()
+		_apply_synthesis_confirmed_result(resp.get("data", {}))
+		_sync_after_synthesis_success_background()
 	else:
 		push_error("合成失败: ", resp.get("error", ""))
-	_show_loading(false)
+		await _recover_after_synthesis_failure()
+
+func _apply_hand_synthesis_pending_removal(selected_indices: Array) -> void:
+	var indices := selected_indices.duplicate()
+	indices.sort()
+	for i in range(indices.size() - 1, -1, -1):
+		GameManager.player_data.remove_from_hand_at(indices[i])
+	GameManager.player_data.changed.emit()
+
+func _apply_synthesis_confirmed_result(result: Dictionary) -> void:
+	var rewards: Dictionary = result.get("rewards", {})
+	var gold := int(result.get("gold_reward", rewards.get("gold", 0)))
+	if gold > 0:
+		GameManager.player_data.add_gold(gold)
+
+	var gems := int(rewards.get("gems", 0))
+	if gems > 0:
+		GameManager.player_data.add_gems(gems)
+
+	var deck_data: Dictionary = result.get("deck", {})
+	if not deck_data.is_empty():
+		DeckSystem.add_synthesized_deck(deck_data)
+
+	GameManager.player_data.changed.emit()
+
+func _sync_after_synthesis_success_background() -> void:
+	await GameManager.sync_reward_state_from_server()
+	await GameManager.sync_decks_from_server()
+	if is_instance_valid(_hand_area_ui):
+		_hand_area_ui.refresh_display()
+
+func _recover_after_synthesis_failure() -> void:
+	await GameManager.sync_initial_card_pool_from_server()
+	await GameManager.sync_decks_from_server()
+	if is_instance_valid(_hand_area_ui):
+		_hand_area_ui.clear_selection()
+		_hand_area_ui.refresh_display()
 
 func _on_hand_discard() -> void:
 	if not is_instance_valid(_hand_area_ui):

@@ -71,7 +71,7 @@ func add_synthesized_deck(deck_data: Dictionary) -> void:
 
 	var dd = deck_data.get("deck_def", {})
 	if dd is Dictionary:
-		deck_name = dd.get("name", "")
+		deck_name = str(dd.get("description", dd.get("name", "")))
 
 	var s = deck_data.get("series", {})
 	if s is Dictionary:

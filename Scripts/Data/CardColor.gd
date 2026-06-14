@@ -31,7 +31,7 @@ const DEMOTE_CHAIN: Array[ColorType] = [
 	ColorType.WHITE,
 ]
 
-static func get_name(c: ColorType) -> String:
+static func display_name(c: ColorType) -> String:
 	return NAMES[c]
 
 static func get_rarity(c: ColorType) -> int:

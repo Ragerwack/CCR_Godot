@@ -15,6 +15,8 @@ var _warm_rolls: Dictionary = {}
 var _warming_types: Dictionary = {}
 var _warm_target_type: String = ""
 var skip_confirm_after_preview_for_test: bool = false
+var gold_draw_debug_click_started_msec: int = 0
+var animate_next_pool_update: bool = false
 
 func _ready() -> void:
 	GameManager.pool_refreshed.connect(_on_pool_refresh)
@@ -41,6 +43,10 @@ func _update_visible_series() -> void:
 
 func refresh_pool(refresh_type: String = "free") -> void:
 	var draw_started := Time.get_ticks_msec()
+	var debug_total_started := draw_started
+	if refresh_type == "gold" and gold_draw_debug_click_started_msec > 0:
+		debug_total_started = gold_draw_debug_click_started_msec
+		gold_draw_debug_click_started_msec = 0
 	loading_started.emit()
 	FileLogger.perf("draw_refresh_start", {"type": refresh_type})
 	_warm_target_type = refresh_type
@@ -49,30 +55,60 @@ func refresh_pool(refresh_type: String = "free") -> void:
 	var old_pool_cards: Array = current_pool.duplicate(true)
 	var old_hand_cards: Array = GameManager.player_data.hand_cards.duplicate(true)
 
+	var step_started := Time.get_ticks_msec()
 	var roll_data := _take_warm_roll(refresh_type)
 	var used_warm_roll := not roll_data.is_empty()
+	var warming_still_active := false
 	if not used_warm_roll:
 		var wait_started := Time.get_ticks_msec()
 		while _has_any_warming_type() and Time.get_ticks_msec() - wait_started < WARM_ROLL_CLICK_WAIT_MS:
 			await get_tree().process_frame
 		roll_data = _take_warm_roll(refresh_type)
 		used_warm_roll = not roll_data.is_empty()
+		warming_still_active = _has_any_warming_type()
 
-	if not used_warm_roll:
-		if _has_any_warming_type():
-			_rollback_refresh_attempt(refresh_type)
-			refresh_failed.emit("抽卡预热仍在进行，请稍后重试")
-			loading_completed.emit()
-			FileLogger.perf("draw_refresh_failed", {
-				"type": refresh_type,
-				"stage": "warm_pending",
-				"total_ms": Time.get_ticks_msec() - draw_started,
-			})
-			return
+	_print_gold_draw_step(
+		refresh_type,
+		2,
+		"done",
+		"检查/等待预热 roll",
+		step_started,
+		debug_total_started,
+		{
+			"used_warm_roll": used_warm_roll,
+			"warming_still_active": warming_still_active,
+		}
+	)
+
+	if used_warm_roll:
+		step_started = Time.get_ticks_msec()
+		_print_gold_draw_step(
+			refresh_type,
+			3,
+			"done",
+			"复用已预热金币随机数组",
+			step_started,
+			debug_total_started,
+			{"used_warm_roll": true}
+		)
+	else:
+		step_started = Time.get_ticks_msec()
 		var prepare_resp := await _prepare_refresh_roll(refresh_type)
 		if not prepare_resp.get("success", false):
+			_print_gold_draw_step(
+				refresh_type,
+				3,
+				"failed",
+				"获取金币抽卡随机数组",
+				step_started,
+				debug_total_started,
+				{
+					"error": prepare_resp.get("error", "unknown"),
+					"status": prepare_resp.get("status_code", 0),
+				}
+			)
 			if _should_fallback_to_legacy_refresh(prepare_resp):
-				await _refresh_pool_legacy(refresh_type, old_pool_cards, old_hand_cards, draw_started)
+				await _refresh_pool_legacy(refresh_type, old_pool_cards, old_hand_cards, draw_started, debug_total_started)
 				return
 			_rollback_refresh_attempt(refresh_type)
 			refresh_failed.emit(prepare_resp.get("error", "生成抽卡随机数组失败"))
@@ -84,13 +120,31 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			})
 			return
 		roll_data = prepare_resp["data"]
+		_print_gold_draw_step(
+			refresh_type,
+			3,
+			"done",
+			"获取金币抽卡随机数组",
+			step_started,
+			debug_total_started,
+			{"used_warm_roll": false}
+		)
 
+	step_started = Time.get_ticks_msec()
 	var preview_slots := ApiClient.translate_refresh_roll_to_slots(
 		roll_data,
 		GameManager.player_data.level,
 		GameManager.player_data.pool_slots
 	)
 	if preview_slots.is_empty():
+		_print_gold_draw_step(
+			refresh_type,
+			4,
+			"failed",
+			"翻译随机数组为预览卡牌",
+			step_started,
+			debug_total_started
+		)
 		_rollback_refresh_attempt(refresh_type)
 		refresh_failed.emit("抽卡随机数组翻译失败")
 		loading_completed.emit()
@@ -101,12 +155,31 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			"used_warm_roll": used_warm_roll,
 		})
 		return
+	_print_gold_draw_step(
+		refresh_type,
+		4,
+		"done",
+		"翻译随机数组为预览卡牌",
+		step_started,
+		debug_total_started,
+		{"preview_slots": preview_slots.size()}
+	)
 
 	var render_started := Time.get_ticks_msec()
 	current_pool = ApiClient.card_slots_to_array_sorted(preview_slots)
 	GameManager.player_data.pool_cards = current_pool.duplicate()
+	animate_next_pool_update = true
 	pool_updated.emit(current_pool)
 	pool_filled.emit(current_pool)
+	_print_gold_draw_step(
+		refresh_type,
+		5,
+		"done",
+		"渲染金币抽卡预览",
+		render_started,
+		debug_total_started,
+		{"cards": current_pool.size()}
+	)
 	var preview_total_ms := Time.get_ticks_msec() - draw_started
 	FileLogger.perf("draw_refresh_preview_done", {
 		"type": refresh_type,
@@ -119,6 +192,15 @@ func refresh_pool(refresh_type: String = "free") -> void:
 		FileLogger.warn("抽卡预览耗时超过 0.5 秒: " + str(preview_total_ms) + "ms type=" + refresh_type, "[PERF]")
 
 	if skip_confirm_after_preview_for_test:
+		step_started = Time.get_ticks_msec()
+		_print_gold_draw_step(
+			refresh_type,
+			6,
+			"done",
+			"测试跳过服务端确认",
+			step_started,
+			debug_total_started
+		)
 		loading_completed.emit()
 		FileLogger.perf("draw_refresh_confirm_skipped", {
 			"type": refresh_type,
@@ -135,6 +217,15 @@ func refresh_pool(refresh_type: String = "free") -> void:
 		old_hand_cards
 	)
 	if confirm_resp.get("success", false):
+		_print_gold_draw_step(
+			refresh_type,
+			6,
+			"done",
+			"服务端确认金币抽卡",
+			confirm_started,
+			debug_total_started
+		)
+		step_started = Time.get_ticks_msec()
 		var data: Dictionary = confirm_resp["data"]
 		var cards_data: Array = data.get("cards", [])
 		current_pool = ApiClient.card_slots_to_array_sorted(cards_data)
@@ -151,6 +242,15 @@ func refresh_pool(refresh_type: String = "free") -> void:
 		pool_updated.emit(current_pool)
 		pool_filled.emit(current_pool)
 		loading_completed.emit()
+		_print_gold_draw_step(
+			refresh_type,
+			7,
+			"done",
+			"应用服务端最终状态",
+			step_started,
+			debug_total_started,
+			{"cards": current_pool.size(), "gold": GameManager.player_data.gold}
+		)
 		FileLogger.perf("draw_refresh_confirm_done", {
 			"type": refresh_type,
 			"success": true,
@@ -158,6 +258,19 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			"total_ms": Time.get_ticks_msec() - draw_started,
 		})
 	else:
+		_print_gold_draw_step(
+			refresh_type,
+			6,
+			"failed",
+			"服务端确认金币抽卡",
+			confirm_started,
+			debug_total_started,
+			{
+				"error": confirm_resp.get("error", "unknown"),
+				"status": confirm_resp.get("status_code", 0),
+			}
+		)
+		step_started = Time.get_ticks_msec()
 		_rollback_refresh_attempt(refresh_type)
 		current_pool = old_pool_cards
 		GameManager.player_data.pool_cards = old_pool_cards.duplicate()
@@ -168,6 +281,15 @@ func refresh_pool(refresh_type: String = "free") -> void:
 
 		refresh_failed.emit(confirm_resp.get("error", "确认抽卡失败"))
 		loading_completed.emit()
+		_print_gold_draw_step(
+			refresh_type,
+			7,
+			"done",
+			"确认失败后回滚本地状态",
+			step_started,
+			debug_total_started,
+			{"gold": GameManager.player_data.gold}
+		)
 		FileLogger.perf("draw_refresh_confirm_done", {
 			"type": refresh_type,
 			"success": false,
@@ -303,10 +425,22 @@ func _should_fallback_to_legacy_refresh(resp: Dictionary) -> bool:
 		return true
 	return str(resp.get("error_type", "")) == "http" and str(resp.get("error", "")).contains("接口不存在")
 
-func _refresh_pool_legacy(refresh_type: String, old_pool_cards: Array, old_hand_cards: Array, draw_started: int) -> void:
+func _refresh_pool_legacy(refresh_type: String, old_pool_cards: Array, old_hand_cards: Array, draw_started: int, debug_total_started: int = -1) -> void:
+	if debug_total_started < 0:
+		debug_total_started = draw_started
 	FileLogger.perf("draw_refresh_legacy_fallback_start", {"type": refresh_type})
+	var step_started := Time.get_ticks_msec()
 	var sync_resp := await ApiClient.sync_pool_hand_layout(old_pool_cards, old_hand_cards)
 	if not sync_resp.get("success", false):
+		_print_gold_draw_step(
+			refresh_type,
+			4,
+			"failed",
+			"旧接口回退前同步布局",
+			step_started,
+			debug_total_started,
+			{"error": sync_resp.get("error", "unknown"), "status": sync_resp.get("status_code", 0)}
+		)
 		_rollback_refresh_attempt(refresh_type)
 		current_pool = old_pool_cards
 		GameManager.player_data.pool_cards = old_pool_cards.duplicate()
@@ -315,22 +449,67 @@ func _refresh_pool_legacy(refresh_type: String, old_pool_cards: Array, old_hand_
 		pool_updated.emit(current_pool)
 		refresh_failed.emit(sync_resp.get("error", "刷新前同步卡池和手牌失败"))
 		loading_completed.emit()
+		_print_gold_draw_step(
+			refresh_type,
+			7,
+			"done",
+			"旧接口同步失败后回滚本地状态",
+			step_started,
+			debug_total_started,
+			{"gold": GameManager.player_data.gold}
+		)
 		FileLogger.perf("draw_refresh_failed", {
 			"type": refresh_type,
 			"stage": "legacy_sync",
 			"total_ms": Time.get_ticks_msec() - draw_started,
 		})
 		return
+	_print_gold_draw_step(
+		refresh_type,
+		4,
+		"done",
+		"旧接口回退前同步布局",
+		step_started,
+		debug_total_started
+	)
 
+	step_started = Time.get_ticks_msec()
 	var resp := await ApiClient.refresh_pool(refresh_type)
 	if resp.get("success", false):
+		_print_gold_draw_step(
+			refresh_type,
+			5,
+			"done",
+			"调用旧金币抽卡接口",
+			step_started,
+			debug_total_started
+		)
+		step_started = Time.get_ticks_msec()
 		var cards_data: Array = resp.get("data", [])
 		current_pool = ApiClient.card_slots_to_array_sorted(cards_data)
 		GameManager.player_data.pool_cards = current_pool.duplicate()
 		await _sync_profile()
+		animate_next_pool_update = true
 		pool_updated.emit(current_pool)
 		pool_filled.emit(current_pool)
 		loading_completed.emit()
+		_print_gold_draw_step(
+			refresh_type,
+			6,
+			"done",
+			"应用旧接口返回状态",
+			step_started,
+			debug_total_started,
+			{"cards": current_pool.size(), "gold": GameManager.player_data.gold}
+		)
+		_print_gold_draw_step(
+			refresh_type,
+			7,
+			"done",
+			"旧接口金币抽卡完成",
+			Time.get_ticks_msec(),
+			debug_total_started
+		)
 		FileLogger.perf("draw_refresh_legacy_fallback_done", {
 			"type": refresh_type,
 			"success": true,
@@ -338,6 +517,16 @@ func _refresh_pool_legacy(refresh_type: String, old_pool_cards: Array, old_hand_
 		})
 		return
 
+	_print_gold_draw_step(
+		refresh_type,
+		5,
+		"failed",
+		"调用旧金币抽卡接口",
+		step_started,
+		debug_total_started,
+		{"error": resp.get("error", "unknown"), "status": resp.get("status_code", 0)}
+	)
+	step_started = Time.get_ticks_msec()
 	_rollback_refresh_attempt(refresh_type)
 	current_pool = old_pool_cards
 	GameManager.player_data.pool_cards = old_pool_cards.duplicate()
@@ -346,12 +535,37 @@ func _refresh_pool_legacy(refresh_type: String, old_pool_cards: Array, old_hand_
 	pool_updated.emit(current_pool)
 	refresh_failed.emit(resp.get("error", "刷新卡池失败"))
 	loading_completed.emit()
+	_print_gold_draw_step(
+		refresh_type,
+		7,
+		"done",
+		"旧接口失败后回滚本地状态",
+		step_started,
+		debug_total_started,
+		{"gold": GameManager.player_data.gold}
+	)
 	FileLogger.perf("draw_refresh_legacy_fallback_done", {
 		"type": refresh_type,
 		"success": false,
 		"status": resp.get("status_code", 0),
 		"total_ms": Time.get_ticks_msec() - draw_started,
 	})
+
+func _print_gold_draw_step(refresh_type: String, step: int, status: String, name: String, step_started: int, total_started: int, details: Dictionary = {}) -> void:
+	if refresh_type != "gold":
+		return
+	var now := Time.get_ticks_msec()
+	var parts: Array[String] = [
+		"gold-draw step %d: %s" % [step, status],
+		name,
+		"step_ms=%d" % (now - step_started),
+		"total_ms=%d" % (now - total_started),
+	]
+	var keys := details.keys()
+	keys.sort()
+	for key in keys:
+		parts.append("%s=%s" % [str(key), str(details[key])])
+	print(" | ".join(parts))
 
 ## 同步玩家资料（刷新后）
 func _sync_profile() -> void:

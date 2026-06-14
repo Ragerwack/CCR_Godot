@@ -18,6 +18,8 @@ var _free_countdown_label: Label = null
 var _is_refreshing: bool = false
 var auto_warm_enabled: bool = true
 
+const DRAW_DROP_STAGGER_PER_CARD: float = 0.0625
+
 func _ready() -> void:
 	setup_ui()
 	# 先读取已有数据（解决竞态：信号发出后才创建本控件）
@@ -125,9 +127,46 @@ func _on_gem_refresh() -> void:
 func _on_gold_refresh() -> void:
 	if _is_refreshing:
 		return
+	var step_started := Time.get_ticks_msec()
+	var total_started := step_started
+	var gold_before := GameManager.player_data.gold
+	var cost := maxi(1, int(gold_before * 0.01))
+	CardPoolSystem.gold_draw_debug_click_started_msec = total_started
 	if CardPoolSystem.do_refresh("gold"):
+		_print_gold_draw_step(
+			1,
+			"done",
+			"本地金币扣费检查",
+			step_started,
+			total_started,
+			{"cost": cost, "gold_before": gold_before, "gold_after": GameManager.player_data.gold}
+		)
 		CardPoolSystem.refresh_pool("gold")
+	else:
+		_print_gold_draw_step(
+			1,
+			"failed",
+			"本地金币扣费检查",
+			step_started,
+			total_started,
+			{"cost": cost, "gold_before": gold_before}
+		)
+		CardPoolSystem.gold_draw_debug_click_started_msec = 0
 	_update_refresh_buttons()
+
+func _print_gold_draw_step(step: int, status: String, name: String, step_started: int, total_started: int, details: Dictionary = {}) -> void:
+	var now := Time.get_ticks_msec()
+	var parts: Array[String] = [
+		"gold-draw step %d: %s" % [step, status],
+		name,
+		"step_ms=%d" % (now - step_started),
+		"total_ms=%d" % (now - total_started),
+	]
+	var keys := details.keys()
+	keys.sort()
+	for key in keys:
+		parts.append("%s=%s" % [str(key), str(details[key])])
+	print(" | ".join(parts))
 
 func _on_free_refresh_hovered() -> void:
 	if not _is_refreshing and GameManager.get_free_refresh_remaining() > 0:
@@ -235,7 +274,9 @@ func _resolve_card_index(cards: Array, card: CardInfo, preferred_idx: int) -> in
 
 # ── 卡池数据更新 ──
 func _on_pool_updated(cards: Array) -> void:
-	_refresh_display(cards)
+	var should_animate := bool(CardPoolSystem.animate_next_pool_update)
+	CardPoolSystem.animate_next_pool_update = false
+	_refresh_display(cards, should_animate)
 	_update_refresh_buttons()
 	_auto_warm_next_refresh_roll.call_deferred()
 
@@ -262,7 +303,7 @@ func _on_player_data_changed() -> void:
 	_update_refresh_buttons()
 	_auto_warm_next_refresh_roll.call_deferred()
 
-func _refresh_display(cards: Array) -> void:
+func _refresh_display(cards: Array, animate_draw: bool = false) -> void:
 	# 固定 16 槽，无翻页
 	var unlocked_count = GameManager.player_data.pool_slots
 	for i in range(slot_count):
@@ -273,9 +314,17 @@ func _refresh_display(cards: Array) -> void:
 		slots[i].set_unlocked(i < unlocked_count)
 		if i < unlocked_count and i < cards.size():
 			slots[i].set_card(cards[i], i)
+			if animate_draw and cards[i] != null:
+				slots[i].play_draw_drop_in(_draw_drop_delay_for_slot(i))
 		else:
 			slots[i].clear_slot()
 		slots[i].visible = true
+
+
+func _draw_drop_delay_for_slot(slot_idx: int) -> float:
+	var row := int(slot_idx / columns)
+	var col := slot_idx % columns
+	return float(row * columns + col) * DRAW_DROP_STAGGER_PER_CARD
 
 
 # ── 全局拖拽事件 ──

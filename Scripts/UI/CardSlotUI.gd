@@ -39,6 +39,19 @@ var slot_data_index: int = -1
 const DRAG_OUT_COLOR: Color = Color(0.1, 0.1, 0.12, 0.5)
 static var SLOT_SIZE: Vector2 = Vector2(107, 149)
 const RETURN_ANIMATION_DURATION: float = 0.25
+const DROP_IN_HEIGHT: float = 72.0
+const DROP_IN_DURATION: float = 0.20
+const DROP_IN_BOUNCE_DURATION: float = 0.11
+const DROP_IN_FLASH_DURATION: float = 0.16
+const DROP_IN_START_SCALE: Vector2 = Vector2(1.08, 1.08)
+const DROP_IN_IMPACT_SCALE: Vector2 = Vector2(1.04, 0.96)
+const DROP_IN_BOUNCE_SCALE: Vector2 = Vector2(0.985, 1.025)
+const DROP_IN_START_ROTATION: float = -2.0
+const DROP_IN_IMPACT_ROTATION: float = 0.8
+const DROP_IN_BOUNCE_Y: float = -4.0
+
+var _drop_in_tween: Tween = null
+var _drop_in_glow_tween: Tween = null
 
 static func configure_slot_size(slot_size: Vector2) -> void:
 	SLOT_SIZE = slot_size
@@ -191,6 +204,7 @@ func set_card(card: CardInfo, idx: int = -1) -> void:
 		clear_slot()
 
 func clear_slot() -> void:
+	_stop_drop_in_animation()
 	if _glow_effect:
 		_glow_effect.visible = false
 	set_selected(false)
@@ -214,6 +228,81 @@ func set_selected(selected: bool) -> void:
 func show_unlock_glow() -> void:
 	if _glow_effect:
 		_glow_effect.visible = true
+
+## 抽卡刷新时播放“从上方入槽”的 UI 动画。
+func play_draw_drop_in(delay: float = 0.0) -> void:
+	if card_display == null or card_display.card == null or not _unlocked:
+		return
+	if get_tree() == null:
+		return
+	_stop_drop_in_animation()
+	set_slot_hovered(false)
+	card_display.visible = true
+	card_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card_display.pivot_offset = card_display.size * 0.5
+	card_display.position = Vector2(0.0, -DROP_IN_HEIGHT)
+	card_display.scale = DROP_IN_START_SCALE
+	card_display.rotation_degrees = DROP_IN_START_ROTATION
+	card_display.modulate = Color(1, 1, 1, 0)
+	card_display.z_index = 80
+
+	_drop_in_tween = create_tween()
+	_drop_in_tween.set_parallel(true)
+	_drop_in_tween.tween_property(card_display, "modulate:a", 1.0, 0.08).set_delay(delay)
+	_drop_in_tween.tween_property(card_display, "position", Vector2.ZERO, DROP_IN_DURATION).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	_drop_in_tween.tween_property(card_display, "scale", DROP_IN_IMPACT_SCALE, DROP_IN_DURATION).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	_drop_in_tween.tween_property(card_display, "rotation_degrees", DROP_IN_IMPACT_ROTATION, DROP_IN_DURATION).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	_drop_in_tween.set_parallel(false)
+	_drop_in_tween.tween_property(card_display, "position", Vector2(0.0, DROP_IN_BOUNCE_Y), DROP_IN_BOUNCE_DURATION * 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_drop_in_tween.parallel().tween_property(card_display, "scale", DROP_IN_BOUNCE_SCALE, DROP_IN_BOUNCE_DURATION * 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_drop_in_tween.parallel().tween_property(card_display, "rotation_degrees", 0.0, DROP_IN_BOUNCE_DURATION * 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_drop_in_tween.tween_property(card_display, "position", Vector2.ZERO, DROP_IN_BOUNCE_DURATION * 0.55).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_drop_in_tween.parallel().tween_property(card_display, "scale", Vector2.ONE, DROP_IN_BOUNCE_DURATION * 0.55).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_drop_in_tween.finished.connect(func():
+		_finish_drop_in_animation()
+		_play_draw_confirm_flash()
+	)
+
+
+func _stop_drop_in_animation() -> void:
+	if _drop_in_tween != null and _drop_in_tween.is_valid():
+		_drop_in_tween.kill()
+	_drop_in_tween = null
+	if _drop_in_glow_tween != null and _drop_in_glow_tween.is_valid():
+		_drop_in_glow_tween.kill()
+	_drop_in_glow_tween = null
+	if card_display != null:
+		card_display.position = Vector2.ZERO
+		card_display.scale = Vector2.ONE
+		card_display.rotation_degrees = 0.0
+		card_display.modulate = Color(1, 1, 1, 1)
+		card_display.z_index = 0
+		card_display.mouse_filter = Control.MOUSE_FILTER_STOP
+
+
+func _finish_drop_in_animation() -> void:
+	if card_display == null:
+		return
+	card_display.position = Vector2.ZERO
+	card_display.scale = Vector2.ONE
+	card_display.rotation_degrees = 0.0
+	card_display.modulate = Color(1, 1, 1, 1)
+	card_display.z_index = 0
+	card_display.mouse_filter = Control.MOUSE_FILTER_STOP
+
+
+func _play_draw_confirm_flash() -> void:
+	if _glow_effect == null:
+		return
+	_glow_effect.visible = true
+	_glow_effect.color = Color(0.55, 0.85, 1.0, 0.0)
+	_drop_in_glow_tween = create_tween()
+	_drop_in_glow_tween.tween_property(_glow_effect, "color:a", 0.35, DROP_IN_FLASH_DURATION * 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_drop_in_glow_tween.tween_property(_glow_effect, "color:a", 0.0, DROP_IN_FLASH_DURATION * 0.65).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_drop_in_glow_tween.finished.connect(func():
+		if _glow_effect != null:
+			_glow_effect.visible = false
+	)
 
 ## 鼠标进入时隐藏光晕
 func _on_mouse_entered() -> void:

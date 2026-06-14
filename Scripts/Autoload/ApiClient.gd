@@ -80,6 +80,7 @@ const _METHOD_NAMES: Dictionary = {
 var _auth_token: String = ""
 var _refresh_token: String = ""
 var _api_base_url: String = DEFAULT_API_BASE_URL
+var _operation_counter: int = 0
 
 # ══════════════════════════════════════════════════
 #  初始化
@@ -127,6 +128,16 @@ func _resolve_api_base_url() -> String:
 		return _normalize_api_base_url(configured)
 
 	return DEFAULT_API_BASE_URL
+
+func _new_operation_id(kind: String) -> String:
+	_operation_counter += 1
+	var safe_kind := kind.replace("/", "_").replace(" ", "_")
+	return "%s:%d:%d:%08x" % [
+		safe_kind,
+		int(Time.get_unix_time_from_system() * 1000.0),
+		_operation_counter,
+		randi(),
+	]
 
 func _normalize_api_base_url(base_url: String) -> String:
 	var normalized := base_url.strip_edges()
@@ -420,7 +431,10 @@ func get_profile() -> Dictionary:
 
 ## 刷新卡池
 func refresh_pool(refresh_type: String) -> Dictionary:
-	var body := JSON.stringify({"type": refresh_type})
+	var body := JSON.stringify({
+		"operation_id": _new_operation_id("refresh_pool"),
+		"type": refresh_type,
+	})
 	var resp := await _request(_api_url("/game/refresh-pool"), HTTPClient.METHOD_POST, body)
 	if resp["success"]:
 		pool_refreshed.emit(resp["data"])
@@ -445,6 +459,7 @@ func prepare_refresh_pool_roll(refresh_type: String, draw_key_version: int) -> D
 
 func confirm_refresh_pool_roll(roll_data: Dictionary, cards: Array, pool_cards: Array, hand_cards: Array) -> Dictionary:
 	var body := JSON.stringify({
+		"operation_id": _new_operation_id("refresh_pool_confirm"),
 		"roll_id": roll_data.get("roll_id", ""),
 		"signature": roll_data.get("signature", ""),
 		"cards": _slot_cards_to_refresh_results(cards),
@@ -461,6 +476,7 @@ func confirm_refresh_pool_roll(roll_data: Dictionary, cards: Array, pool_cards: 
 ## 移动到指定手牌槽位
 func move_to_hand(pool_slot_index: int, hand_slot_index: int) -> Dictionary:
 	var body := JSON.stringify({
+		"operation_id": _new_operation_id("move_to_hand"),
 		"pool_slot_index": pool_slot_index,
 		"hand_slot_index": hand_slot_index,
 	})
@@ -474,6 +490,7 @@ func move_to_hand(pool_slot_index: int, hand_slot_index: int) -> Dictionary:
 ## 移动到保险箱
 func move_to_vault(source_type: String, source_slot_index: int, vault_slot_index: int) -> Dictionary:
 	var body := JSON.stringify({
+		"operation_id": _new_operation_id("move_to_vault"),
 		"source_type": source_type,
 		"source_slot_index": source_slot_index,
 		"vault_slot_index": vault_slot_index,
@@ -500,6 +517,7 @@ func sync_pool_hand_layout(pool_cards: Array, hand_cards: Array) -> Dictionary:
 ## 丢弃卡牌
 func discard_card(slot_type: String, slot_index: int) -> Dictionary:
 	var body := JSON.stringify({
+		"operation_id": _new_operation_id("discard"),
 		"slot_type": slot_type,
 		"slot_index": slot_index,
 	})
@@ -513,6 +531,7 @@ func discard_card(slot_type: String, slot_index: int) -> Dictionary:
 ## 解锁槽位
 func unlock_slot(slot_type: String, slot_index: int) -> Dictionary:
 	var body := JSON.stringify({
+		"operation_id": _new_operation_id("unlock_slot"),
 		"type": slot_type,
 		"index": slot_index,
 	})
@@ -536,6 +555,7 @@ func get_cards(slot_type: String) -> Dictionary:
 ## source_type: "hand" (默认) 或 "vault"
 func synthesize(slot_indices: Array, source_type: String = "hand") -> Dictionary:
 	var body := JSON.stringify({
+		"operation_id": _new_operation_id("synthesize"),
 		"source_type": source_type,
 		"slot_indices": slot_indices,
 	})

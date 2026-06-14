@@ -310,6 +310,7 @@ func _on_synthesis_succeeded(result: Dictionary) -> void:
 		DeckSystem.add_synthesized_deck(deck_data)
 
 	synthesis_completed.emit(result)
+	await GameManager.sync_reward_state_from_server()
 
 	# 延迟刷新
 	await get_tree().create_timer(1.0).timeout

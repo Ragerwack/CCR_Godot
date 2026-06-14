@@ -369,49 +369,69 @@ func _on_synthesize_pressed() -> void:
 		return
 
 	_synthesize_btn.disabled = true
-	_synthesize_btn.text = Localization.t("ui.synthesis.crafting")
+	_synthesize_btn.text = Localization.t("ui.synthesis.vault.done")
 
-	# 调用后端 API：保险箱合成
-	var resp = await ApiClient.synthesize(_selected_slots.duplicate(), "vault")
+	var selected_slots := _selected_slots.duplicate()
+	_apply_vault_synthesis_pending_removal(selected_slots)
+	_confirm_vault_synthesis_background(selected_slots)
 
+func _confirm_vault_synthesis_background(selected_slots: Array) -> void:
+	var resp = await ApiClient.synthesize(selected_slots, "vault")
 	if resp["success"]:
-		_synthesize_btn.text = Localization.t("ui.synthesis.vault.done")
 		var result_data: Dictionary = resp["data"]
+		_apply_vault_synthesis_confirmed_result(result_data)
+		_sync_after_vault_synthesis_success_background()
+	else:
+		print("[VaultUI] 合成失败: ", resp.get("error", "未知错误"))
+		await _recover_after_vault_synthesis_failure()
 
-		# 清除保险箱中被消耗的卡牌，优先使用服务端返回的槽位，避免本地选择顺序漂移。
-		var sorted_indices = _extract_consumed_indices(result_data)
-		if sorted_indices.is_empty():
-			sorted_indices = _selected_slots.duplicate()
-		sorted_indices.sort()
-		for i in range(sorted_indices.size() - 1, -1, -1):
-			var idx = sorted_indices[i]
-			if idx < vault.size():
-				vault[idx] = null  # 置空
+func _apply_vault_synthesis_pending_removal(selected_slots: Array) -> void:
+	var vault = GameManager.player_data.vault_cards
+	var sorted_indices := selected_slots.duplicate()
+	sorted_indices.sort()
+	for i in range(sorted_indices.size() - 1, -1, -1):
+		var idx = sorted_indices[i]
+		if idx < vault.size():
+			vault[idx] = null
 
-		# 添加套牌
-		var deck_data = result_data.get("deck", {})
-		if not deck_data.is_empty():
-			DeckSystem.add_synthesized_deck(deck_data)
+	_clear_selection()
+	GameManager.player_data.changed.emit()
+	refresh_display()
 
-		# 清除选中状态
-		_clear_selection()
-		GameManager.player_data.changed.emit()
-
-		var profile_resp := await ApiClient.get_profile()
-		if profile_resp.get("success", false):
-			GameManager.apply_profile(profile_resp["data"])
-		await GameManager.sync_vault_from_server()
-		await GameManager.sync_decks_from_server()
-		refresh_display()
-
+	if _synthesize_btn != null:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
 		_synthesize_btn.visible = false
-	else:
+
+func _apply_vault_synthesis_confirmed_result(result_data: Dictionary) -> void:
+	var rewards: Dictionary = result_data.get("rewards", {})
+	var gold := int(result_data.get("gold_reward", rewards.get("gold", 0)))
+	if gold > 0:
+		GameManager.player_data.add_gold(gold)
+
+	var gems := int(rewards.get("gems", 0))
+	if gems > 0:
+		GameManager.player_data.add_gems(gems)
+
+	var deck_data = result_data.get("deck", {})
+	if not deck_data.is_empty():
+		DeckSystem.add_synthesized_deck(deck_data)
+
+	GameManager.player_data.changed.emit()
+
+func _sync_after_vault_synthesis_success_background() -> void:
+	await GameManager.sync_reward_state_from_server()
+	await GameManager.sync_decks_from_server()
+	if is_inside_tree():
+		refresh_display()
+
+func _recover_after_vault_synthesis_failure() -> void:
+	if _synthesize_btn != null:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.failed")
 		_synthesize_btn.disabled = false
-		_update_synthesize_button()
-		print("[VaultUI] 合成失败: ", resp.get("error", "未知错误"))
-		await get_tree().create_timer(2.0).timeout
+	await GameManager.sync_vault_from_server()
+	await GameManager.sync_decks_from_server()
+	if is_inside_tree():
+		refresh_display()
 		_update_synthesize_button()
 
 func _extract_consumed_indices(result_data: Dictionary) -> Array[int]:

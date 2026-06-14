@@ -153,7 +153,7 @@ func _create_color_header(color_type: int, count: int) -> Control:
 	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hdr.custom_minimum_size = Vector2(0, HEADER_HEIGHT)
 
-	var color_name = CardColor.get_name(color_type)
+	var color_name = CardColor.display_name(color_type)
 	var color_label = Label.new()
 	color_label.text = "■ " + Localization.t("ui.deck_collection.color_header", [color_name])
 	color_label.add_theme_font_size_override("font_size", 16)

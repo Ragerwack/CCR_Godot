@@ -47,6 +47,9 @@ func _setup_state() -> void:
 	GameManager.player_data.hand_cards = []
 	GameManager.player_data.pool_cards = []
 	CardPoolSystem.current_pool = []
+	CardPoolSystem._warm_rolls.clear()
+	CardPoolSystem._warming_types.clear()
+	CardPoolSystem._warming_types["free"] = true
 	for _i in range(8):
 		GameManager.player_data.hand_cards.append(null)
 		GameManager.player_data.pool_cards.append(null)

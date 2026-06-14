@@ -148,16 +148,30 @@ func _apply_card_slots(slot_type: String, slots: Array) -> void:
 	match slot_type:
 		"pool":
 			player_data.pool_cards = ApiClient.card_slots_to_array_sorted(slots)
+			player_data.pool_slots = _count_unlocked_slots(slots, player_data.pool_slots)
 			CardPoolSystem.current_pool = player_data.pool_cards.duplicate()
 			CardPoolSystem.pool_updated.emit(CardPoolSystem.current_pool)
 		"hand":
 			player_data.hand_cards = ApiClient.card_slots_to_array_sorted(slots)
+			player_data.hand_slots = _count_unlocked_slots(slots, player_data.hand_slots)
 		"vault":
 			vault_raw_slot_data = slots.duplicate()
 			player_data.vault_cards = ApiClient.card_slots_to_array_sorted(slots)
-			player_data.vault_slots = max(player_data.vault_slots, player_data.vault_cards.size())
+			player_data.vault_slots = _count_unlocked_slots(slots, player_data.vault_slots)
 	_cache_loaded[slot_type] = true
 	player_data.changed.emit()
+
+func _count_unlocked_slots(slots: Array, fallback: int) -> int:
+	var max_unlocked_index := -1
+	for raw in slots:
+		if not (raw is Dictionary):
+			continue
+		if not bool(raw.get("unlocked", false)):
+			continue
+		max_unlocked_index = maxi(max_unlocked_index, int(raw.get("slot_index", -1)))
+	if max_unlocked_index < 0:
+		return fallback
+	return max_unlocked_index + 1
 
 func _apply_decks(decks_data: Array) -> void:
 	DeckSystem.player_decks.clear()
@@ -343,6 +357,39 @@ func sync_vault_from_server() -> void:
 	else:
 		FileLogger.warn("保险箱同步失败: " + vault_resp.get("error", ""))
 	FileLogger.perf("new_data_request_done", {"page": "vault", "success": vault_resp.get("success", false), "total_ms": Time.get_ticks_msec() - started})
+	data_synced.emit()
+
+func sync_reward_state_from_server() -> void:
+	var started := Time.get_ticks_msec()
+	FileLogger.perf("reward_state_sync_start")
+
+	var base := ApiClient.get_api_base_url()
+	var results := await ApiClient.batch_request([
+		{"key": "profile", "url": base + "/user/profile"},
+		{"key": "level", "url": base + "/player/level"},
+		{"key": "pool", "url": base + "/game/cards?type=pool"},
+		{"key": "hand", "url": base + "/game/cards?type=hand"},
+		{"key": "vault", "url": base + "/game/cards?type=vault"},
+	])
+
+	if results.get("profile", {}).get("success", false):
+		apply_profile(results["profile"]["data"])
+	else:
+		FileLogger.warn("奖励后 profile 同步失败: " + results.get("profile", {}).get("error", ""))
+
+	if results.get("level", {}).get("success", false):
+		_apply_level_info(results["level"]["data"])
+	else:
+		FileLogger.warn("奖励后等级同步失败: " + results.get("level", {}).get("error", ""))
+
+	for slot_type in ["pool", "hand", "vault"]:
+		var resp: Dictionary = results.get(slot_type, {})
+		if resp.get("success", false):
+			_apply_card_slots(slot_type, resp["data"])
+		else:
+			FileLogger.warn("奖励后 " + slot_type + " 同步失败: " + resp.get("error", ""))
+
+	FileLogger.perf("reward_state_sync_done", {"total_ms": Time.get_ticks_msec() - started})
 	data_synced.emit()
 
 ## 提交抽卡页内卡池/手牌临时布局。
