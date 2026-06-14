@@ -350,7 +350,7 @@ func set_slot_hovered(active: bool) -> void:
 	_update_process_state()
 
 func _show_hover_preview() -> void:
-	if area_type != "pool":
+	if not ["pool", "hand", "vault"].has(area_type):
 		return
 	if card_display == null or card_display.card == null:
 		return
