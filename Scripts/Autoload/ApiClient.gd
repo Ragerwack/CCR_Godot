@@ -666,11 +666,14 @@ static func translate_refresh_roll_to_slots(roll_data: Dictionary, player_level:
 	var number_probs: Dictionary = draw_key.get("number_probabilities", {})
 	var color_probs: Dictionary = draw_key.get("color_probabilities", {})
 	var deck_count := mini(_visible_deck_count(player_level), decks.size())
-	var slot_count := mini(mini(pool_slots, 8), matrix.size())
+	var expected_slots := mini(pool_slots, 16)
 	var result: Array = []
 	if deck_count <= 0:
 		return result
+	if matrix.size() < 16:
+		return result
 
+	var slot_count := expected_slots
 	for i in range(slot_count):
 		var row: Array = matrix[i] if matrix[i] is Array else [0.0, 0.0, 0.0]
 		var deck_roll := _unit_float(row[0] if row.size() > 0 else 0.0)

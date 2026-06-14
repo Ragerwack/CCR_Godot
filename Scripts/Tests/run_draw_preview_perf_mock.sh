@@ -52,7 +52,7 @@ function makeRoll() {
     key_stale: false,
     roll_id: "00000000-0000-4000-8000-000000000001",
     signature: "0123456789abcdef0123456789abcdef",
-    random_matrix: Array.from({ length: 8 }, (_, index) => [
+    random_matrix: Array.from({ length: 16 }, (_, index) => [
       index % 2 === 0 ? 0.2 : 0.7,
       (index % 5) / 5 + 0.01,
       0.01,
@@ -82,7 +82,7 @@ function makeRoll() {
 }
 
 function makeConfirmedCards() {
-  return makeRoll().random_matrix.map((_, index) => {
+  return makeRoll().random_matrix.slice(0, 9).map((_, index) => {
     const deckId = index % 2 === 0 ? 1 : 2;
     const number = (index % 5) + 1;
     const cardDefId = deckId * 100 + number;

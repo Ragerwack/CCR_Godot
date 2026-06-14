@@ -50,9 +50,9 @@ func _ready() -> void:
 		get_tree().quit(1)
 
 func _setup_state() -> void:
-	GameManager.player_data.level = 1
-	GameManager.player_data.pool_slots = 8
-	GameManager.player_data.hand_slots = 8
+	GameManager.player_data.level = 3
+	GameManager.player_data.pool_slots = 9
+	GameManager.player_data.hand_slots = 9
 	GameManager.player_data.gold = 1000
 	GameManager.player_data.gems = 50
 	GameManager.free_refresh_count = 1
@@ -61,7 +61,7 @@ func _setup_state() -> void:
 	GameManager.player_data.hand_cards = []
 	GameManager.player_data.pool_cards = []
 	CardPoolSystem.current_pool = []
-	for _i in range(8):
+	for _i in range(9):
 		GameManager.player_data.hand_cards.append(null)
 		GameManager.player_data.pool_cards.append(null)
 		CardPoolSystem.current_pool.append(null)
@@ -75,13 +75,13 @@ func _on_pool_updated(cards: Array) -> void:
 			occupied += 1
 	print("DRAW_PREVIEW_PERF total_ms=%d target_ms=%d occupied=%d" % [elapsed_ms, TARGET_MS, occupied])
 	if _use_http_warm:
-		if elapsed_ms > TARGET_MS or occupied != 8:
+		if elapsed_ms > TARGET_MS or occupied != 9:
 			_done = true
 			get_tree().quit(1)
 		return
 
 	_done = true
-	if elapsed_ms <= TARGET_MS and occupied == 8:
+	if elapsed_ms <= TARGET_MS and occupied == 9:
 		get_tree().quit(0)
 	else:
 		get_tree().quit(1)
@@ -97,7 +97,7 @@ func _on_loading_completed() -> void:
 
 func _mock_roll() -> Dictionary:
 	var matrix: Array = []
-	for i in range(8):
+	for i in range(16):
 		var deck_roll := 0.20 if i % 2 == 0 else 0.70
 		var number_roll := float(i % 5) / 5.0 + 0.01
 		var color_roll := 0.01

@@ -391,6 +391,10 @@ func _get_warm_roll(refresh_type: String) -> Dictionary:
 		return {}
 	var roll = entry.get("roll", {})
 	if roll is Dictionary:
+		var matrix: Array = roll.get("random_matrix", [])
+		if matrix.size() < 16:
+			_warm_rolls.erase(refresh_type)
+			return {}
 		return roll
 	_warm_rolls.erase(refresh_type)
 	return {}

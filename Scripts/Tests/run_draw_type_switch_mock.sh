@@ -91,7 +91,7 @@ function makeRoll(refreshType) {
   if (!pending) {
     pending = {
       roll_id: "00000000-0000-4000-8000-000000000009",
-      random_matrix: Array.from({ length: 8 }, (_, index) => [
+      random_matrix: Array.from({ length: 16 }, (_, index) => [
         index % 2 === 0 ? 0.2 : 0.7,
         (index % 5) / 5 + 0.01,
         0.01,
@@ -111,7 +111,7 @@ function makeRoll(refreshType) {
 }
 
 function makeConfirmedCards() {
-  return pending.random_matrix.map((_, index) => {
+  return pending.random_matrix.slice(0, 8).map((_, index) => {
     const deckId = index % 2 === 0 ? 1 : 2;
     const number = (index % 5) + 1;
     const cardDefId = deckId * 100 + number;
