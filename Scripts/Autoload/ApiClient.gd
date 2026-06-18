@@ -457,15 +457,17 @@ func prepare_refresh_pool_roll(refresh_type: String, draw_key_version: int) -> D
 	var body := JSON.stringify(payload)
 	return await _request(_api_url("/game/refresh-pool/prepare"), HTTPClient.METHOD_POST, body)
 
-func confirm_refresh_pool_roll(roll_data: Dictionary, cards: Array, pool_cards: Array, hand_cards: Array) -> Dictionary:
-	var body := JSON.stringify({
+func confirm_refresh_pool_roll(roll_data: Dictionary, cards: Array, pool_cards: Array, hand_cards: Array, sync_layout: bool = true) -> Dictionary:
+	var payload := {
 		"operation_id": _new_operation_id("refresh_pool_confirm"),
 		"roll_id": roll_data.get("roll_id", ""),
 		"signature": roll_data.get("signature", ""),
 		"cards": _slot_cards_to_refresh_results(cards),
-		"pool": _cards_to_layout(pool_cards),
-		"hand": _cards_to_layout(hand_cards),
-	})
+	}
+	if sync_layout:
+		payload["pool"] = _cards_to_layout(pool_cards)
+		payload["hand"] = _cards_to_layout(hand_cards)
+	var body := JSON.stringify(payload)
 	var resp := await _request(_api_url("/game/refresh-pool/confirm"), HTTPClient.METHOD_POST, body)
 	if resp.get("success", false):
 		pool_refreshed.emit(resp["data"].get("cards", []))
@@ -506,6 +508,17 @@ func sync_pool_hand_layout(pool_cards: Array, hand_cards: Array) -> Dictionary:
 	var body := JSON.stringify({
 		"pool": _cards_to_layout(pool_cards),
 		"hand": _cards_to_layout(hand_cards),
+	})
+	var resp := await _request(_api_url("/game/sync-layout"), HTTPClient.METHOD_POST, body)
+	if resp["success"]:
+		layout_synced.emit(resp["data"])
+	else:
+		layout_sync_failed.emit(resp["error"])
+	return resp
+
+func sync_vault_layout(vault_cards: Array) -> Dictionary:
+	var body := JSON.stringify({
+		"vault": _cards_to_layout(vault_cards),
 	})
 	var resp := await _request(_api_url("/game/sync-layout"), HTTPClient.METHOD_POST, body)
 	if resp["success"]:

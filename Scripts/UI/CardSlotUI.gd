@@ -14,7 +14,7 @@ signal slot_unlock_requested(index: int)
 
 ## 该槽位所属区域: "pool" / "hand" / "vault"
 var area_type: String = ""
-## 是否允许从此槽位拖出卡牌（保险箱设为 false）
+## 是否允许从此槽位拖出卡牌
 var can_drag_from: bool = true
 ## 是否登记为真实可查找槽位；翻页动画临时槽位不参与拖拽定位
 var register_drag_slot: bool = true
@@ -515,6 +515,7 @@ func _is_valid_drop_path(src: String, dst: String) -> bool:
 	#   hand <-> hand  (同区换位 / 移动)
 	#   pool <-> hand  (双向)
 	#   hand -> vault  (单向)
+	#   vault <-> vault (保险箱内换位 / 移动)
 	# 禁止: vault -> pool, vault -> hand
 	match src:
 		"pool":
@@ -522,7 +523,7 @@ func _is_valid_drop_path(src: String, dst: String) -> bool:
 		"hand":
 			return dst == "hand" or dst == "pool" or dst == "vault"
 		"vault":
-			return false  # 保险箱只能通过按钮操作取出
+			return dst == "vault"
 	return false
 
 

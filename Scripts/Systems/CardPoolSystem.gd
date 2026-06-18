@@ -54,6 +54,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 
 	var old_pool_cards: Array = current_pool.duplicate(true)
 	var old_hand_cards: Array = GameManager.player_data.hand_cards.duplicate(true)
+	var should_sync_layout := GameManager.is_pool_hand_layout_dirty()
 
 	var step_started := Time.get_ticks_msec()
 	var roll_data := _take_warm_roll(refresh_type)
@@ -214,7 +215,8 @@ func refresh_pool(refresh_type: String = "free") -> void:
 		roll_data,
 		preview_slots,
 		old_pool_cards,
-		old_hand_cards
+		old_hand_cards,
+		should_sync_layout
 	)
 	if confirm_resp.get("success", false):
 		_print_gold_draw_step(
@@ -238,6 +240,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			GameManager.apply_profile(data["profile"])
 		else:
 			await _sync_profile()
+		GameManager.mark_pool_hand_layout_clean("draw_confirm")
 
 		pool_updated.emit(current_pool)
 		pool_filled.emit(current_pool)
@@ -255,6 +258,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			"type": refresh_type,
 			"success": true,
 			"confirm_ms": Time.get_ticks_msec() - confirm_started,
+			"layout_sync_submitted": should_sync_layout,
 			"total_ms": Time.get_ticks_msec() - draw_started,
 		})
 	else:
@@ -294,6 +298,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			"type": refresh_type,
 			"success": false,
 			"confirm_ms": Time.get_ticks_msec() - confirm_started,
+			"layout_sync_submitted": should_sync_layout,
 			"total_ms": Time.get_ticks_msec() - draw_started,
 		})
 
@@ -599,6 +604,7 @@ func remove_card(card: CardInfo) -> void:
 	var idx = current_pool.find(card)
 	if idx >= 0:
 		current_pool[idx] = null
+		GameManager.mark_pool_hand_layout_dirty("pool_remove")
 
 func add_card(card: CardInfo) -> bool:
 	for i in range(GameManager.player_data.pool_slots):
@@ -606,6 +612,7 @@ func add_card(card: CardInfo) -> bool:
 			current_pool.append(null)
 		if current_pool[i] == null:
 			current_pool[i] = card
+			GameManager.mark_pool_hand_layout_dirty("pool_add")
 			pool_updated.emit(current_pool)
 			return true
 	return false
@@ -642,6 +649,7 @@ func quick_move_to_hand(card: CardInfo, hand_slot_index: int = -1) -> void:
 	else:
 		hand_cards.append(card)
 
+	GameManager.mark_pool_hand_layout_dirty("quick_pool_to_hand")
 	GameManager.player_data.changed.emit()
 	pool_updated.emit(current_pool)
 
@@ -679,6 +687,7 @@ func quick_move_from_hand_to_pool(card: CardInfo, hand_slot_index: int) -> void:
 	else:
 		current_pool.append(card)
 
+	GameManager.mark_pool_hand_layout_dirty("quick_hand_to_pool")
 	GameManager.player_data.changed.emit()
 	pool_updated.emit(current_pool)
 

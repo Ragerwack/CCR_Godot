@@ -229,6 +229,7 @@ func _handle_hand_to_pool(card: CardInfo, hand_idx: int, target_pool_idx: int) -
 	pool[target_pool_idx] = card
 	hand[hand_idx] = target_card
 	GameManager.player_data.pool_cards = pool.duplicate()
+	GameManager.mark_pool_hand_layout_dirty("hand_to_pool")
 
 	GameManager.player_data.changed.emit()
 	card_dragged.emit(card, hand_idx)
@@ -257,6 +258,7 @@ func _handle_pool_to_pool(card: CardInfo, source_pool_idx: int, target_pool_idx:
 	pool[target_pool_idx] = pool[source_pool_idx]
 	pool[source_pool_idx] = target_card
 	GameManager.player_data.pool_cards = pool.duplicate()
+	GameManager.mark_pool_hand_layout_dirty("pool_to_pool")
 
 	GameManager.player_data.changed.emit()
 	card_dragged.emit(card, source_pool_idx)

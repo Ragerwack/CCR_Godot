@@ -38,6 +38,7 @@ var _cache_loaded: Dictionary = {
 var vault_raw_slot_data: Array = []
 var _layout_sync_in_flight: bool = false
 var _optional_login_sync_in_flight: bool = false
+var _pool_hand_layout_dirty: bool = false
 
 const NAV_BUTTONS: Array[Dictionary] = [
 	{"id": "card_pool", "label": "抽牌"},
@@ -146,6 +147,21 @@ func _apply_level_info(level_info: Dictionary) -> void:
 func is_cache_loaded(key: String) -> bool:
 	return bool(_cache_loaded.get(key, false))
 
+func mark_pool_hand_layout_dirty(reason: String = "") -> void:
+	if _pool_hand_layout_dirty:
+		return
+	_pool_hand_layout_dirty = true
+	FileLogger.perf("pool_hand_layout_dirty", {"reason": reason})
+
+func mark_pool_hand_layout_clean(reason: String = "") -> void:
+	if not _pool_hand_layout_dirty:
+		return
+	_pool_hand_layout_dirty = false
+	FileLogger.perf("pool_hand_layout_clean", {"reason": reason})
+
+func is_pool_hand_layout_dirty() -> bool:
+	return _pool_hand_layout_dirty
+
 func _apply_card_slots(slot_type: String, slots: Array) -> void:
 	match slot_type:
 		"pool":
@@ -213,6 +229,8 @@ func sync_all_from_server() -> void:
 			_apply_card_slots(slot_type, resp["data"])
 		else:
 			FileLogger.warn(slot_type + " 同步失败: " + resp.get("error", ""))
+	if results.get("pool", {}).get("success", false) and results.get("hand", {}).get("success", false):
+		mark_pool_hand_layout_clean("full_sync")
 
 	if results.get("decks", {}).get("success", false):
 		_apply_decks(results["decks"]["data"])
@@ -253,6 +271,8 @@ func sync_initial_card_pool_from_server() -> void:
 			_apply_card_slots(slot_type, resp["data"])
 		else:
 			FileLogger.warn("首屏 " + slot_type + " 同步失败: " + resp.get("error", ""))
+	if results.get("pool", {}).get("success", false) and results.get("hand", {}).get("success", false):
+		mark_pool_hand_layout_clean("initial_sync")
 
 	FileLogger.perf("login_initial_sync_done", {"total_ms": Time.get_ticks_msec() - started})
 	data_synced.emit()
@@ -390,6 +410,8 @@ func sync_reward_state_from_server() -> void:
 			_apply_card_slots(slot_type, resp["data"])
 		else:
 			FileLogger.warn("奖励后 " + slot_type + " 同步失败: " + resp.get("error", ""))
+	if results.get("pool", {}).get("success", false) and results.get("hand", {}).get("success", false):
+		mark_pool_hand_layout_clean("reward_sync")
 
 	FileLogger.perf("reward_state_sync_done", {"total_ms": Time.get_ticks_msec() - started})
 	data_synced.emit()
@@ -408,9 +430,11 @@ func sync_pool_hand_layout() -> Dictionary:
 	if not resp.get("success", false):
 		var error := str(resp.get("error", ""))
 		FileLogger.warn("卡池/手牌布局同步失败: " + error)
-		if error.contains("临时布局与服务端卡牌集合不一致"):
+		if error.contains("提交布局与服务端卡牌集合不一致") or error.contains("临时布局与服务端卡牌集合不一致"):
 			FileLogger.warn("检测到本地卡池/手牌缓存与服务端不一致，正在回源同步")
 			await sync_initial_card_pool_from_server()
+	else:
+		mark_pool_hand_layout_clean("sync_layout")
 	return resp
 
 func sync_pool_hand_layout_background(reason: String = "scene_switch") -> void:

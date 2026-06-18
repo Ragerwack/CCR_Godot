@@ -255,6 +255,7 @@ func _handle_pool_to_hand(card: CardInfo, source_pool_idx: int, target_hand_idx:
 	hand[target_hand_idx] = card
 	pool[source_pool_idx] = target_card
 	GameManager.player_data.pool_cards = pool.duplicate()
+	GameManager.mark_pool_hand_layout_dirty("pool_to_hand")
 	if _selected_hand_index == target_hand_idx or _selected_hand_index == source_pool_idx:
 		clear_selection()
 
@@ -285,6 +286,7 @@ func _handle_hand_to_hand(card: CardInfo, source_hand_idx: int, target_hand_idx:
 		DragSystem.play_swap_animation("hand", source_hand_idx, "hand", target_hand_idx, card, target_card)
 	hand[target_hand_idx] = hand[source_hand_idx]
 	hand[source_hand_idx] = target_card
+	GameManager.mark_pool_hand_layout_dirty("hand_to_hand")
 	clear_selection()
 
 	GameManager.player_data.changed.emit()

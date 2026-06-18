@@ -108,7 +108,7 @@ func _create_slot_grid() -> void:
 		slot.slot_index = i
 		slot.custom_minimum_size = slot_size
 		slot.area_type = "vault"
-		slot.can_drag_from = false  # 保险箱卡牌不可拖出
+		slot.can_drag_from = true
 		slot.slot_clicked.connect(_on_slot_clicked)
 		slot.card_dropped.connect(_on_card_dropped)
 		slot.slot_unlock_requested.connect(func(idx: int): GameManager.handle_unlock_slot("vault", idx))
@@ -129,17 +129,25 @@ func _create_slot_grid() -> void:
 func _on_player_data_changed() -> void:
 	refresh_display()
 
-# ── 卡牌拖放到此槽位（仅接收来自手牌的拖放） ──
+# ── 卡牌拖放到此槽位 ──
 func _on_card_dropped(target_index: int, card: CardInfo, source: String, source_index: int) -> void:
-	if source != "hand":
-		DragSystem.cancel_drag()
-		return  # 保险箱只接收手牌拖入
+	if source == "hand":
+		var ok := await _handle_hand_to_vault(card, source_index, target_index)
+		if ok:
+			DragSystem.notify_drop_completed(card, source, "vault")
+		else:
+			DragSystem.cancel_drag()
+		return
 
-	var ok := await _handle_hand_to_vault(card, source_index, target_index)
-	if ok:
-		DragSystem.notify_drop_completed(card, source, "vault")
-	else:
-		DragSystem.cancel_drag()
+	if source == "vault":
+		var ok := await _handle_vault_to_vault(card, source_index, target_index)
+		if ok:
+			DragSystem.notify_drop_completed(card, source, "vault")
+		else:
+			DragSystem.cancel_drag()
+		return
+
+	DragSystem.cancel_drag()
 
 
 func _handle_hand_to_vault(card: CardInfo, hand_idx: int, vault_target_idx: int) -> bool:
@@ -188,6 +196,57 @@ func _handle_hand_to_vault(card: CardInfo, hand_idx: int, vault_target_idx: int)
 	GameManager.player_data.changed.emit()
 	card_dragged.emit(card, target_idx)
 	return true
+
+
+func _handle_vault_to_vault(card: CardInfo, source_vault_idx: int, target_vault_idx: int) -> bool:
+	var vault = GameManager.player_data.vault_cards
+	if target_vault_idx < 0 or target_vault_idx >= GameManager.player_data.vault_slots or not _is_vault_slot_unlocked(target_vault_idx):
+		print("[VaultUI] 目标保险箱槽位无效")
+		return false
+
+	source_vault_idx = _resolve_card_index(vault, card, source_vault_idx)
+	if source_vault_idx < 0:
+		print("[VaultUI] 源保险箱槽位无效")
+		return false
+	if not _is_vault_slot_unlocked(source_vault_idx):
+		print("[VaultUI] 源保险箱槽位未解锁")
+		return false
+
+	while vault.size() <= maxi(source_vault_idx, target_vault_idx):
+		vault.append(null)
+	if source_vault_idx == target_vault_idx:
+		return true
+
+	var old_vault := vault.duplicate()
+	var target_card = vault[target_vault_idx]
+	if target_card != null:
+		DragSystem.play_swap_animation("vault", source_vault_idx, "vault", target_vault_idx, card, target_card)
+	vault[target_vault_idx] = vault[source_vault_idx]
+	vault[source_vault_idx] = target_card
+	_clear_selection()
+
+	GameManager.player_data.changed.emit()
+	card_dragged.emit(card, source_vault_idx)
+
+	if ApiClient.is_logged_in():
+		var sync_resp := await ApiClient.sync_vault_layout(vault)
+		if not sync_resp.get("success", false):
+			print("[VaultUI] 保险箱布局同步失败: ", sync_resp.get("error", ""))
+			GameManager.player_data.vault_cards = old_vault
+			await GameManager.sync_vault_from_server()
+			GameManager.player_data.changed.emit()
+			return false
+
+	return true
+
+
+func _resolve_card_index(cards: Array, card: CardInfo, preferred_idx: int) -> int:
+	if preferred_idx >= 0 and preferred_idx < cards.size() and cards[preferred_idx] != null:
+		return preferred_idx
+	for i in range(cards.size()):
+		if cards[i] != null and cards[i].get_uid() == card.get_uid():
+			return i
+	return -1
 
 
 func refresh_display() -> void:
