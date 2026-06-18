@@ -519,6 +519,11 @@ func _on_hand_discard() -> void:
 		_hand_area_ui.clear_selection()
 		return
 
+	var old_pool_cards: Array = CardPoolSystem.current_pool.duplicate(true)
+	if old_pool_cards.is_empty() and not GameManager.player_data.pool_cards.is_empty():
+		old_pool_cards = GameManager.player_data.pool_cards.duplicate(true)
+	var old_hand_cards: Array = hand_cards.duplicate(true)
+
 	if not ApiClient.is_logged_in():
 		hand_cards[idx] = null
 		GameManager.player_data.changed.emit()
@@ -527,24 +532,27 @@ func _on_hand_discard() -> void:
 			_hand_area_ui.refresh_display()
 		return
 
-	_show_loading(true)
-	var sync_resp := await GameManager.sync_pool_hand_layout()
+	hand_cards[idx] = null
+	GameManager.player_data.changed.emit()
+	if is_instance_valid(_hand_area_ui):
+		_hand_area_ui.clear_selection()
+		_hand_area_ui.refresh_display()
+
+	_confirm_hand_discard_background(idx, old_pool_cards, old_hand_cards)
+
+func _confirm_hand_discard_background(idx: int, old_pool_cards: Array, old_hand_cards: Array) -> void:
+	var sync_resp := await ApiClient.sync_pool_hand_layout(old_pool_cards, old_hand_cards)
 	if not sync_resp.get("success", false):
 		push_error("丢弃前同步失败: ", sync_resp.get("error", ""))
-		_show_loading(false)
+		await _recover_after_hand_action_failure("discard_sync")
 		return
 
 	var resp = await ApiClient.discard_card("hand", idx)
 	if resp["success"]:
-		if idx < hand_cards.size():
-			hand_cards[idx] = null
-		GameManager.player_data.changed.emit()
-		if is_instance_valid(_hand_area_ui):
-			_hand_area_ui.clear_selection()
-			_hand_area_ui.refresh_display()
+		GameManager.mark_pool_hand_layout_clean("hand_discard")
 	else:
 		push_error("丢弃失败: ", resp["error"])
-	_show_loading(false)
+		await _recover_after_hand_action_failure("discard")
 
 func _on_hand_save_to_vault() -> void:
 	if not is_instance_valid(_hand_area_ui):
@@ -560,92 +568,82 @@ func _on_hand_save_to_vault() -> void:
 	var card = hand_cards[source_idx]
 
 	var vault_cards = GameManager.player_data.vault_cards
-	var vault_idx = -1
-
-	_show_loading(true)
+	var vault_idx := _find_first_local_vault_space()
 
 	if not ApiClient.is_logged_in():
 		# 找第一个空保险箱槽
-		for i in range(GameManager.player_data.vault_slots):
-			if i >= vault_cards.size() or vault_cards[i] == null:
-				vault_idx = i
-				break
 		if vault_idx < 0:
 			print("保险箱已满")
-			_show_loading(false)
 			return
 
 		# 离线模式：直接本地移动
 		hand_cards[source_idx] = null
-		while vault_cards.size() < vault_idx:
+		while vault_cards.size() <= vault_idx:
 			vault_cards.append(null)
-		if vault_idx < vault_cards.size():
-			vault_cards[vault_idx] = card
-		else:
-			vault_cards.append(card)
+		vault_cards[vault_idx] = card
 		GameManager.player_data.changed.emit()
 		if is_instance_valid(_hand_area_ui):
 			_hand_area_ui.clear_selection()
 			_hand_area_ui.refresh_display()
-		_show_loading(false)
 		return
 
-	var sync_resp := await GameManager.sync_pool_hand_layout()
-	if not sync_resp.get("success", false):
-		print("保存前同步失败: ", sync_resp.get("error", ""))
-		_show_loading(false)
-		return
-
-	var vault_resp := await ApiClient.get_cards("vault")
-	if not vault_resp.get("success", false):
-		print("获取保险箱槽位失败: ", vault_resp.get("error", ""))
-		_show_loading(false)
-		return
-
-	var raw_vault_slots: Array = vault_resp["data"] as Array
-	vault_cards = ApiClient.card_slots_to_array_sorted(raw_vault_slots)
-	GameManager.player_data.vault_cards = vault_cards
-	GameManager.player_data.vault_slots = vault_cards.size()
-	for raw in raw_vault_slots:
-		if not (raw is Dictionary):
-			continue
-		if not raw.get("unlocked", false):
-			continue
-		var idx := int(raw.get("slot_index", -1))
-		if idx >= 0 and (idx >= vault_cards.size() or vault_cards[idx] == null):
-			vault_idx = idx
-			break
 	if vault_idx < 0:
 		print("保险箱已满，请先购买保险箱槽位")
-		_show_loading(false)
+		return
+
+	var old_pool_cards: Array = CardPoolSystem.current_pool.duplicate(true)
+	if old_pool_cards.is_empty() and not GameManager.player_data.pool_cards.is_empty():
+		old_pool_cards = GameManager.player_data.pool_cards.duplicate(true)
+	var old_hand_cards: Array = hand_cards.duplicate(true)
+	var old_vault_cards: Array = vault_cards.duplicate(true)
+
+	hand_cards[source_idx] = null
+	while vault_cards.size() <= vault_idx:
+		vault_cards.append(null)
+	vault_cards[vault_idx] = card
+	GameManager.player_data.changed.emit()
+	if is_instance_valid(_hand_area_ui):
+		_hand_area_ui.clear_selection()
+		_hand_area_ui.refresh_display()
+
+	_confirm_hand_save_to_vault_background(source_idx, vault_idx, old_pool_cards, old_hand_cards, old_vault_cards)
+
+func _confirm_hand_save_to_vault_background(source_idx: int, vault_idx: int, old_pool_cards: Array, old_hand_cards: Array, old_vault_cards: Array) -> void:
+	var sync_resp := await ApiClient.sync_pool_hand_layout(old_pool_cards, old_hand_cards)
+	if not sync_resp.get("success", false):
+		print("保存前同步失败: ", sync_resp.get("error", ""))
+		await _recover_after_hand_action_failure("vault_sync")
 		return
 
 	var resp = await ApiClient.move_to_vault("hand", source_idx, vault_idx)
 	if resp["success"]:
 		var result_data: Dictionary = resp["data"]
 		var cd = ApiClient.card_slot_to_cardinfo(result_data)
-		if cd != null and card != null:
-			cd.id = card.id
-
-		if source_idx < hand_cards.size():
-			hand_cards[source_idx] = null
-
-		while vault_cards.size() < vault_idx:
-			vault_cards.append(null)
-		if vault_idx < vault_cards.size():
-			vault_cards[vault_idx] = cd
-		else:
-			vault_cards.append(cd)
-
-		GameManager.player_data.changed.emit()
-
-		if is_instance_valid(_hand_area_ui):
-			_hand_area_ui.clear_selection()
-			_hand_area_ui.refresh_display()
+		if cd != null:
+			while GameManager.player_data.vault_cards.size() <= vault_idx:
+				GameManager.player_data.vault_cards.append(null)
+			GameManager.player_data.vault_cards[vault_idx] = cd
+			GameManager.player_data.changed.emit()
+		GameManager.mark_pool_hand_layout_clean("hand_to_vault")
 	else:
 		print("保存失败: ", resp["error"])
+		GameManager.player_data.vault_cards = old_vault_cards
+		await _recover_after_hand_action_failure("vault")
 
-	_show_loading(false)
+func _find_first_local_vault_space() -> int:
+	var vault_cards = GameManager.player_data.vault_cards
+	for i in range(GameManager.player_data.vault_slots):
+		if i >= vault_cards.size() or vault_cards[i] == null:
+			return i
+	return -1
+
+func _recover_after_hand_action_failure(reason: String = "") -> void:
+	FileLogger.warn("手牌资产动作失败，正在回源同步: " + reason)
+	await GameManager.sync_initial_card_pool_from_server()
+	await GameManager.sync_vault_from_server()
+	if is_instance_valid(_hand_area_ui):
+		_hand_area_ui.clear_selection()
+		_hand_area_ui.refresh_display()
 
 func _apply_hand_synthesis_result(result: Dictionary, fallback_indices: Array[int]) -> void:
 	var consumed = result.get("consumed_slots", [])

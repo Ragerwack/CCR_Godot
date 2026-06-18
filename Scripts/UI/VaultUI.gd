@@ -11,17 +11,23 @@ var slots: Array[CardSlotUI] = []
 var _raw_slot_data: Array = []  # 服务端原始槽位数据（含 unlocked 等信息）
 var _slot_viewport: ScrollContainer = null
 var _slot_canvas: Control = null
+var _gold_unlock_btn: Button = null
+var _gold_unlock_cost_label: Label = null
+var _gem_unlock_btn: Button = null
+var _gem_unlock_cost_label: Label = null
+var _unlock_buttons_busy: bool = false
 
 # ── 选中合成相关 ──
-var _selected_slots: Array[int] = []     # 选中的槽位索引（最多5个）
+var _selected_slots: Array[int] = []     # 单选槽位；保留数组形态便于复用现有高亮逻辑
 var _synthesize_btn: Button = null
 
 
-const MAX_SELECT: int = 5
 const SELECT_BORDER_COLOR: Color = Color(1.0, 0.84, 0.0, 0.7)  # 金色
 const VAULT_COLUMNS: int = 8
 const MAX_VISIBLE_ROWS: int = 4
 const EXTRA_LOCKED_ROWS: int = 1
+const UNLOCK_PANEL_WIDTH: float = 210.0
+const UNLOCK_PANEL_MARGIN: float = 28.0
 
 func _ready() -> void:
 	columns = VAULT_COLUMNS
@@ -36,6 +42,7 @@ func _ready() -> void:
 
 func _load_from_server() -> void:
 	await GameManager.sync_vault_from_server()
+	await GameManager.sync_vault_slot_quote_from_server()
 	_update_slot_count_from_server()
 	refresh_display()
 
@@ -79,20 +86,58 @@ func setup_ui() -> void:
 	_synthesize_btn.pressed.connect(_on_synthesize_pressed)
 	add_child(_synthesize_btn)
 
+	_create_unlock_panel()
 	_create_slot_grid()
 	refresh_display()
 
+func _create_unlock_panel() -> void:
+	var panel_width := UNLOCK_PANEL_WIDTH
+	var panel_x := maxf(20.0, get_viewport_rect().size.x - panel_width - UNLOCK_PANEL_MARGIN)
+	var panel_y := 120.0
+
+	var panel = VBoxContainer.new()
+	panel.name = "VaultUnlockPanel"
+	panel.position = Vector2(panel_x, panel_y)
+	panel.size = Vector2(panel_width, 170)
+	panel.add_theme_constant_override("separation", 8)
+	add_child(panel)
+
+	_gold_unlock_btn = Button.new()
+	_gold_unlock_btn.custom_minimum_size = Vector2(panel_width, 38)
+	_gold_unlock_btn.text = Localization.t("ui.vault.unlock_gold")
+	_gold_unlock_btn.pressed.connect(func(): _on_unlock_slot_pressed("gold"))
+	panel.add_child(_gold_unlock_btn)
+
+	_gold_unlock_cost_label = Label.new()
+	_gold_unlock_cost_label.custom_minimum_size = Vector2(panel_width, 24)
+	_gold_unlock_cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_gold_unlock_cost_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(_gold_unlock_cost_label)
+
+	_gem_unlock_btn = Button.new()
+	_gem_unlock_btn.custom_minimum_size = Vector2(panel_width, 38)
+	_gem_unlock_btn.text = Localization.t("ui.vault.unlock_gem")
+	_gem_unlock_btn.pressed.connect(func(): _on_unlock_slot_pressed("gem"))
+	panel.add_child(_gem_unlock_btn)
+
+	_gem_unlock_cost_label = Label.new()
+	_gem_unlock_cost_label.custom_minimum_size = Vector2(panel_width, 24)
+	_gem_unlock_cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_gem_unlock_cost_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(_gem_unlock_cost_label)
+
 func _create_slot_grid() -> void:
-	# 保险箱格子大一些，居中显示，预留底部合成按钮空间
-	var slot_size = Vector2(100, 140)
-	var slot_spacing = 15
+	# 右侧预留购买按钮面板，避免卡槽和操作区重叠。
+	var slot_size = Vector2(88, 123)
+	var slot_spacing = 10
 	var render_rows := maxi(1, int(ceil(float(slot_count) / float(columns))))
 	var visible_rows := mini(MAX_VISIBLE_ROWS, render_rows)
 	var total_width = columns * slot_size.x + (columns - 1) * slot_spacing
 	var content_height = render_rows * slot_size.y + (render_rows - 1) * slot_spacing
 	var viewport_height = visible_rows * slot_size.y + (visible_rows - 1) * slot_spacing
 	var available_width = size.x if size.x > 0.0 else get_viewport_rect().size.x
-	var start_x = (available_width - total_width) / 2
+	var grid_area_width = maxf(total_width, available_width - UNLOCK_PANEL_WIDTH - UNLOCK_PANEL_MARGIN * 2.0)
+	var start_x = (grid_area_width - total_width) / 2
 	var start_y = 85.0
 
 	if _slot_viewport != null:
@@ -275,9 +320,44 @@ func refresh_display() -> void:
 	if label != null:
 		label.text = Localization.t("ui.vault.slot_count", [_count_occupied(cards), _count_unlocked_slots()])
 
+	_update_unlock_buttons()
+
 	# 更新合成按钮状态
 	_update_synthesize_button()
 	FileLogger.perf("ui_render_done", {"page": "vault", "component": "slot_grid", "slots": slot_count, "total_ms": Time.get_ticks_msec() - render_started})
+
+func _update_unlock_buttons() -> void:
+	var quote: Dictionary = GameManager.vault_slot_quote
+	var costs: Dictionary = quote.get("costs", {})
+	var gold_cost := int(costs.get("gold", 20))
+	var gem_cost := int(costs.get("gem", 10))
+	var has_quote := not quote.is_empty()
+
+	if _gold_unlock_btn != null:
+		_gold_unlock_btn.disabled = _unlock_buttons_busy or not has_quote
+	if _gem_unlock_btn != null:
+		_gem_unlock_btn.disabled = _unlock_buttons_busy or not has_quote
+	if _gold_unlock_cost_label != null:
+		_gold_unlock_cost_label.text = Localization.t("ui.vault.unlock_gold_cost", [gold_cost])
+	if _gem_unlock_cost_label != null:
+		_gem_unlock_cost_label.text = Localization.t("ui.vault.unlock_gem_cost", [gem_cost])
+
+func _on_unlock_slot_pressed(currency: String) -> void:
+	if _unlock_buttons_busy:
+		return
+	_unlock_buttons_busy = true
+	_update_unlock_buttons()
+
+	var quote: Dictionary = GameManager.vault_slot_quote
+	if quote.is_empty():
+		await GameManager.sync_vault_slot_quote_from_server()
+		quote = GameManager.vault_slot_quote
+	var slot_index := int(quote.get("next_slot_index", _count_unlocked_slots()))
+	await GameManager.handle_unlock_slot("vault", slot_index, currency)
+
+	_unlock_buttons_busy = false
+	if is_inside_tree():
+		refresh_display()
 
 func _on_slot_clicked(index: int) -> void:
 	if index >= slots.size():
@@ -286,14 +366,13 @@ func _on_slot_clicked(index: int) -> void:
 	if not slot.is_occupied or not slot.is_unlocked():
 		return
 
-	# 切换选中状态
+	# 保险箱和手牌一样，一次只允许选中一张卡牌。
 	if _selected_slots.has(index):
 		_selected_slots.erase(index)
 	else:
-		if _selected_slots.size() >= MAX_SELECT:
-			# 移除最旧的选择
-			var old = _selected_slots.pop_front()
+		for old in _selected_slots.duplicate():
 			_update_slot_selection_visual(old)
+		_selected_slots.clear()
 		_selected_slots.append(index)
 
 	# 更新视觉
@@ -326,36 +405,11 @@ func _update_slot_selection_visual(slot_idx: int) -> void:
 	if is_selected:
 		var highlight = ColorRect.new()
 		highlight.name = "VaultSelectHighlight"
-		highlight.set_anchors_preset(Control.PRESET_FULL_RECT)
 		highlight.position = Vector2(-2, -2)
 		highlight.size = slot.size + Vector2(4, 4)
 		highlight.color = SELECT_BORDER_COLOR
 		highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(highlight)
-
-		# 右上角显示序号
-		var order = _selected_slots.find(slot_idx)
-		if order >= 0:
-			var num_label = Label.new()
-			num_label.name = "VaultSelectNum"
-			num_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			num_label.position = Vector2(-4, 4)
-			num_label.size = Vector2(20, 20)
-			num_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			num_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			num_label.text = str(order + 1)
-			num_label.add_theme_font_size_override("font_size", 12)
-			num_label.add_theme_color_override("font_color", Color(0, 0, 0, 1))
-			# 背景圆
-			var bg = ColorRect.new()
-			bg.name = "VaultSelectNumBg"
-			bg.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			bg.position = Vector2(-6, 2)
-			bg.size = Vector2(24, 24)
-			bg.color = SELECT_BORDER_COLOR
-			bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			slot.add_child(bg)
-			slot.add_child(num_label)
 
 func _clear_selection() -> void:
 	_selected_slots.clear()
@@ -368,33 +422,25 @@ func _update_synthesize_button() -> void:
 		return
 
 	var count = _selected_slots.size()
-	if count < 5:
-		_synthesize_btn.visible = count > 0
-		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [count])
+	if count <= 0:
+		_synthesize_btn.visible = false
 		_synthesize_btn.disabled = true
 		return
 
-	# 选中5张，检查合成条件
 	var vault = GameManager.player_data.vault_cards
-	var selected_cards: Array[CardInfo] = []
-	for idx in _selected_slots:
-		if idx < vault.size() and vault[idx] != null:
-			selected_cards.append(vault[idx])
-
-	if selected_cards.size() < 5:
-		_synthesize_btn.visible = true
-		_synthesize_btn.text = Localization.t("ui.synthesis.vault.invalid", [count])
+	var selected_idx := int(_selected_slots[0])
+	if selected_idx < 0 or selected_idx >= vault.size() or vault[selected_idx] == null:
+		_synthesize_btn.visible = false
 		_synthesize_btn.disabled = true
 		return
 
-	# 验证合成条件：同名同色同系列编号1-5
-	var valid = _validate_synthesis_cards(selected_cards)
+	var synthesis_indices := _find_synthesizable_indices_for_card(vault[selected_idx], selected_idx)
 	_synthesize_btn.visible = true
-	if valid:
+	if synthesis_indices.size() == 5:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.valid")
 		_synthesize_btn.disabled = false
 	else:
-		_synthesize_btn.text = Localization.t("ui.synthesis.vault.invalid", [5])
+		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [1])
 		_synthesize_btn.disabled = true
 
 func _validate_synthesis_cards(cards: Array[CardInfo]) -> bool:
@@ -415,24 +461,53 @@ func _validate_synthesis_cards(cards: Array[CardInfo]) -> bool:
 	return numbers == [1, 2, 3, 4, 5]
 
 func _on_synthesize_pressed() -> void:
-	if _selected_slots.size() != 5:
+	if _selected_slots.size() != 1:
 		return
 
 	var vault = GameManager.player_data.vault_cards
-	var selected_cards: Array[CardInfo] = []
-	for idx in _selected_slots:
-		if idx < vault.size() and vault[idx] != null:
-			selected_cards.append(vault[idx])
-
-	if not _validate_synthesis_cards(selected_cards):
+	var selected_idx := int(_selected_slots[0])
+	if selected_idx < 0 or selected_idx >= vault.size() or vault[selected_idx] == null:
+		return
+	var selected_slots := _find_synthesizable_indices_for_card(vault[selected_idx], selected_idx)
+	if selected_slots.size() != 5:
 		return
 
 	_synthesize_btn.disabled = true
 	_synthesize_btn.text = Localization.t("ui.synthesis.vault.done")
 
-	var selected_slots := _selected_slots.duplicate()
 	_apply_vault_synthesis_pending_removal(selected_slots)
 	_confirm_vault_synthesis_background(selected_slots)
+
+func _find_synthesizable_indices_for_card(selected_card: CardInfo, selected_idx: int) -> Array[int]:
+	if selected_card == null:
+		return []
+	var vault = GameManager.player_data.vault_cards
+	var by_number: Dictionary = {}
+	var selected_number := int(selected_card.card_number)
+	if selected_number >= 1 and selected_number <= 5:
+		by_number[selected_number] = selected_idx
+	for i in range(vault.size()):
+		var card = vault[i]
+		if card == null or i == selected_idx:
+			continue
+		if card.series_name != selected_card.series_name:
+			continue
+		if card.deck_name != selected_card.deck_name:
+			continue
+		if card.color != selected_card.color:
+			continue
+		var number := int(card.card_number)
+		if number < 1 or number > 5:
+			continue
+		if not by_number.has(number):
+			by_number[number] = i
+
+	var result: Array[int] = []
+	for number in [1, 2, 3, 4, 5]:
+		if not by_number.has(number):
+			return []
+		result.append(int(by_number[number]))
+	return result
 
 func _confirm_vault_synthesis_background(selected_slots: Array) -> void:
 	var resp = await ApiClient.synthesize(selected_slots, "vault")

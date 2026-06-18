@@ -541,12 +541,16 @@ func discard_card(slot_type: String, slot_index: int) -> Dictionary:
 		discard_failed.emit(resp["error"])
 	return resp
 
+func get_vault_slot_quote() -> Dictionary:
+	return await _request(_api_url("/game/vault-slot-quote"), HTTPClient.METHOD_GET)
+
 ## 解锁槽位
-func unlock_slot(slot_type: String, slot_index: int) -> Dictionary:
+func unlock_slot(slot_type: String, slot_index: int, currency: String = "gem") -> Dictionary:
 	var body := JSON.stringify({
 		"operation_id": _new_operation_id("unlock_slot"),
 		"type": slot_type,
 		"index": slot_index,
+		"currency": currency,
 	})
 	var resp := await _request(_api_url("/game/unlock-slot"), HTTPClient.METHOD_POST, body)
 	if resp["success"]:

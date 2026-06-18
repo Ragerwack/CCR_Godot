@@ -36,6 +36,7 @@ var _cache_loaded: Dictionary = {
 	"decks": false,
 }
 var vault_raw_slot_data: Array = []
+var vault_slot_quote: Dictionary = {}
 var _layout_sync_in_flight: bool = false
 var _optional_login_sync_in_flight: bool = false
 var _pool_hand_layout_dirty: bool = false
@@ -381,6 +382,17 @@ func sync_vault_from_server() -> void:
 	FileLogger.perf("new_data_request_done", {"page": "vault", "success": vault_resp.get("success", false), "total_ms": Time.get_ticks_msec() - started})
 	data_synced.emit()
 
+func sync_vault_slot_quote_from_server() -> Dictionary:
+	if not ApiClient.is_logged_in():
+		return {"success": false, "error": "未登录"}
+	var resp := await ApiClient.get_vault_slot_quote()
+	if resp.get("success", false):
+		vault_slot_quote = resp["data"]
+		player_data.changed.emit()
+	else:
+		FileLogger.warn("保险箱槽位价格同步失败: " + str(resp.get("error", "")))
+	return resp
+
 func sync_reward_state_from_server() -> void:
 	var started := Time.get_ticks_msec()
 	FileLogger.perf("reward_state_sync_start")
@@ -592,18 +604,20 @@ func sync_level_info_async() -> void:
 # ══════════════════════════════════════════════════
 
 ## 处理槽位解锁请求（由 CardSlotUI 的 slot_unlock_requested 信号触发）
-func handle_unlock_slot(type: String, index: int) -> void:
+func handle_unlock_slot(type: String, index: int, currency: String = "gem") -> void:
 	if type != "vault":
 		print("[GameManager] 卡池和手牌槽位由等级或系统奖励解锁")
 		return
 
-	var resp := await ApiClient.unlock_slot(type, index)
+	var resp := await ApiClient.unlock_slot(type, index, currency)
 	if not resp.get("success", false):
 		print("[GameManager] 保险箱槽位购买失败: " + str(resp.get("error", "未知错误")))
 		await sync_vault_from_server()
+		await sync_vault_slot_quote_from_server()
 		return
 
 	var profile_resp := await ApiClient.get_profile()
 	if profile_resp.get("success", false):
 		apply_profile(profile_resp["data"])
 	await sync_vault_from_server()
+	await sync_vault_slot_quote_from_server()

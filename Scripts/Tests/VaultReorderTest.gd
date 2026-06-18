@@ -33,6 +33,35 @@ func _ready() -> void:
 	if GameManager.player_data.vault_cards[2] != card_a or GameManager.player_data.vault_cards[3] != null:
 		return _fail("locked_target_changed_data")
 
+	GameManager.player_data.vault_slots = 5
+	GameManager.vault_raw_slot_data = [
+		{"slot_index": 0, "unlocked": true},
+		{"slot_index": 1, "unlocked": true},
+		{"slot_index": 2, "unlocked": true},
+		{"slot_index": 3, "unlocked": true},
+		{"slot_index": 4, "unlocked": true},
+	]
+	GameManager.player_data.vault_cards = [
+		_make_card(201, "合成卡1", 1),
+		_make_card(202, "合成卡2", 2),
+		_make_card(203, "合成卡3", 3),
+		_make_card(204, "合成卡4", 4),
+		_make_card(205, "合成卡5", 5),
+	]
+	vault_ui.refresh_display()
+	await get_tree().process_frame
+	vault_ui._on_slot_clicked(0)
+	if vault_ui._selected_slots.size() != 1 or int(vault_ui._selected_slots[0]) != 0:
+		return _fail("single_select_first_wrong")
+	vault_ui._on_slot_clicked(1)
+	if vault_ui._selected_slots.size() != 1 or int(vault_ui._selected_slots[0]) != 1:
+		return _fail("single_select_replace_wrong")
+	var indices := vault_ui._find_synthesizable_indices_for_card(GameManager.player_data.vault_cards[1], 1)
+	if indices.size() != 5:
+		return _fail("vault_auto_synthesis_indices_missing")
+	if vault_ui._synthesize_btn == null or vault_ui._synthesize_btn.disabled:
+		return _fail("vault_synthesis_button_disabled")
+
 	print("VAULT_REORDER ok")
 	get_tree().quit(0)
 

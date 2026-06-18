@@ -14,6 +14,7 @@ const WARM_ROLL_CLICK_WAIT_MS: int = 450
 var _warm_rolls: Dictionary = {}
 var _warming_types: Dictionary = {}
 var _warm_target_type: String = ""
+var _confirm_in_flight: bool = false
 var skip_confirm_after_preview_for_test: bool = false
 var gold_draw_debug_click_started_msec: int = 0
 var animate_next_pool_update: bool = false
@@ -192,6 +193,10 @@ func refresh_pool(refresh_type: String = "free") -> void:
 	if preview_total_ms > 500:
 		FileLogger.warn("抽卡预览耗时超过 0.5 秒: " + str(preview_total_ms) + "ms type=" + refresh_type, "[PERF]")
 
+	# 预览已经完成，按钮和页面不再等待服务端最终确认；confirm 继续在后台收口资产状态。
+	_confirm_in_flight = true
+	loading_completed.emit()
+
 	if skip_confirm_after_preview_for_test:
 		step_started = Time.get_ticks_msec()
 		_print_gold_draw_step(
@@ -208,6 +213,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			"reason": "perf_test",
 			"total_ms": Time.get_ticks_msec() - draw_started,
 		})
+		_confirm_in_flight = false
 		return
 
 	var confirm_started := Time.get_ticks_msec()
@@ -301,6 +307,8 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			"layout_sync_submitted": should_sync_layout,
 			"total_ms": Time.get_ticks_msec() - draw_started,
 		})
+	_confirm_in_flight = false
+	loading_completed.emit()
 
 func warm_refresh_roll(refresh_type: String = "free") -> void:
 	if _get_warm_roll(refresh_type).size() > 0:
@@ -584,6 +592,9 @@ func _sync_profile() -> void:
 
 ## 消耗检查 + API 刷新
 func do_refresh(type: String) -> bool:
+	if _confirm_in_flight:
+		refresh_failed.emit("上一次抽卡仍在确认中")
+		return false
 	match type:
 		"free":
 			var ok = GameManager.try_free_refresh()
@@ -595,6 +606,9 @@ func do_refresh(type: String) -> bool:
 		"gold":
 			return GameManager.try_gold_refresh()
 	return false
+
+func has_pending_confirm() -> bool:
+	return _confirm_in_flight
 
 # ══════════════════════════════════════════════════
 #  卡池本地操作

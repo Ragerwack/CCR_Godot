@@ -379,6 +379,8 @@ func _auto_warm_next_refresh_roll() -> void:
 		return
 	if _is_refreshing:
 		return
+	if CardPoolSystem.has_pending_confirm():
+		return
 	var refresh_type := _preferred_refresh_type_for_warm()
 	if refresh_type == "":
 		return

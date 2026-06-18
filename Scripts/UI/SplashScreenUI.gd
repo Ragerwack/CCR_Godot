@@ -7,6 +7,8 @@ class_name SplashScreenUI
 
 signal login_completed()
 
+const LoadingTutorialUIScript = preload("res://Scripts/UI/LoadingTutorialUI.gd")
+
 # ══════════════════════════════════════════════════
 #  状态
 # ══════════════════════════════════════════════════
@@ -24,6 +26,7 @@ var _submit_button: Button
 var _switch_button: Button
 var _loading_label: Label
 var _progress_ui = null
+var _loading_tutorial_ui = null
 var _step_started_at: Dictionary = {}
 var _last_submit: Dictionary = {}
 var _login_flow_running: bool = false
@@ -284,6 +287,8 @@ func _run_login_preparation(payload: Dictionary) -> void:
 	if data.has("draw_key") and data["draw_key"] is Dictionary:
 		GameManager.apply_draw_key(data["draw_key"])
 	_finish_step("LOAD_PLAYER_BOOTSTRAP", PREP_STATUS_SUCCESS)
+	_show_loading_tutorial_ui(GameManager.player_data.level)
+	_set_loading_tutorial_progress(28.0, "正在准备收藏空间")
 
 	_start_step("LOAD_TODAY_CATALOG", Localization.t("ui.login.prepare.current.load_today_catalog"))
 
@@ -302,16 +307,19 @@ func _run_login_preparation(payload: Dictionary) -> void:
 		failed_stage = "LOAD_TODAY_CATALOG"
 		_fail_preparation(failed_messages[0], failed_stage)
 		return
+	_set_loading_tutorial_progress(72.0, "正在整理卡池与手牌")
 
 	_start_step("CONNECT_REALTIME_OR_HEARTBEAT", Localization.t("ui.login.prepare.current.connect_realtime_or_heartbeat"))
 	SessionManager.start_session()
 	_finish_step("CONNECT_REALTIME_OR_HEARTBEAT", PREP_STATUS_SUCCESS)
+	_set_loading_tutorial_progress(88.0, "正在建立在线状态")
 
 	_start_step("ENTER_MAIN_MENU", Localization.t("ui.login.prepare.current.enter_main_menu"))
 	var ui_started := Time.get_ticks_msec()
 	await get_tree().process_frame
 	_finish_step("ENTER_MAIN_MENU", PREP_STATUS_SUCCESS)
 	FileLogger.perf("login_state_enter_main_menu_done", {"ui_render_ms": Time.get_ticks_msec() - ui_started})
+	await _finish_loading_tutorial_ui()
 
 	if _progress_ui != null:
 		_progress_ui.show_success()
@@ -393,6 +401,23 @@ func _show_progress_ui() -> void:
 		steps.append({"id": step["id"], "label": Localization.t(step["label"])})
 	_progress_ui.set_steps(steps)
 
+func _show_loading_tutorial_ui(level: int) -> void:
+	if _progress_ui != null:
+		_progress_ui.visible = false
+	if _loading_tutorial_ui == null:
+		_loading_tutorial_ui = LoadingTutorialUIScript.new()
+		add_child(_loading_tutorial_ui)
+	_loading_tutorial_ui.visible = true
+	_loading_tutorial_ui.setup_for_level(level)
+
+func _set_loading_tutorial_progress(value: float, status: String = "") -> void:
+	if _loading_tutorial_ui != null:
+		_loading_tutorial_ui.set_progress(value, status)
+
+func _finish_loading_tutorial_ui() -> void:
+	if _loading_tutorial_ui != null:
+		await _loading_tutorial_ui.finish()
+
 func _start_step(step_id: String, current_text: String = "") -> void:
 	_step_started_at[step_id] = Time.get_ticks_msec()
 	if _progress_ui != null:
@@ -421,10 +446,13 @@ func _fail_preparation(message: String, failed_stage: String = FAILED_WITH_REASO
 		"error": message,
 	})
 	if _progress_ui != null:
+		_progress_ui.visible = true
 		var hint := message
 		if hint == "":
 			hint = Localization.t("ui.login.prepare.retry_hint")
 		_progress_ui.show_failure(hint)
+	if _loading_tutorial_ui != null:
+		_loading_tutorial_ui.visible = false
 
 func _on_progress_retry() -> void:
 	if _login_flow_running or _last_submit.is_empty():
@@ -436,6 +464,8 @@ func _on_progress_back() -> void:
 	_set_loading(false)
 	if _progress_ui != null:
 		_progress_ui.visible = false
+	if _loading_tutorial_ui != null:
+		_loading_tutorial_ui.visible = false
 	_panel.visible = true
 	_error_label.visible = false
 
