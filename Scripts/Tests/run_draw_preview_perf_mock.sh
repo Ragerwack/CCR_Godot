@@ -58,7 +58,12 @@ function makeRoll() {
       0.01,
     ]),
     draw_key: {
-      date_key: "2026-06-10",
+      date_key: new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date()),
       version: 1,
       decks: [makeDeck(1, "性能测试一"), makeDeck(2, "性能测试二")],
       number_probabilities: {

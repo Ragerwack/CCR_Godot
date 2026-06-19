@@ -54,6 +54,7 @@ const CARD_TEXT_COLOR: Color = Color(0.294118, 0.333333, 0.388235, 1.0)
 const INFO_PANEL_BORDER_COLOR: Color = Color(0.850980, 0.866667, 0.898039, 1.0)
 const INFO_PANEL_BG_COLOR: Color = Color(0.972549, 0.976471, 0.984314, 1.0)
 const CARD_CORNER_RADIUS_RATIO: float = 1.0 / 13.0
+const NUMBER_BADGE_CANVAS_RECT: Rect2 = Rect2(830, -30, 190, 190)
 const CARD_ROUNDED_MASK_SHADER: String = """
 shader_type canvas_item;
 
@@ -314,7 +315,12 @@ func _apply_card_layout() -> void:
 
 	_apply_rect(_art_image, _canvas_rect(90, 190, 820, 740))
 	_apply_rect(_deck_name_label, _canvas_rect(90, 40, 720, 120))
-	_apply_rect(_number_badge, _canvas_rect(900, -90, 190, 190))
+	_apply_rect(_number_badge, _canvas_rect(
+		NUMBER_BADGE_CANVAS_RECT.position.x,
+		NUMBER_BADGE_CANVAS_RECT.position.y,
+		NUMBER_BADGE_CANVAS_RECT.size.x,
+		NUMBER_BADGE_CANVAS_RECT.size.y
+	))
 	_apply_rect(_card_name_label, _canvas_rect(150, 900, 700, 90))
 	var desc_rect := _canvas_rect(140, 1010, 720, 260)
 	_apply_rect(_description_panel, desc_rect)
@@ -606,7 +612,13 @@ func _create_drag_preview(card_offset: Vector2) -> Control:
 	deck_lbl.add_theme_color_override("font_color", CARD_TEXT_COLOR)
 	card_layer.add_child(deck_lbl)
 
-	var badge_rect := _canvas_rect_for(CARD_SIZE, 900, -90, 190, 190)
+	var badge_rect := _canvas_rect_for(
+		CARD_SIZE,
+		NUMBER_BADGE_CANVAS_RECT.position.x,
+		NUMBER_BADGE_CANVAS_RECT.position.y,
+		NUMBER_BADGE_CANVAS_RECT.size.x,
+		NUMBER_BADGE_CANVAS_RECT.size.y
+	)
 	var badge = Panel.new()
 	badge.position = badge_rect.position
 	badge.size = badge_rect.size

@@ -109,7 +109,7 @@ func _mock_roll() -> Dictionary:
 		"signature": "0123456789abcdef0123456789abcdef",
 		"random_matrix": matrix,
 		"draw_key": {
-			"date_key": "2026-06-10",
+			"date_key": CardPoolSystem._beijing_date_key(),
 			"version": 1,
 			"decks": [
 				_mock_deck(1, "性能测试一"),

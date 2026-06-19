@@ -66,7 +66,12 @@ function makeDeck(deckId, deckName) {
 
 function makeDrawKey() {
   return {
-    date_key: "2026-06-11",
+    date_key: new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date()),
     version: 1,
     decks: [makeDeck(1, "类型测试一"), makeDeck(2, "类型测试二")],
     number_probabilities: {

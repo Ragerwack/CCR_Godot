@@ -456,6 +456,10 @@ func _get_warm_roll(refresh_type: String) -> Dictionary:
 		return {}
 	var roll = entry.get("roll", {})
 	if roll is Dictionary:
+		var roll_draw_key = roll.get("draw_key", {})
+		if not roll_draw_key is Dictionary or str(roll_draw_key.get("date_key", "")) != _beijing_date_key():
+			_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
+			return {}
 		var matrix: Array = roll.get("random_matrix", [])
 		if matrix.size() < 16:
 			_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
@@ -463,6 +467,11 @@ func _get_warm_roll(refresh_type: String) -> Dictionary:
 		return roll
 	_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
 	return {}
+
+func _beijing_date_key() -> String:
+	var beijing_unix := int(Time.get_unix_time_from_system()) + 8 * 60 * 60
+	var parts := Time.get_datetime_dict_from_unix_time(beijing_unix)
+	return "%04d-%02d-%02d" % [int(parts.year), int(parts.month), int(parts.day)]
 
 func _has_any_warming_type() -> bool:
 	for key in _warming_types.keys():
