@@ -78,6 +78,7 @@ func setup_ui() -> void:
 	_bg_rect = ColorRect.new()
 	_bg_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_bg_rect.color = empty_color
+	_bg_rect.material = CardDisplay._new_rounded_mask_material(SLOT_SIZE)
 	_bg_rect.name = "Background"
 	_bg_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_bg_rect)
@@ -87,6 +88,7 @@ func setup_ui() -> void:
 	border.position = Vector2(1, 1)
 	border.size = SLOT_SIZE - Vector2(2, 2)
 	border.color = border_color
+	border.material = CardDisplay._new_rounded_mask_material(SLOT_SIZE)
 	border.name = "Border"
 	border.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(border)
@@ -104,14 +106,14 @@ func setup_ui() -> void:
 	_lock_overlay = ColorRect.new()
 	_lock_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_lock_overlay.color = Color(0, 0, 0, 0.55)
+	_lock_overlay.material = CardDisplay._new_rounded_mask_material(SLOT_SIZE)
 	_lock_overlay.visible = false
 	_lock_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_lock_overlay)
 
 	_lock_label = Label.new()
-	_lock_label.set_anchors_preset(Control.PRESET_CENTER)
-	_lock_label.position = Vector2(0, 0)
-	_lock_label.size = Vector2(60, 40)
+	_lock_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_lock_label.position = Vector2.ZERO
 	_lock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_lock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_lock_label.text = "🔒"
@@ -124,6 +126,7 @@ func setup_ui() -> void:
 	_drag_out_overlay = ColorRect.new()
 	_drag_out_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_drag_out_overlay.color = DRAG_OUT_COLOR
+	_drag_out_overlay.material = CardDisplay._new_rounded_mask_material(SLOT_SIZE)
 	_drag_out_overlay.visible = false
 	_drag_out_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_drag_out_overlay)

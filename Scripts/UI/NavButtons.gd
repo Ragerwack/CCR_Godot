@@ -34,6 +34,7 @@ func setup_ui() -> void:
 		btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		btn.position = Vector2(pad_left, y)
 		btn.size = Vector2(btn_width, btn_height)
+		btn.add_theme_font_size_override("font_size", 11 if Localization.locale == "en" else 14)
 		var label := Localization.t(item["label_key"])
 		btn.text = label if item.get("enabled", true) else Localization.t("ui.nav.coming_soon", [label])
 		btn.disabled = not item.get("enabled", true)
@@ -41,6 +42,13 @@ func setup_ui() -> void:
 		_apply_style(btn, i == selected_index)
 		buttons.append(btn)
 		add_child(btn)
+
+func refresh_labels() -> void:
+	for i in range(mini(buttons.size(), NAV_ITEMS.size())):
+		var item := NAV_ITEMS[i]
+		var label := Localization.t(item["label_key"])
+		buttons[i].text = label if item.get("enabled", true) else Localization.t("ui.nav.coming_soon", [label])
+		buttons[i].add_theme_font_size_override("font_size", 11 if Localization.locale == "en" else 14)
 
 func _on_button_pressed(index: int) -> void:
 	if not NAV_ITEMS[index].get("enabled", true):

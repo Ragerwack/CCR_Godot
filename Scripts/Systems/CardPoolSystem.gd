@@ -8,12 +8,11 @@ signal loading_completed()
 
 var current_pool: Array = []
 var visible_series: Array[String] = []
-const WARM_ROLL_MAX_AGE_MS: int = 240000
 const WARM_ROLL_CLICK_WAIT_MS: int = 450
+const WARM_ROLL_CACHE_KEY: String = "next"
 
 var _warm_rolls: Dictionary = {}
 var _warming_types: Dictionary = {}
-var _warm_target_type: String = ""
 var _confirm_in_flight: bool = false
 var skip_confirm_after_preview_for_test: bool = false
 var gold_draw_debug_click_started_msec: int = 0
@@ -50,9 +49,6 @@ func refresh_pool(refresh_type: String = "free") -> void:
 		gold_draw_debug_click_started_msec = 0
 	loading_started.emit()
 	FileLogger.perf("draw_refresh_start", {"type": refresh_type})
-	_warm_target_type = refresh_type
-	_clear_warm_rolls_except(refresh_type)
-
 	var old_pool_cards: Array = current_pool.duplicate(true)
 	var old_hand_cards: Array = GameManager.player_data.hand_cards.duplicate(true)
 	var should_sync_layout := GameManager.is_pool_hand_layout_dirty()
@@ -148,7 +144,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			debug_total_started
 		)
 		_rollback_refresh_attempt(refresh_type)
-		refresh_failed.emit("抽卡随机数组翻译失败")
+		refresh_failed.emit(Localization.t("error.draw.translating"))
 		loading_completed.emit()
 		FileLogger.perf("draw_refresh_failed", {
 			"type": refresh_type,
@@ -217,12 +213,15 @@ func refresh_pool(refresh_type: String = "free") -> void:
 		return
 
 	var confirm_started := Time.get_ticks_msec()
+	var confirm_operation_id := ApiClient.new_operation_id("refresh_pool_confirm")
 	var confirm_resp := await ApiClient.confirm_refresh_pool_roll(
+		refresh_type,
 		roll_data,
 		preview_slots,
 		old_pool_cards,
 		old_hand_cards,
-		should_sync_layout
+		should_sync_layout,
+		confirm_operation_id
 	)
 	if confirm_resp.get("success", false):
 		_print_gold_draw_step(
@@ -280,6 +279,20 @@ func refresh_pool(refresh_type: String = "free") -> void:
 				"status": confirm_resp.get("status_code", 0),
 			}
 		)
+		if ApiClient.is_network_uncertain_response(confirm_resp):
+			await _handle_unknown_confirm_result(
+				refresh_type,
+				confirm_operation_id,
+				confirm_resp,
+				confirm_started,
+				draw_started,
+				debug_total_started,
+				should_sync_layout
+			)
+			_confirm_in_flight = false
+			loading_completed.emit()
+			return
+
 		step_started = Time.get_ticks_msec()
 		_rollback_refresh_attempt(refresh_type)
 		current_pool = old_pool_cards
@@ -310,16 +323,71 @@ func refresh_pool(refresh_type: String = "free") -> void:
 	_confirm_in_flight = false
 	loading_completed.emit()
 
+func _handle_unknown_confirm_result(
+	refresh_type: String,
+	operation_id: String,
+	confirm_resp: Dictionary,
+	confirm_started: int,
+	draw_started: int,
+	debug_total_started: int,
+	should_sync_layout: bool
+) -> void:
+	FileLogger.warn("抽卡确认网络状态未知，开始回源同步: operation_id=" + operation_id + " error=" + str(confirm_resp.get("error", "")), "[NET]")
+	refresh_failed.emit(Localization.t("error.draw.reconciling"))
+
+	var step_started := Time.get_ticks_msec()
+	var sync_resp = await GameManager.sync_initial_card_pool_from_server()
+	var sync_success := sync_resp is Dictionary and bool(sync_resp.get("success", false))
+	if sync_success:
+		current_pool = GameManager.player_data.pool_cards.duplicate()
+		pool_updated.emit(current_pool)
+		pool_filled.emit(current_pool)
+		GameManager.mark_pool_hand_layout_clean("draw_confirm_reconciled")
+		_print_gold_draw_step(
+			refresh_type,
+			7,
+			"done",
+			"确认状态未知后回源同步成功",
+			step_started,
+			debug_total_started,
+			{"operation_id": operation_id}
+		)
+		FileLogger.perf("draw_refresh_confirm_done", {
+			"type": refresh_type,
+			"success": true,
+			"reconciled": true,
+			"operation_id": operation_id,
+			"confirm_ms": Time.get_ticks_msec() - confirm_started,
+			"layout_sync_submitted": should_sync_layout,
+			"total_ms": Time.get_ticks_msec() - draw_started,
+		})
+		return
+
+	GameManager.mark_pool_hand_layout_dirty("draw_confirm_unknown")
+	_print_gold_draw_step(
+		refresh_type,
+		7,
+		"failed",
+		"确认状态未知后回源同步失败",
+		step_started,
+		debug_total_started,
+		{"operation_id": operation_id}
+	)
+	FileLogger.warn("抽卡确认仍未能验证，保留本地预览等待后续同步修正: operation_id=" + operation_id, "[NET]")
+	FileLogger.perf("draw_refresh_confirm_done", {
+		"type": refresh_type,
+		"success": false,
+		"unknown": true,
+		"operation_id": operation_id,
+		"confirm_ms": Time.get_ticks_msec() - confirm_started,
+		"layout_sync_submitted": should_sync_layout,
+		"total_ms": Time.get_ticks_msec() - draw_started,
+	})
+
 func warm_refresh_roll(refresh_type: String = "free") -> void:
 	if _get_warm_roll(refresh_type).size() > 0:
 		return
-	if bool(_warming_types.get(refresh_type, false)):
-		return
-
-	_warm_target_type = refresh_type
-	_clear_warm_rolls_except(refresh_type)
-	if _has_warming_type_except(refresh_type):
-		FileLogger.perf("draw_roll_warm_skip", {"type": refresh_type, "reason": "other_warming"})
+	if _has_any_warming_type():
 		return
 
 	_warming_types[refresh_type] = true
@@ -327,18 +395,7 @@ func warm_refresh_roll(refresh_type: String = "free") -> void:
 	FileLogger.perf("draw_roll_warm_start", {"type": refresh_type})
 	var resp := await _prepare_refresh_roll(refresh_type)
 	_warming_types.erase(refresh_type)
-	if _warm_target_type != refresh_type:
-		FileLogger.perf("draw_roll_warm_done", {
-			"type": refresh_type,
-			"success": false,
-			"reason": "stale_target",
-			"total_ms": Time.get_ticks_msec() - warm_started,
-		})
-		if _warm_target_type != "":
-			warm_refresh_roll.call_deferred(_warm_target_type)
-		return
 	if resp.get("success", false):
-		_clear_warm_rolls_except(refresh_type)
 		_store_warm_roll(refresh_type, resp["data"])
 		FileLogger.perf("draw_roll_warm_done", {
 			"type": refresh_type,
@@ -380,52 +437,36 @@ func _prepare_refresh_roll(refresh_type: String) -> Dictionary:
 func _store_warm_roll(refresh_type: String, roll_data: Dictionary) -> void:
 	if roll_data.is_empty() or roll_data.get("key_stale", false):
 		return
-	_warm_rolls[refresh_type] = {
-		"created_msec": Time.get_ticks_msec(),
+	_warm_rolls[WARM_ROLL_CACHE_KEY] = {
 		"roll": roll_data,
 	}
 
 func _take_warm_roll(refresh_type: String) -> Dictionary:
 	var roll := _get_warm_roll(refresh_type)
 	if not roll.is_empty():
-		_warm_rolls.erase(refresh_type)
+		_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
 	return roll
 
 func _get_warm_roll(refresh_type: String) -> Dictionary:
-	if not _warm_rolls.has(refresh_type):
+	if not _warm_rolls.has(WARM_ROLL_CACHE_KEY):
 		return {}
-	var entry = _warm_rolls[refresh_type]
+	var entry = _warm_rolls[WARM_ROLL_CACHE_KEY]
 	if not entry is Dictionary:
-		_warm_rolls.erase(refresh_type)
-		return {}
-	var created_msec := int(entry.get("created_msec", 0))
-	if created_msec <= 0 or Time.get_ticks_msec() - created_msec > WARM_ROLL_MAX_AGE_MS:
-		_warm_rolls.erase(refresh_type)
+		_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
 		return {}
 	var roll = entry.get("roll", {})
 	if roll is Dictionary:
 		var matrix: Array = roll.get("random_matrix", [])
 		if matrix.size() < 16:
-			_warm_rolls.erase(refresh_type)
+			_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
 			return {}
 		return roll
-	_warm_rolls.erase(refresh_type)
+	_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
 	return {}
-
-func _clear_warm_rolls_except(refresh_type: String) -> void:
-	for key in _warm_rolls.keys():
-		if str(key) != refresh_type:
-			_warm_rolls.erase(key)
 
 func _has_any_warming_type() -> bool:
 	for key in _warming_types.keys():
 		if bool(_warming_types[key]):
-			return true
-	return false
-
-func _has_warming_type_except(refresh_type: String) -> bool:
-	for key in _warming_types.keys():
-		if str(key) != refresh_type and bool(_warming_types[key]):
 			return true
 	return false
 
@@ -593,13 +634,13 @@ func _sync_profile() -> void:
 ## 消耗检查 + API 刷新
 func do_refresh(type: String) -> bool:
 	if _confirm_in_flight:
-		refresh_failed.emit("上一次抽卡仍在确认中")
+		refresh_failed.emit(Localization.t("error.draw.pending"))
 		return false
 	match type:
 		"free":
 			var ok = GameManager.try_free_refresh()
 			if not ok:
-				refresh_failed.emit("免费刷新次数已用完")
+				refresh_failed.emit(Localization.t("error.draw.no_stamina"))
 			return ok
 		"gem":
 			return GameManager.try_gem_refresh()
@@ -638,7 +679,7 @@ func add_card(card: CardInfo) -> bool:
 func quick_move_to_hand(card: CardInfo, hand_slot_index: int = -1) -> void:
 	var pool_idx = current_pool.find(card)
 	if pool_idx < 0:
-		refresh_failed.emit("卡牌不在当前卡池中")
+		refresh_failed.emit(Localization.t("error.card.not_in_pool"))
 		return
 
 	# 自动找第一个空手牌槽
@@ -649,7 +690,7 @@ func quick_move_to_hand(card: CardInfo, hand_slot_index: int = -1) -> void:
 				hand_slot_index = i
 				break
 		if hand_slot_index < 0:
-			refresh_failed.emit("手牌槽已满")
+			refresh_failed.emit(Localization.t("error.card.hand_full"))
 			return
 
 	# 纯本地操作：从卡池移除 → 插入手牌槽位
@@ -674,11 +715,11 @@ func quick_move_to_hand(card: CardInfo, hand_slot_index: int = -1) -> void:
 func quick_move_from_hand_to_pool(card: CardInfo, hand_slot_index: int) -> void:
 	var hand_cards = GameManager.player_data.hand_cards
 	if hand_slot_index < 0 or hand_slot_index >= hand_cards.size():
-		refresh_failed.emit("手牌槽位无效")
+		refresh_failed.emit(Localization.t("error.card.invalid_hand_slot"))
 		return
 
 	if hand_cards[hand_slot_index] == null or hand_cards[hand_slot_index] != card:
-		refresh_failed.emit("卡牌不在此手牌槽位")
+		refresh_failed.emit(Localization.t("error.card.not_in_hand_slot"))
 		return
 
 	# 找第一个空卡池槽
@@ -688,7 +729,7 @@ func quick_move_from_hand_to_pool(card: CardInfo, hand_slot_index: int) -> void:
 			target_idx = i
 			break
 	if target_idx < 0:
-		refresh_failed.emit("卡池已满")
+		refresh_failed.emit(Localization.t("error.card.pool_full"))
 		return
 
 	# 纯本地操作：从手牌移除 → 插入卡池槽位

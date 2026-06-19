@@ -26,8 +26,9 @@ const SELECT_BORDER_COLOR: Color = Color(1.0, 0.84, 0.0, 0.7)  # 金色
 const VAULT_COLUMNS: int = 8
 const MAX_VISIBLE_ROWS: int = 4
 const EXTRA_LOCKED_ROWS: int = 1
-const UNLOCK_PANEL_WIDTH: float = 210.0
-const UNLOCK_PANEL_MARGIN: float = 28.0
+const VAULT_GRID_LEFT_MARGIN: float = 40.0
+const UNLOCK_PANEL_WIDTH: float = 130.0
+const UNLOCK_PANEL_RIGHT_MARGIN: float = 10.0
 
 func _ready() -> void:
 	columns = VAULT_COLUMNS
@@ -77,11 +78,14 @@ func setup_ui() -> void:
 
 	# ── 合成按钮（初始隐藏） ──
 	_synthesize_btn = Button.new()
-	_synthesize_btn.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_synthesize_btn.position = Vector2(0, -60)
-	_synthesize_btn.size = Vector2(140, 40)
+	_synthesize_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_synthesize_btn.offset_left = -120
+	_synthesize_btn.offset_right = -10
+	_synthesize_btn.offset_top = -46
+	_synthesize_btn.offset_bottom = -10
+	_synthesize_btn.custom_minimum_size = Vector2(110, 36)
 	_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
-	_synthesize_btn.visible = false
+	_synthesize_btn.visible = true
 	_synthesize_btn.disabled = true
 	_synthesize_btn.pressed.connect(_on_synthesize_pressed)
 	add_child(_synthesize_btn)
@@ -92,13 +96,14 @@ func setup_ui() -> void:
 
 func _create_unlock_panel() -> void:
 	var panel_width := UNLOCK_PANEL_WIDTH
-	var panel_x := maxf(20.0, get_viewport_rect().size.x - panel_width - UNLOCK_PANEL_MARGIN)
-	var panel_y := 120.0
 
 	var panel = VBoxContainer.new()
 	panel.name = "VaultUnlockPanel"
-	panel.position = Vector2(panel_x, panel_y)
-	panel.size = Vector2(panel_width, 170)
+	panel.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	panel.offset_left = -panel_width - UNLOCK_PANEL_RIGHT_MARGIN
+	panel.offset_right = -UNLOCK_PANEL_RIGHT_MARGIN
+	panel.offset_top = -72
+	panel.offset_bottom = 72
 	panel.add_theme_constant_override("separation", 8)
 	add_child(panel)
 
@@ -127,17 +132,18 @@ func _create_unlock_panel() -> void:
 	panel.add_child(_gem_unlock_cost_label)
 
 func _create_slot_grid() -> void:
-	# 右侧预留购买按钮面板，避免卡槽和操作区重叠。
-	var slot_size = Vector2(88, 123)
-	var slot_spacing = 10
+	var slot_size = CardSlotUI.SLOT_SIZE
+	var slot_spacing = 8
 	var render_rows := maxi(1, int(ceil(float(slot_count) / float(columns))))
 	var visible_rows := mini(MAX_VISIBLE_ROWS, render_rows)
 	var total_width = columns * slot_size.x + (columns - 1) * slot_spacing
 	var content_height = render_rows * slot_size.y + (render_rows - 1) * slot_spacing
 	var viewport_height = visible_rows * slot_size.y + (visible_rows - 1) * slot_spacing
 	var available_width = size.x if size.x > 0.0 else get_viewport_rect().size.x
-	var grid_area_width = maxf(total_width, available_width - UNLOCK_PANEL_WIDTH - UNLOCK_PANEL_MARGIN * 2.0)
-	var start_x = (grid_area_width - total_width) / 2
+	var right_reserved = UNLOCK_PANEL_WIDTH + UNLOCK_PANEL_RIGHT_MARGIN + 10.0
+	var start_x = VAULT_GRID_LEFT_MARGIN
+	if start_x + total_width + right_reserved > available_width:
+		start_x = maxf(8.0, (available_width - total_width - right_reserved) / 2.0)
 	var start_y = 85.0
 
 	if _slot_viewport != null:
@@ -334,13 +340,13 @@ func _update_unlock_buttons() -> void:
 	var has_quote := not quote.is_empty()
 
 	if _gold_unlock_btn != null:
-		_gold_unlock_btn.disabled = _unlock_buttons_busy or not has_quote
+		_gold_unlock_btn.disabled = _unlock_buttons_busy
 	if _gem_unlock_btn != null:
-		_gem_unlock_btn.disabled = _unlock_buttons_busy or not has_quote
+		_gem_unlock_btn.disabled = _unlock_buttons_busy
 	if _gold_unlock_cost_label != null:
-		_gold_unlock_cost_label.text = Localization.t("ui.vault.unlock_gold_cost", [gold_cost])
+		_gold_unlock_cost_label.text = Localization.t("ui.vault.unlock_gold_cost", [gold_cost]) if has_quote else Localization.t("ui.vault.unlock_cost_loading")
 	if _gem_unlock_cost_label != null:
-		_gem_unlock_cost_label.text = Localization.t("ui.vault.unlock_gem_cost", [gem_cost])
+		_gem_unlock_cost_label.text = Localization.t("ui.vault.unlock_gem_cost", [gem_cost]) if has_quote else Localization.t("ui.vault.unlock_cost_loading")
 
 func _on_unlock_slot_pressed(currency: String) -> void:
 	if _unlock_buttons_busy:
@@ -350,7 +356,12 @@ func _on_unlock_slot_pressed(currency: String) -> void:
 
 	var quote: Dictionary = GameManager.vault_slot_quote
 	if quote.is_empty():
-		await GameManager.sync_vault_slot_quote_from_server()
+		var quote_resp := await GameManager.sync_vault_slot_quote_from_server()
+		if not quote_resp.get("success", false):
+			print("[VaultUI] 获取保险箱解锁报价失败: ", quote_resp.get("error", ""))
+			_unlock_buttons_busy = false
+			_update_unlock_buttons()
+			return
 		quote = GameManager.vault_slot_quote
 	var slot_index := int(quote.get("next_slot_index", _count_unlocked_slots()))
 	await GameManager.handle_unlock_slot("vault", slot_index, currency)
@@ -423,14 +434,16 @@ func _update_synthesize_button() -> void:
 
 	var count = _selected_slots.size()
 	if count <= 0:
-		_synthesize_btn.visible = false
+		_synthesize_btn.visible = true
+		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
 		_synthesize_btn.disabled = true
 		return
 
 	var vault = GameManager.player_data.vault_cards
 	var selected_idx := int(_selected_slots[0])
 	if selected_idx < 0 or selected_idx >= vault.size() or vault[selected_idx] == null:
-		_synthesize_btn.visible = false
+		_synthesize_btn.visible = true
+		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
 		_synthesize_btn.disabled = true
 		return
 
@@ -534,7 +547,8 @@ func _apply_vault_synthesis_pending_removal(selected_slots: Array) -> void:
 
 	if _synthesize_btn != null:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
-		_synthesize_btn.visible = false
+		_synthesize_btn.visible = true
+		_synthesize_btn.disabled = true
 
 func _apply_vault_synthesis_confirmed_result(result_data: Dictionary) -> void:
 	var rewards: Dictionary = result_data.get("rewards", {})

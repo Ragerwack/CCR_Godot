@@ -32,6 +32,7 @@ func setup_ui() -> void:
 	_title_label.size = Vector2(400, 30)
 	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_title_label.text = Localization.t("ui.synthesis.title")
+	_title_label.add_theme_font_size_override("font_size", 14 if Localization.locale == "en" else 16)
 	add_child(_title_label)
 
 	# 合成按钮

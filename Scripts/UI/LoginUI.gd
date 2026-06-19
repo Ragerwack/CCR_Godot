@@ -7,6 +7,8 @@ class_name LoginUI
 
 signal login_completed()
 
+const CountryCatalogScript = preload("res://Scripts/Data/CountryCatalog.gd")
+
 # ══════════════════════════════════════════════════
 #  状态
 # ══════════════════════════════════════════════════
@@ -20,6 +22,9 @@ var _error_label: Label
 var _username_input: LineEdit
 var _password_input: LineEdit
 var _email_input: LineEdit
+var _country_row: HBoxContainer
+var _country_label: Label
+var _country_select: OptionButton
 var _submit_button: Button
 var _switch_button: Button
 var _loading_label: Label
@@ -60,7 +65,7 @@ func _setup_ui() -> void:
 	var vbox := VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	vbox.position = Vector2(25, 20)
-	vbox.size = Vector2(350, 310)
+	vbox.size = Vector2(350, 415)
 	vbox.add_theme_constant_override("separation", 12)
 	_panel.add_child(vbox)
 
@@ -92,6 +97,18 @@ func _setup_ui() -> void:
 	_email_input.custom_minimum_size = Vector2(0, 36)
 	_email_input.text_submitted.connect(_on_submit)
 	vbox.add_child(_email_input)
+
+	_country_row = HBoxContainer.new()
+	_country_label = Label.new()
+	_country_label.custom_minimum_size = Vector2(100, 36)
+	_country_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_country_row.add_child(_country_label)
+	_country_select = OptionButton.new()
+	_country_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_country_select.custom_minimum_size = Vector2(0, 36)
+	_country_row.add_child(_country_select)
+	vbox.add_child(_country_row)
+	_populate_country_options()
 
 	# ── 错误提示 ──
 	_error_label = Label.new()
@@ -133,15 +150,18 @@ func _update_mode() -> void:
 		_title.text = Localization.t("ui.login.title.login")
 		_username_input.placeholder_text = Localization.t("ui.login.email")
 		_email_input.visible = false
+		_country_row.visible = false
 		_submit_button.text = Localization.t("ui.login.submit.login")
 		_switch_button.text = Localization.t("ui.login.switch.to_register")
 		_panel.size.y = 350
 	else:
 		_title.text = Localization.t("ui.login.title.register")
+		_username_input.placeholder_text = Localization.t("ui.login.username")
 		_email_input.visible = true
+		_country_row.visible = true
 		_submit_button.text = Localization.t("ui.login.submit.register")
 		_switch_button.text = Localization.t("ui.login.switch.to_login")
-		_panel.size.y = 400
+		_panel.size.y = 455
 
 	# 重新居中
 	_panel.position = Vector2(
@@ -172,7 +192,7 @@ func _on_submit(_unused: String = "") -> void:
 		if email == "":
 			_show_error(Localization.t("ui.login.error.missing_email"))
 			return
-		_do_register(username, password, email)
+		_do_register(username, password, email, _selected_country_code())
 	else:
 		_do_login(username, password)
 
@@ -200,9 +220,9 @@ func _do_login(username: String, password: String) -> void:
 	else:
 		_show_error(resp["error"])
 
-func _do_register(username: String, password: String, email: String) -> void:
+func _do_register(username: String, password: String, email: String, country: String) -> void:
 	_set_loading(true)
-	var resp := await ApiClient.register(username, password, email)
+	var resp := await ApiClient.register(username, password, email, country)
 	_set_loading(false)
 
 	if resp["success"]:
@@ -220,6 +240,26 @@ func _do_register(username: String, password: String, email: String) -> void:
 	else:
 		_show_error(resp["error"])
 
+func _populate_country_options() -> void:
+	var selected_code := _selected_country_code()
+	_country_label.text = Localization.t("ui.login.country")
+	_country_select.tooltip_text = Localization.t("ui.login.country.hint")
+	_country_select.clear()
+	var selected_index := 0
+	var entries: Array[Dictionary] = CountryCatalogScript.localized_entries(Localization.locale)
+	for index in range(entries.size()):
+		var entry: Dictionary = entries[index]
+		_country_select.add_item(str(entry["label"]))
+		_country_select.set_item_metadata(index, str(entry["code"]))
+		if str(entry["code"]) == selected_code:
+			selected_index = index
+	_country_select.select(selected_index)
+
+func _selected_country_code() -> String:
+	if _country_select == null or _country_select.item_count == 0 or _country_select.selected < 0:
+		return "EARTH"
+	return str(_country_select.get_item_metadata(_country_select.selected))
+
 # ══════════════════════════════════════════════════
 #  UI 状态控制
 # ══════════════════════════════════════════════════
@@ -230,6 +270,7 @@ func _set_loading(loading: bool) -> void:
 	_username_input.editable = not loading
 	_password_input.editable = not loading
 	_email_input.editable = not loading
+	_country_select.disabled = loading
 	_loading_label.visible = loading
 	_error_label.visible = false
 

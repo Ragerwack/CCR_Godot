@@ -5,6 +5,7 @@ extends RefCounted
 enum ColorType { WHITE, GREEN, BLUE, PURPLE, ORANGE, BLACK, RED }
 
 const NAMES: Array[String] = ["白", "绿", "蓝", "紫", "橙", "黑", "红"]
+const NAME_KEYS: Array[String] = ["ui.color.white", "ui.color.green", "ui.color.blue", "ui.color.purple", "ui.color.orange", "ui.color.black", "ui.color.red"]
 const RARITY: Array[int] = [1, 2, 3, 4, 5, 6, 7]
 const EXP_VALUES: Array[int] = [20, 40, 60, 100, 200, 400, 1000]
 const GLOBAL_LIMITS: Array[int] = [0, 1000000, 30000, 900, 30, 1, 1]
@@ -32,7 +33,7 @@ const DEMOTE_CHAIN: Array[ColorType] = [
 ]
 
 static func display_name(c: ColorType) -> String:
-	return NAMES[c]
+	return Localization.t(NAME_KEYS[c])
 
 static func get_rarity(c: ColorType) -> int:
 	return RARITY[c]

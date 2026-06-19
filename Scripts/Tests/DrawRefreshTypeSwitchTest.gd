@@ -24,8 +24,9 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 
-	if not CardPoolSystem._get_warm_roll("free").is_empty():
-		push_error("DRAW_TYPE_SWITCH stale_free_roll_not_cleared")
+	var shared_roll := CardPoolSystem._get_warm_roll("free")
+	if shared_roll.is_empty() or shared_roll.get("roll_id", "") != CardPoolSystem._get_warm_roll("gem").get("roll_id", ""):
+		push_error("DRAW_TYPE_SWITCH roll_not_shared_across_types")
 		get_tree().quit(1)
 		return
 

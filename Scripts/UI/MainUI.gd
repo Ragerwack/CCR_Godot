@@ -15,6 +15,7 @@ var _currency: CurrencyUI
 var _nav_buttons: NavButtons
 var _center_area: Control
 var _exp_bar_ui: ExpBarUI
+var _menu_button: Button
 
 # 子面板
 var _card_pool_ui: CardPoolUI = null
@@ -25,6 +26,9 @@ var _deck_collection_ui: DeckCollectionUI = null
 
 # 加载遮罩
 var _loading_overlay: ColorRect = null
+var _current_view_id: String = "card_pool"
+var _view_before_menu: String = "card_pool"
+var _game_ui_active: bool = false
 
 func _ready() -> void:
 	setup_ui()
@@ -32,6 +36,7 @@ func _ready() -> void:
 	GameManager.scene_changed.connect(_on_scene_changed)
 	_nav_buttons.nav_button_clicked.connect(_on_nav_button)
 	ApiClient.auth_expired.connect(_on_auth_expired)
+	Localization.locale_changed.connect(_on_locale_changed)
 
 	# 总是先显示开机界面（全屏覆盖在一切之上）
 	_show_splash_screen()
@@ -50,10 +55,12 @@ func _show_splash_screen() -> void:
 	add_child(splash)
 
 func _set_game_ui_visible(visible: bool) -> void:
+	_game_ui_active = visible
 	if _player_info: _player_info.visible = visible
 	if _currency: _currency.visible = visible
 	if _nav_buttons: _nav_buttons.visible = visible
 	if _exp_bar_ui: _exp_bar_ui.visible = visible
+	if _menu_button: _menu_button.visible = visible
 
 func _on_splash_completed() -> void:
 	# 显示游戏UI，进入主界面
@@ -98,7 +105,7 @@ func _show_loading(show: bool) -> void:
 			label.position = Vector2(0, -100)
 			label.size = Vector2(200, 40)
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			label.text = "加载中..."
+			label.text = Localization.t("ui.login.loading")
 			label.add_theme_font_size_override("font_size", 18)
 			label.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
 			_loading_overlay.add_child(label)
@@ -129,7 +136,7 @@ func _show_loading_light(show: bool) -> void:
 			label.position = Vector2(0, -100)
 			label.size = Vector2(200, 40)
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			label.text = "同步数据中..."
+			label.text = Localization.t("ui.login.syncing")
 			label.add_theme_font_size_override("font_size", 14)
 			label.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
 			_loading_light.add_child(label)
@@ -200,16 +207,18 @@ func setup_ui() -> void:
 	add_child(_currency)
 
 	# ── 菜单按钮（右上角，currency 右边） ──
-	var menu_btn = Button.new()
-	menu_btn.text = "\u2630"
-	menu_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	menu_btn.position = Vector2(0, 10)
-	menu_btn.offset_left = -50
-	menu_btn.offset_right = -5
-	menu_btn.offset_top = 10
-	menu_btn.offset_bottom = 50
-	menu_btn.pressed.connect(_show_menu)
-	add_child(menu_btn)
+	_menu_button = Button.new()
+	_menu_button.text = "\u2630"
+	_menu_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_menu_button.position = Vector2(0, 10)
+	_menu_button.offset_left = -50
+	_menu_button.offset_right = -5
+	_menu_button.offset_top = 10
+	_menu_button.offset_bottom = 50
+	_menu_button.pressed.connect(_show_menu)
+	_menu_button.z_index = 100
+	_menu_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_menu_button)
 
 	# ── 左侧导航 ──
 	_nav_buttons = NavButtons.new()
@@ -273,6 +282,7 @@ func _on_nav_button(id: String) -> void:
 # ══════════════════════════════════════════════════
 
 func _show_card_pool() -> void:
+	_current_view_id = "card_pool"
 	_clear_center()
 
 	_card_pool_ui = CardPoolUI.new()
@@ -317,12 +327,14 @@ func _sync_before_leaving_card_pool() -> Dictionary:
 	return await GameManager.sync_pool_hand_layout()
 
 func _show_vault() -> void:
+	_current_view_id = "vault"
 	_clear_center()
 	_vault_ui = VaultUI.new()
 	_vault_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_center_area.add_child(_vault_ui)
 
 func _show_deck_collection() -> void:
+	_current_view_id = "deck_panel"
 	_clear_center()
 	_deck_collection_ui = DeckCollectionUI.new()
 	_deck_collection_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -333,6 +345,7 @@ func _refresh_page_data_background(id: String) -> void:
 		"vault":
 			if ApiClient.is_logged_in():
 				await GameManager.sync_vault_from_server()
+				await GameManager.sync_vault_slot_quote_from_server()
 				if is_instance_valid(_vault_ui):
 					_vault_ui.refresh_display()
 		"deck_panel":
@@ -342,6 +355,7 @@ func _refresh_page_data_background(id: String) -> void:
 					_deck_collection_ui.render_decks()
 
 func _show_synthesis_panel() -> void:
+	_current_view_id = "synthesis"
 	_clear_center()
 	_synthesis_panel = SynthesisPanelUI.new()
 	_synthesis_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -356,6 +370,7 @@ func _on_synthesis_cancelled() -> void:
 	_show_card_pool()
 
 func _show_message(msg: String) -> void:
+	_current_view_id = "message"
 	_clear_center()
 	var label = Label.new()
 	label.set_anchors_preset(Control.PRESET_CENTER)
@@ -365,6 +380,9 @@ func _show_message(msg: String) -> void:
 	_center_area.add_child(label)
 
 func _show_menu() -> void:
+	if _current_view_id != "menu":
+		_view_before_menu = _current_view_id
+	_current_view_id = "menu"
 	_clear_center()
 	var menu_panel = _build_menu_panel()
 	_center_area.add_child(menu_panel)
@@ -375,7 +393,9 @@ func _build_menu_panel() -> Control:
 
 	var vbox = VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_CENTER)
-	vbox.size = Vector2(400, 300)
+	vbox.size = Vector2(400, 360)
+	vbox.position = -vbox.size / 2.0
+	vbox.add_theme_constant_override("separation", 10)
 	panel.add_child(vbox)
 
 	var title = Label.new()
@@ -389,6 +409,25 @@ func _build_menu_panel() -> Control:
 
 	var sfx_row = _make_slider_row(Localization.t("ui.menu.sfx_volume"), AudioManager.sfx_volume, func(v): AudioManager.set_sfx_volume(v))
 	vbox.add_child(sfx_row)
+
+	var language_row := HBoxContainer.new()
+	var language_label := Label.new()
+	language_label.text = Localization.t("ui.menu.language")
+	language_label.custom_minimum_size = Vector2(100, 30)
+	language_row.add_child(language_label)
+	var language_select := OptionButton.new()
+	language_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	language_select.add_item(Localization.t("ui.language.en"))
+	language_select.set_item_metadata(0, "en")
+	language_select.add_item(Localization.t("ui.language.zh_cn"))
+	language_select.set_item_metadata(1, "zh-CN")
+	language_select.select(1 if Localization.locale == "zh-CN" else 0)
+	language_select.item_selected.connect(func(index: int):
+		var selected_locale := str(language_select.get_item_metadata(index))
+		_apply_language_selection.call_deferred(selected_locale)
+	)
+	language_row.add_child(language_select)
+	vbox.add_child(language_row)
 
 	var mute_btn = Button.new()
 	mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
@@ -408,10 +447,49 @@ func _build_menu_panel() -> Control:
 
 	var back_btn = Button.new()
 	back_btn.text = Localization.t("ui.button.back")
-	back_btn.pressed.connect(func(): _show_card_pool())
+	back_btn.pressed.connect(_return_from_menu)
 	vbox.add_child(back_btn)
 
 	return panel
+
+func _apply_language_selection(selected_locale: String) -> void:
+	Localization.set_locale(selected_locale, true, GameManager.player_data.user_id)
+
+func _return_from_menu() -> void:
+	match _view_before_menu:
+		"vault": _show_vault()
+		"deck_panel": _show_deck_collection()
+		"synthesis": _show_synthesis_panel()
+		_: _show_card_pool()
+
+func _on_locale_changed(_locale: String) -> void:
+	_nav_buttons.refresh_labels()
+	if not _game_ui_active:
+		return
+	var localized_data_view := _view_before_menu if _current_view_id == "menu" else _current_view_id
+	match _current_view_id:
+		"menu": _show_menu()
+		"vault": _show_vault()
+		"deck_panel": _show_deck_collection()
+		"synthesis": _show_synthesis_panel()
+		_: _show_card_pool()
+	_refresh_localized_server_data.call_deferred(localized_data_view)
+
+func _refresh_localized_server_data(view_id: String) -> void:
+	if not ApiClient.is_logged_in():
+		return
+	match view_id:
+		"card_pool", "synthesis": await GameManager.sync_initial_card_pool_from_server()
+		"vault": await GameManager.sync_vault_from_server()
+		"deck_panel": await GameManager.sync_decks_from_server()
+		_: return
+	if _current_view_id != view_id:
+		return
+	match view_id:
+		"vault": _show_vault()
+		"deck_panel": _show_deck_collection()
+		"synthesis": _show_synthesis_panel()
+		_: _show_card_pool()
 
 func _make_slider_row(label_text: String, default_val: float, callback: Callable) -> HBoxContainer:
 	var row = HBoxContainer.new()

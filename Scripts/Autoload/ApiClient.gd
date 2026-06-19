@@ -55,6 +55,7 @@ signal heartbeat_failed(reason: String)
 signal signin_completed(result: Dictionary)
 signal signin_failed(reason: String)
 signal auth_expired()
+signal network_status_changed(status: String)
 
 # ══════════════════════════════════════════════════
 #  常量 & 状态
@@ -65,6 +66,12 @@ const AUTH_TOKEN_KEY: String = "ccr_auth_token"
 const REFRESH_TOKEN_KEY: String = "ccr_refresh_token"
 const HTTP_TIMEOUT_SECONDS: float = 30.0
 const AUTH_TIMEOUT_SECONDS: float = 45.0
+const READ_RETRY_ATTEMPTS: int = 2
+const PREPARE_RETRY_ATTEMPTS: int = 3
+const ASSET_WRITE_RETRY_ATTEMPTS: int = 3
+const NETWORK_RETRY_BASE_SECONDS: float = 0.8
+const NETWORK_RETRY_MAX_SECONDS: float = 4.0
+const NETWORK_SLOW_MS: int = 8000
 
 ## HTTP method → human-readable name (Godot 4 移除了 HTTPClient.METHOD_NAMES)
 const _METHOD_NAMES: Dictionary = {
@@ -81,6 +88,10 @@ var _auth_token: String = ""
 var _refresh_token: String = ""
 var _api_base_url: String = DEFAULT_API_BASE_URL
 var _operation_counter: int = 0
+var _network_status: String = "good"
+var _consecutive_network_failures: int = 0
+var _asset_request_busy: bool = false
+var _asset_request_queue_counter: int = 0
 
 # ══════════════════════════════════════════════════
 #  初始化
@@ -139,6 +150,12 @@ func _new_operation_id(kind: String) -> String:
 		randi(),
 	]
 
+func new_operation_id(kind: String) -> String:
+	return _new_operation_id(kind)
+
+func get_network_status() -> String:
+	return _network_status
+
 func _normalize_api_base_url(base_url: String) -> String:
 	var normalized := base_url.strip_edges()
 	while normalized.ends_with("/"):
@@ -156,6 +173,7 @@ func _api_url(path: String) -> String:
 
 func _make_headers() -> PackedStringArray:
 	var h: PackedStringArray = PackedStringArray(["Content-Type: application/json"])
+	h.append("Accept-Language: " + Localization.get_http_locale())
 	if _auth_token != "":
 		h.append("Authorization: Bearer " + _auth_token)
 	return h
@@ -239,21 +257,62 @@ func _on_batch_request_completed(result: int, code: int, headers: PackedStringAr
 	if is_instance_valid(http):
 		http.queue_free()
 
-## 发送 HTTP 请求并等待响应，返回标准化的 Dictionary
-func _request(url: String, method: int = HTTPClient.METHOD_GET, body: String = "", timeout_seconds: float = HTTP_TIMEOUT_SECONDS) -> Dictionary:
+## 发送 HTTP 请求并等待响应，返回标准化的 Dictionary。max_attempts > 1 时会对网络/入口层失败做退避重试。
+func _request(
+	url: String,
+	method: int = HTTPClient.METHOD_GET,
+	body: String = "",
+	timeout_seconds: float = HTTP_TIMEOUT_SECONDS,
+	max_attempts: int = 1,
+	retry_processing_conflict: bool = false
+) -> Dictionary:
+	var attempts := maxi(1, max_attempts)
+	var last_resp: Dictionary = {}
+	for attempt_index in range(attempts):
+		var attempt_no := attempt_index + 1
+		var resp := await _request_once(url, method, body, timeout_seconds, attempt_no, attempts)
+		resp["attempt"] = attempt_no
+		resp["max_attempts"] = attempts
+		_record_network_result(resp)
+		last_resp = resp
+		if attempt_no >= attempts or not _should_retry_response(resp, retry_processing_conflict):
+			return resp
+
+		var delay_seconds := _retry_delay_seconds(attempt_no)
+		FileLogger.perf("network_retry_scheduled", {
+			"method": _METHOD_NAMES.get(method, "?"),
+			"url": url,
+			"attempt": attempt_no,
+			"max_attempts": attempts,
+			"delay_ms": int(delay_seconds * 1000.0),
+			"status": resp.get("status_code", 0),
+			"error": resp.get("error", ""),
+		})
+		await _sleep_seconds(delay_seconds)
+	return last_resp
+
+func _request_once(
+	url: String,
+	method: int = HTTPClient.METHOD_GET,
+	body: String = "",
+	timeout_seconds: float = HTTP_TIMEOUT_SECONDS,
+	attempt_no: int = 1,
+	max_attempts: int = 1
+) -> Dictionary:
 	var started := Time.get_ticks_msec()
 	var http := HTTPRequest.new()
 	http.timeout = timeout_seconds
 	add_child(http)
 	var headers = _make_headers()
 	FileLogger.http(_METHOD_NAMES.get(method, "?"), url)
-	FileLogger.perf("new_data_request_start", {"method": _METHOD_NAMES.get(method, "?"), "url": url})
+	FileLogger.perf("new_data_request_start", {"method": _METHOD_NAMES.get(method, "?"), "url": url, "attempt": attempt_no, "max_attempts": max_attempts})
 	var req_err = http.request(url, headers, method, body)
 	if req_err != OK:
 		http.queue_free()
 		FileLogger.error("请求启动失败: " + url + " err=" + str(req_err), "[HTTP]")
-		FileLogger.perf("new_data_request_done", {"method": _METHOD_NAMES.get(method, "?"), "url": url, "success": false, "total_ms": Time.get_ticks_msec() - started})
-		return {"success": false, "error": "请求启动失败", "error_type": "network"}
+		var failed_total_ms := Time.get_ticks_msec() - started
+		FileLogger.perf("new_data_request_done", {"method": _METHOD_NAMES.get(method, "?"), "url": url, "success": false, "total_ms": failed_total_ms, "attempt": attempt_no, "max_attempts": max_attempts})
+		return {"success": false, "error": "请求启动失败", "error_type": "network", "status_code": 0, "network_ms": 0, "total_ms": failed_total_ms}
 
 	var network_started := Time.get_ticks_msec()
 	var result_arr: Array = await http.request_completed
@@ -261,8 +320,92 @@ func _request(url: String, method: int = HTTPClient.METHOD_GET, body: String = "
 	http.queue_free()
 	var resp = _parse_response(result_arr, url)
 	var total_ms := Time.get_ticks_msec() - started
+	resp["network_ms"] = network_ms
+	resp["total_ms"] = total_ms
 	FileLogger.http(_METHOD_NAMES.get(method, "?"), url, resp.get("status_code", 0), ("成功" if resp.get("success", false) else "失败: " + resp.get("error", "")) + " | network_ms=" + str(network_ms) + " | total_ms=" + str(total_ms))
-	FileLogger.perf("new_data_request_done", {"method": _METHOD_NAMES.get(method, "?"), "url": url, "status": resp.get("status_code", 0), "success": resp.get("success", false), "network_ms": network_ms, "total_ms": total_ms})
+	FileLogger.perf("new_data_request_done", {"method": _METHOD_NAMES.get(method, "?"), "url": url, "status": resp.get("status_code", 0), "success": resp.get("success", false), "network_ms": network_ms, "total_ms": total_ms, "attempt": attempt_no, "max_attempts": max_attempts})
+	return resp
+
+func _should_retry_response(resp: Dictionary, retry_processing_conflict: bool) -> bool:
+	var status := int(resp.get("status_code", 0))
+	var error_type := str(resp.get("error_type", ""))
+	if error_type == "network":
+		return true
+	if _is_retryable_status(status):
+		return true
+	if retry_processing_conflict and status == 409:
+		var err := str(resp.get("error", ""))
+		return err.contains("正在处理中")
+	return false
+
+func is_network_uncertain_response(resp: Dictionary) -> bool:
+	var status := int(resp.get("status_code", 0))
+	if str(resp.get("error_type", "")) == "network" or status == 0:
+		return true
+	if _is_retryable_status(status):
+		return true
+	return status == 409 and str(resp.get("error", "")).contains("正在处理中")
+
+func _is_retryable_status(status: int) -> bool:
+	return status in [408, 425, 429, 500, 502, 503, 504]
+
+func _retry_delay_seconds(attempt_no: int) -> float:
+	var exponential = NETWORK_RETRY_BASE_SECONDS * pow(2.0, float(maxi(0, attempt_no - 1)))
+	var jitter := randf() * 0.35
+	return minf(NETWORK_RETRY_MAX_SECONDS, exponential + jitter)
+
+func _sleep_seconds(seconds: float) -> void:
+	if seconds <= 0.0 or get_tree() == null:
+		return
+	var timer := get_tree().create_timer(seconds)
+	await timer.timeout
+
+func _record_network_result(resp: Dictionary) -> void:
+	var status := int(resp.get("status_code", 0))
+	var network_ms := int(resp.get("network_ms", 0))
+	if status == 0 or str(resp.get("error_type", "")) == "network":
+		_consecutive_network_failures += 1
+	elif status >= 500:
+		_consecutive_network_failures += 1
+	else:
+		_consecutive_network_failures = 0
+
+	var next_status := "good"
+	if _consecutive_network_failures >= 3:
+		next_status = "offline"
+	elif _consecutive_network_failures >= 2:
+		next_status = "bad"
+	elif _consecutive_network_failures >= 1 or network_ms >= NETWORK_SLOW_MS:
+		next_status = "unstable"
+
+	if next_status != _network_status:
+		_network_status = next_status
+		network_status_changed.emit(_network_status)
+		FileLogger.perf("network_status_changed", {"status": _network_status, "failures": _consecutive_network_failures, "network_ms": network_ms})
+
+func _asset_request(url: String, method: int, body: String, operation_kind: String) -> Dictionary:
+	_asset_request_queue_counter += 1
+	var queue_id := _asset_request_queue_counter
+	var queued_at := Time.get_ticks_msec()
+	if _asset_request_busy:
+		FileLogger.perf("asset_request_queued", {"kind": operation_kind, "queue_id": queue_id})
+	while _asset_request_busy:
+		await get_tree().process_frame
+
+	_asset_request_busy = true
+	FileLogger.perf("asset_request_started", {
+		"kind": operation_kind,
+		"queue_id": queue_id,
+		"queue_wait_ms": Time.get_ticks_msec() - queued_at,
+	})
+	var resp := await _request(url, method, body, HTTP_TIMEOUT_SECONDS, ASSET_WRITE_RETRY_ATTEMPTS, true)
+	_asset_request_busy = false
+	FileLogger.perf("asset_request_done", {
+		"kind": operation_kind,
+		"queue_id": queue_id,
+		"success": resp.get("success", false),
+		"status": resp.get("status_code", 0),
+	})
 	return resp
 
 ## 解析 HTTP 响应为统一格式
@@ -346,8 +489,8 @@ func login(username: String, password: String) -> Dictionary:
 	return resp
 
 ## 注册
-func register(username: String, password: String, email: String) -> Dictionary:
-	var body := JSON.stringify({"username": username, "password": password, "email": email})
+func register(username: String, password: String, email: String, country: String = "EARTH") -> Dictionary:
+	var body := JSON.stringify({"username": username, "password": password, "email": email, "country": country})
 	var resp := await _request(_api_url("/auth/register"), HTTPClient.METHOD_POST, body, AUTH_TIMEOUT_SECONDS)
 
 	if resp["success"]:
@@ -370,7 +513,7 @@ func refresh_session() -> Dictionary:
 	if _refresh_token == "":
 		return {"success": false, "error": "本地没有可恢复会话", "error_type": "auth", "status_code": 0}
 	var body := JSON.stringify({"refresh_token": _refresh_token})
-	var resp := await _request(_api_url("/auth/refresh"), HTTPClient.METHOD_POST, body, AUTH_TIMEOUT_SECONDS)
+	var resp := await _request(_api_url("/auth/refresh"), HTTPClient.METHOD_POST, body, AUTH_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp.get("success", false):
 		_store_login_tokens(resp["data"])
 	else:
@@ -394,7 +537,7 @@ func heartbeat(user_id: int = 0) -> Dictionary:
 		"user_id": user_id,
 		"client_time": Time.get_datetime_string_from_system(),
 	})
-	var resp := await _request(_api_url("/auth/heartbeat"), HTTPClient.METHOD_POST, body)
+	var resp := await _request(_api_url("/auth/heartbeat"), HTTPClient.METHOD_POST, body, HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp.get("success", false):
 		heartbeat_succeeded.emit(resp["data"])
 	else:
@@ -418,7 +561,7 @@ func signin() -> Dictionary:
 
 ## 获取用户资料
 func get_profile() -> Dictionary:
-	var resp := await _request(_api_url("/user/profile"), HTTPClient.METHOD_GET)
+	var resp := await _request(_api_url("/user/profile"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp["success"]:
 		profile_loaded.emit(resp["data"])
 	else:
@@ -435,7 +578,7 @@ func refresh_pool(refresh_type: String) -> Dictionary:
 		"operation_id": _new_operation_id("refresh_pool"),
 		"type": refresh_type,
 	})
-	var resp := await _request(_api_url("/game/refresh-pool"), HTTPClient.METHOD_POST, body)
+	var resp := await _asset_request(_api_url("/game/refresh-pool"), HTTPClient.METHOD_POST, body, "refresh_pool")
 	if resp["success"]:
 		pool_refreshed.emit(resp["data"])
 	else:
@@ -443,7 +586,7 @@ func refresh_pool(refresh_type: String) -> Dictionary:
 	return resp
 
 func get_draw_key() -> Dictionary:
-	var resp := await _request(_api_url("/game/draw-key"), HTTPClient.METHOD_GET)
+	var resp := await _request(_api_url("/game/draw-key"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp.get("success", false):
 		draw_key_loaded.emit(resp["data"])
 	return resp
@@ -455,11 +598,15 @@ func prepare_refresh_pool_roll(refresh_type: String, draw_key_version: int) -> D
 	if draw_key_version > 0:
 		payload["draw_key_version"] = draw_key_version
 	var body := JSON.stringify(payload)
-	return await _request(_api_url("/game/refresh-pool/prepare"), HTTPClient.METHOD_POST, body)
+	return await _request(_api_url("/game/refresh-pool/prepare"), HTTPClient.METHOD_POST, body, HTTP_TIMEOUT_SECONDS, PREPARE_RETRY_ATTEMPTS)
 
-func confirm_refresh_pool_roll(roll_data: Dictionary, cards: Array, pool_cards: Array, hand_cards: Array, sync_layout: bool = true) -> Dictionary:
+func confirm_refresh_pool_roll(refresh_type: String, roll_data: Dictionary, cards: Array, pool_cards: Array, hand_cards: Array, sync_layout: bool = true, operation_id: String = "") -> Dictionary:
+	var op_id := operation_id
+	if op_id == "":
+		op_id = _new_operation_id("refresh_pool_confirm")
 	var payload := {
-		"operation_id": _new_operation_id("refresh_pool_confirm"),
+		"operation_id": op_id,
+		"type": refresh_type,
 		"roll_id": roll_data.get("roll_id", ""),
 		"signature": roll_data.get("signature", ""),
 		"cards": _slot_cards_to_refresh_results(cards),
@@ -468,7 +615,8 @@ func confirm_refresh_pool_roll(roll_data: Dictionary, cards: Array, pool_cards: 
 		payload["pool"] = _cards_to_layout(pool_cards)
 		payload["hand"] = _cards_to_layout(hand_cards)
 	var body := JSON.stringify(payload)
-	var resp := await _request(_api_url("/game/refresh-pool/confirm"), HTTPClient.METHOD_POST, body)
+	var resp := await _asset_request(_api_url("/game/refresh-pool/confirm"), HTTPClient.METHOD_POST, body, "refresh_pool_confirm")
+	resp["operation_id"] = op_id
 	if resp.get("success", false):
 		pool_refreshed.emit(resp["data"].get("cards", []))
 	else:
@@ -482,7 +630,7 @@ func move_to_hand(pool_slot_index: int, hand_slot_index: int) -> Dictionary:
 		"pool_slot_index": pool_slot_index,
 		"hand_slot_index": hand_slot_index,
 	})
-	var resp := await _request(_api_url("/game/move-to-hand"), HTTPClient.METHOD_POST, body)
+	var resp := await _asset_request(_api_url("/game/move-to-hand"), HTTPClient.METHOD_POST, body, "move_to_hand")
 	if resp["success"]:
 		card_moved_to_hand.emit(resp["data"])
 	else:
@@ -497,7 +645,7 @@ func move_to_vault(source_type: String, source_slot_index: int, vault_slot_index
 		"source_slot_index": source_slot_index,
 		"vault_slot_index": vault_slot_index,
 	})
-	var resp := await _request(_api_url("/game/move-to-vault"), HTTPClient.METHOD_POST, body)
+	var resp := await _asset_request(_api_url("/game/move-to-vault"), HTTPClient.METHOD_POST, body, "move_to_vault")
 	if resp["success"]:
 		card_moved_to_vault.emit(resp["data"])
 	else:
@@ -509,7 +657,7 @@ func sync_pool_hand_layout(pool_cards: Array, hand_cards: Array) -> Dictionary:
 		"pool": _cards_to_layout(pool_cards),
 		"hand": _cards_to_layout(hand_cards),
 	})
-	var resp := await _request(_api_url("/game/sync-layout"), HTTPClient.METHOD_POST, body)
+	var resp := await _request(_api_url("/game/sync-layout"), HTTPClient.METHOD_POST, body, HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp["success"]:
 		layout_synced.emit(resp["data"])
 	else:
@@ -520,7 +668,7 @@ func sync_vault_layout(vault_cards: Array) -> Dictionary:
 	var body := JSON.stringify({
 		"vault": _cards_to_layout(vault_cards),
 	})
-	var resp := await _request(_api_url("/game/sync-layout"), HTTPClient.METHOD_POST, body)
+	var resp := await _request(_api_url("/game/sync-layout"), HTTPClient.METHOD_POST, body, HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp["success"]:
 		layout_synced.emit(resp["data"])
 	else:
@@ -534,7 +682,7 @@ func discard_card(slot_type: String, slot_index: int) -> Dictionary:
 		"slot_type": slot_type,
 		"slot_index": slot_index,
 	})
-	var resp := await _request(_api_url("/game/discard"), HTTPClient.METHOD_POST, body)
+	var resp := await _asset_request(_api_url("/game/discard"), HTTPClient.METHOD_POST, body, "discard")
 	if resp["success"]:
 		card_discarded.emit(resp["data"])
 	else:
@@ -542,7 +690,7 @@ func discard_card(slot_type: String, slot_index: int) -> Dictionary:
 	return resp
 
 func get_vault_slot_quote() -> Dictionary:
-	return await _request(_api_url("/game/vault-slot-quote"), HTTPClient.METHOD_GET)
+	return await _request(_api_url("/game/vault-slot-quote"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 
 ## 解锁槽位
 func unlock_slot(slot_type: String, slot_index: int, currency: String = "gem") -> Dictionary:
@@ -552,7 +700,7 @@ func unlock_slot(slot_type: String, slot_index: int, currency: String = "gem") -
 		"index": slot_index,
 		"currency": currency,
 	})
-	var resp := await _request(_api_url("/game/unlock-slot"), HTTPClient.METHOD_POST, body)
+	var resp := await _asset_request(_api_url("/game/unlock-slot"), HTTPClient.METHOD_POST, body, "unlock_slot")
 	if resp["success"]:
 		print("[ApiClient] 槽位解锁成功: " + slot_type + "[" + str(slot_index) + "]")
 	else:
@@ -561,7 +709,7 @@ func unlock_slot(slot_type: String, slot_index: int, currency: String = "gem") -
 
 ## 获取槽位卡牌
 func get_cards(slot_type: String) -> Dictionary:
-	var resp := await _request(_api_url("/game/cards?type=" + slot_type), HTTPClient.METHOD_GET)
+	var resp := await _request(_api_url("/game/cards?type=" + slot_type), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp["success"]:
 		cards_loaded.emit(slot_type, resp["data"])
 	else:
@@ -576,7 +724,7 @@ func synthesize(slot_indices: Array, source_type: String = "hand") -> Dictionary
 		"source_type": source_type,
 		"slot_indices": slot_indices,
 	})
-	var resp := await _request(_api_url("/game/synthesize"), HTTPClient.METHOD_POST, body)
+	var resp := await _asset_request(_api_url("/game/synthesize"), HTTPClient.METHOD_POST, body, "synthesize")
 	if resp["success"]:
 		synthesis_completed.emit(resp["data"])
 	else:
@@ -585,7 +733,7 @@ func synthesize(slot_indices: Array, source_type: String = "hand") -> Dictionary
 
 ## 获取已合成套牌列表
 func get_decks() -> Dictionary:
-	var resp := await _request(_api_url("/game/decks"), HTTPClient.METHOD_GET)
+	var resp := await _request(_api_url("/game/decks"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp["success"]:
 		decks_loaded.emit(resp["data"])
 	else:
@@ -594,7 +742,7 @@ func get_decks() -> Dictionary:
 
 ## 获取游戏配置
 func get_config() -> Dictionary:
-	var resp := await _request(_api_url("/game/config"), HTTPClient.METHOD_GET)
+	var resp := await _request(_api_url("/game/config"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp["success"]:
 		config_loaded.emit(resp["data"])
 	else:
@@ -607,7 +755,7 @@ func get_config() -> Dictionary:
 
 ## 获取等级信息 (expForNext, expInLevel 等)
 func get_level_info() -> Dictionary:
-	var resp := await _request(_api_url("/player/level"), HTTPClient.METHOD_GET)
+	var resp := await _request(_api_url("/player/level"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp["success"]:
 		level_info_loaded.emit(resp["data"])
 	else:

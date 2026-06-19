@@ -63,6 +63,6 @@ func _on_player_data_changed() -> void:
 
 func refresh() -> void:
 	var pd = GameManager.player_data
-	_id_label.text = pd.nickname if pd.nickname != "" else "玩家"
+	_id_label.text = pd.nickname if pd.nickname != "" else Localization.t("ui.player.default_name")
 	_level_label.text = "Lv.%d" % pd.level
 	_combat_label.text = "⚔ %d" % pd.combat_power

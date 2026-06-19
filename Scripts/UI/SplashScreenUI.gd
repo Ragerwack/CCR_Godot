@@ -8,6 +8,7 @@ class_name SplashScreenUI
 signal login_completed()
 
 const LoadingTutorialUIScript = preload("res://Scripts/UI/LoadingTutorialUI.gd")
+const CountryCatalogScript = preload("res://Scripts/Data/CountryCatalog.gd")
 
 # ══════════════════════════════════════════════════
 #  状态
@@ -22,6 +23,9 @@ var _error_label: Label
 var _username_input: LineEdit
 var _password_input: LineEdit
 var _email_input: LineEdit
+var _country_row: HBoxContainer
+var _country_label: Label
+var _country_select: OptionButton
 var _submit_button: Button
 var _switch_button: Button
 var _loading_label: Label
@@ -99,7 +103,7 @@ func _setup_ui() -> void:
 	var vbox := VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	vbox.position = Vector2(25, 20)
-	vbox.size = Vector2(350, 310)
+	vbox.size = Vector2(350, 415)
 	vbox.add_theme_constant_override("separation", 12)
 	_panel.add_child(vbox)
 
@@ -131,6 +135,19 @@ func _setup_ui() -> void:
 	_email_input.custom_minimum_size = Vector2(0, 36)
 	_email_input.text_submitted.connect(_on_submit)
 	vbox.add_child(_email_input)
+
+	# ── 国籍（仅注册模式显示，默认地球）──
+	_country_row = HBoxContainer.new()
+	_country_label = Label.new()
+	_country_label.custom_minimum_size = Vector2(100, 36)
+	_country_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_country_row.add_child(_country_label)
+	_country_select = OptionButton.new()
+	_country_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_country_select.custom_minimum_size = Vector2(0, 36)
+	_country_row.add_child(_country_select)
+	vbox.add_child(_country_row)
+	_populate_country_options()
 
 	# ── 错误提示 ──
 	_error_label = Label.new()
@@ -172,15 +189,18 @@ func _update_mode() -> void:
 		_title.text = Localization.t("ui.login.title.login")
 		_username_input.placeholder_text = Localization.t("ui.login.email")
 		_email_input.visible = false
+		_country_row.visible = false
 		_submit_button.text = Localization.t("ui.login.submit.login")
 		_switch_button.text = Localization.t("ui.login.switch.to_register")
 		_panel.size.y = 350
 	else:
 		_title.text = Localization.t("ui.login.title.register")
+		_username_input.placeholder_text = Localization.t("ui.login.username")
 		_email_input.visible = true
+		_country_row.visible = true
 		_submit_button.text = Localization.t("ui.login.submit.register")
 		_switch_button.text = Localization.t("ui.login.switch.to_login")
-		_panel.size.y = 400
+		_panel.size.y = 455
 
 	# 重新居中
 	_panel.position = Vector2(
@@ -213,7 +233,7 @@ func _on_submit(_unused: String = "") -> void:
 		if email == "":
 			_show_error(Localization.t("ui.login.error.missing_email"))
 			return
-		_do_register(username, password, email)
+		_do_register(username, password, email, _selected_country_code())
 	else:
 		_do_login(username, password)
 
@@ -225,8 +245,8 @@ func _do_login(username: String, password: String) -> void:
 	_last_submit = {"mode": "login", "username": username, "password": password, "email": ""}
 	await _run_login_preparation(_last_submit)
 
-func _do_register(username: String, password: String, email: String) -> void:
-	_last_submit = {"mode": "register", "username": username, "password": password, "email": email}
+func _do_register(username: String, password: String, email: String, country: String) -> void:
+	_last_submit = {"mode": "register", "username": username, "password": password, "email": email, "country": country}
 	await _run_login_preparation(_last_submit)
 
 func _try_auto_session_resume() -> void:
@@ -288,7 +308,7 @@ func _run_login_preparation(payload: Dictionary) -> void:
 		GameManager.apply_draw_key(data["draw_key"])
 	_finish_step("LOAD_PLAYER_BOOTSTRAP", PREP_STATUS_SUCCESS)
 	_show_loading_tutorial_ui(GameManager.player_data.level)
-	_set_loading_tutorial_progress(28.0, "正在准备收藏空间")
+	_set_loading_tutorial_progress(28.0, Localization.t("ui.login.loading.collection"))
 
 	_start_step("LOAD_TODAY_CATALOG", Localization.t("ui.login.prepare.current.load_today_catalog"))
 
@@ -307,12 +327,12 @@ func _run_login_preparation(payload: Dictionary) -> void:
 		failed_stage = "LOAD_TODAY_CATALOG"
 		_fail_preparation(failed_messages[0], failed_stage)
 		return
-	_set_loading_tutorial_progress(72.0, "正在整理卡池与手牌")
+	_set_loading_tutorial_progress(72.0, Localization.t("ui.login.loading.cards"))
 
 	_start_step("CONNECT_REALTIME_OR_HEARTBEAT", Localization.t("ui.login.prepare.current.connect_realtime_or_heartbeat"))
 	SessionManager.start_session()
 	_finish_step("CONNECT_REALTIME_OR_HEARTBEAT", PREP_STATUS_SUCCESS)
-	_set_loading_tutorial_progress(88.0, "正在建立在线状态")
+	_set_loading_tutorial_progress(88.0, Localization.t("ui.login.loading.online"))
 
 	_start_step("ENTER_MAIN_MENU", Localization.t("ui.login.prepare.current.enter_main_menu"))
 	var ui_started := Time.get_ticks_msec()
@@ -354,10 +374,32 @@ func _authenticate_with_retry(payload: Dictionary) -> Dictionary:
 
 func _authenticate_once(payload: Dictionary) -> Dictionary:
 	if payload.get("mode", "login") == "register":
-		return await ApiClient.register(payload["username"], payload["password"], payload["email"])
+		return await ApiClient.register(payload["username"], payload["password"], payload["email"], payload.get("country", "EARTH"))
 	if payload.get("mode", "login") == "refresh":
 		return await ApiClient.refresh_session()
 	return await ApiClient.login(payload["username"], payload["password"])
+
+func _populate_country_options() -> void:
+	if _country_select == null:
+		return
+	var selected_code := _selected_country_code()
+	_country_label.text = Localization.t("ui.login.country")
+	_country_select.tooltip_text = Localization.t("ui.login.country.hint")
+	_country_select.clear()
+	var selected_index := 0
+	var entries: Array[Dictionary] = CountryCatalogScript.localized_entries(Localization.locale)
+	for index in range(entries.size()):
+		var entry: Dictionary = entries[index]
+		_country_select.add_item(str(entry["label"]))
+		_country_select.set_item_metadata(index, str(entry["code"]))
+		if str(entry["code"]) == selected_code:
+			selected_index = index
+	_country_select.select(selected_index)
+
+func _selected_country_code() -> String:
+	if _country_select == null or _country_select.item_count == 0 or _country_select.selected < 0:
+		return "EARTH"
+	return str(_country_select.get_item_metadata(_country_select.selected))
 
 func _apply_critical_login_results(results: Dictionary, failed_messages: Array[String]) -> void:
 	var profile_resp: Dictionary = results.get("profile", {})

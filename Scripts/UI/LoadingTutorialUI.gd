@@ -29,6 +29,15 @@ const LOADING_TUTORIAL_TIPS: Array[Dictionary] = [
 	{"id": "loading_tip_whalefall_005", "min_level": 30, "max_level": 999, "category": "whalefall", "title": "真正的收藏会留下痕迹", "body": "CCR 的 relic 会记录它的形成时间和创造者信息。即使某些 relic 未来进入鲸落流程，它们曾经属于谁、何时被创造，仍然是这件收藏历史的一部分。", "short_tip": "Relic 不只是道具，也是 CCR 世界中的历史记录。"},
 ]
 
+const LOADING_TUTORIAL_TIPS_EN: Array[Dictionary] = [
+	{"id": "loading_tip_basic_en", "min_level": 1, "max_level": 999, "title": "Card Pool and Hand", "body": "Drawn cards appear in the card pool. Move cards you want to keep into your hand before drawing again, crafting a relic, or organizing your collection.", "short_tip": "Moving cards from the pool to your hand is the basic collection action."},
+	{"id": "loading_tip_craft_en", "min_level": 1, "max_level": 999, "title": "Crafting Relics", "body": "A relic requires five cards from the same series, deck, and color, with one card for each number from 1 to 5. Those five cards are consumed when the relic is crafted.", "short_tip": "Same deck, same color, five different numbers: one relic."},
+	{"id": "loading_tip_vault_en", "min_level": 5, "max_level": 999, "title": "The Vault", "body": "The vault is long-term storage. Cards placed there cannot return to your hand, but complete groups of five can still be crafted inside the vault.", "short_tip": "Use your vault slots carefully; storing a card is a one-way action."},
+	{"id": "loading_tip_rarity_en", "min_level": 10, "max_level": 999, "title": "Card Rarity", "body": "Card colors progress from white, green, blue, purple, orange, and black to the special red tier. Each draw is independent, and exact rates follow the current server configuration.", "short_tip": "Rarer colors are harder to complete, but every collection choice is yours."},
+	{"id": "loading_tip_caps_en", "min_level": 20, "max_level": 999, "title": "Relic Supply Limits", "body": "Higher-rarity relics have global supply limits. The server validates supply and assigns collectible serial numbers when eligible relics are created.", "short_tip": "Advanced relics are long-term collectibles, not routine consumables."},
+	{"id": "loading_tip_history_en", "min_level": 30, "max_level": 999, "title": "A Persistent Collection", "body": "CCR records when a relic was created and who created it. A relic is part of the world's history, even if its owner changes in future systems.", "short_tip": "Relics preserve history as well as rarity."},
+]
+
 var _title_label: Label = null
 var _body_label: Label = null
 var _short_tip_label: Label = null
@@ -44,10 +53,11 @@ func setup_for_level(level: int) -> void:
 	if _title_label == null:
 		_setup_ui()
 	var tip := _pick_tip(level)
-	_title_label.text = str(tip.get("title", "收藏提示"))
+	_title_label.text = str(tip.get("title", "Collection Tip" if Localization.locale == "en" else "收藏提示"))
 	_body_label.text = str(tip.get("body", ""))
 	_short_tip_label.text = str(tip.get("short_tip", ""))
-	set_progress(0.0, "正在进入万象卡域")
+	_body_label.add_theme_font_size_override("font_size", 15 if _body_label.text.length() > 260 else 17)
+	set_progress(0.0, Localization.t("ui.login.loading.entering"))
 
 func set_progress(value: float, status: String = "") -> void:
 	if _progress_bar == null:
@@ -61,7 +71,7 @@ func set_progress(value: float, status: String = "") -> void:
 		_status_label.text = status
 
 func finish() -> void:
-	set_progress(100.0, "准备完成")
+	set_progress(100.0, Localization.t("ui.login.loading.done"))
 	await get_tree().create_timer(0.35).timeout
 
 func _setup_ui() -> void:
@@ -131,10 +141,11 @@ func _setup_ui() -> void:
 	bottom.add_child(_progress_bar)
 
 func _pick_tip(level: int) -> Dictionary:
+	var source: Array[Dictionary] = LOADING_TUTORIAL_TIPS_EN if Localization.locale == "en" else LOADING_TUTORIAL_TIPS
 	var available: Array[Dictionary] = []
-	for tip in LOADING_TUTORIAL_TIPS:
+	for tip in source:
 		if level >= int(tip.get("min_level", 1)) and level <= int(tip.get("max_level", 999)):
 			available.append(tip)
 	if available.is_empty():
-		return LOADING_TUTORIAL_TIPS[0]
+		return source[0]
 	return available[randi() % available.size()]

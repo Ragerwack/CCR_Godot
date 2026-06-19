@@ -14,11 +14,16 @@ var slots: Array[CardSlotUI] = []
 var _btn_free: Button = null
 var _btn_gold: Button = null
 var _btn_gem: Button = null
+var _free_cost_label: Label = null
+var _gold_cost_label: Label = null
+var _gem_cost_label: Label = null
 var _free_countdown_label: Label = null
 var _is_refreshing: bool = false
 var auto_warm_enabled: bool = true
+var _roll_ensure_elapsed: float = 0.0
 
 const DRAW_DROP_STAGGER_PER_CARD: float = 0.0625
+const ROLL_ENSURE_INTERVAL_SECONDS: float = 10.0
 
 func _ready() -> void:
 	setup_ui()
@@ -38,6 +43,17 @@ func _ready() -> void:
 	if DragSystem != null:
 		DragSystem.drag_ended.connect(_on_drag_ended)
 		DragSystem.drag_cancelled.connect(_on_drag_cancelled)
+
+	# 页面建立后立即准备下一条 roll，并周期性补偿网络失败；不再依赖鼠标悬浮。
+	set_process(true)
+	_auto_warm_next_refresh_roll.call_deferred()
+
+func _process(delta: float) -> void:
+	_roll_ensure_elapsed += delta
+	if _roll_ensure_elapsed < ROLL_ENSURE_INTERVAL_SECONDS:
+		return
+	_roll_ensure_elapsed = 0.0
+	_auto_warm_next_refresh_roll()
 
 func setup_ui() -> void:
 	# ── 卡槽网格（8×2 = 16 固定） ──
@@ -75,8 +91,8 @@ func _create_refresh_column() -> void:
 	# 锚点 right=1.0 时 offset 是从右边缘算起的边距，必须为 0 或负数才能可见
 	vbox.offset_left = -120    # -(110 宽 + 10 右边距)
 	vbox.offset_right = -10
-	vbox.offset_top = -70      # 垂直居中: 高 140 → ±70
-	vbox.offset_bottom = 70
+	vbox.offset_top = -108
+	vbox.offset_bottom = 108
 	vbox.add_theme_constant_override("separation", 6)
 	add_child(vbox)
 
@@ -86,6 +102,9 @@ func _create_refresh_column() -> void:
 	_btn_free.mouse_entered.connect(_on_free_refresh_hovered)
 	vbox.add_child(_btn_free)
 
+	_free_cost_label = _create_refresh_cost_label()
+	vbox.add_child(_free_cost_label)
+
 	_btn_gold = Button.new()
 	_btn_gold.text = Localization.t("ui.card_pool.refresh.gold")
 	_btn_gold.custom_minimum_size = Vector2(110, 36)
@@ -93,12 +112,18 @@ func _create_refresh_column() -> void:
 	_btn_gold.mouse_entered.connect(_on_gold_refresh_hovered)
 	vbox.add_child(_btn_gold)
 
+	_gold_cost_label = _create_refresh_cost_label()
+	vbox.add_child(_gold_cost_label)
+
 	_btn_gem = Button.new()
 	_btn_gem.text = Localization.t("ui.card_pool.refresh.gem")
 	_btn_gem.custom_minimum_size = Vector2(110, 36)
 	_btn_gem.pressed.connect(_on_gem_refresh)
 	_btn_gem.mouse_entered.connect(_on_gem_refresh_hovered)
 	vbox.add_child(_btn_gem)
+
+	_gem_cost_label = _create_refresh_cost_label()
+	vbox.add_child(_gem_cost_label)
 
 	_free_countdown_label = Label.new()
 	_free_countdown_label.custom_minimum_size = Vector2(110, 34)
@@ -108,6 +133,15 @@ func _create_refresh_column() -> void:
 	_free_countdown_label.add_theme_color_override("font_color", Color(0.75, 0.85, 1.0, 0.9))
 	vbox.add_child(_free_countdown_label)
 	_update_refresh_buttons()
+
+func _create_refresh_cost_label() -> Label:
+	var label := Label.new()
+	label.custom_minimum_size = Vector2(110, 18)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", 11)
+	label.add_theme_color_override("font_color", Color(0.88, 0.92, 1.0, 0.92))
+	return label
 
 # ── 刷新回调 ──
 func _on_free_refresh() -> void:
@@ -358,6 +392,13 @@ func _update_refresh_buttons() -> void:
 	if _btn_gem != null:
 		_btn_gem.disabled = _is_refreshing or GameManager.player_data.gems < 5
 
+	if _free_cost_label != null:
+		_free_cost_label.text = Localization.t("ui.card_pool.refresh.cost_stamina", [1])
+	if _gold_cost_label != null:
+		_gold_cost_label.text = Localization.t("ui.card_pool.refresh.cost_gold", [_get_gold_refresh_cost()])
+	if _gem_cost_label != null:
+		_gem_cost_label.text = Localization.t("ui.card_pool.refresh.cost_gem", [5])
+
 	if _free_countdown_label == null:
 		return
 	var cooldown := GameManager.get_free_refresh_cooldown()
@@ -368,6 +409,9 @@ func _update_refresh_buttons() -> void:
 		_free_countdown_label.text = ""
 		_free_countdown_label.visible = false
 
+func _get_gold_refresh_cost() -> int:
+	return maxi(1, int(GameManager.player_data.gold * 0.01))
+
 func _format_seconds(seconds: float) -> String:
 	var total := ceili(maxf(0.0, seconds))
 	var minutes := int(total / 60)
@@ -376,6 +420,8 @@ func _format_seconds(seconds: float) -> String:
 
 func _auto_warm_next_refresh_roll() -> void:
 	if not auto_warm_enabled:
+		return
+	if GameManager.player_data.user_id <= 0:
 		return
 	if _is_refreshing:
 		return
@@ -393,4 +439,5 @@ func _preferred_refresh_type_for_warm() -> String:
 		return "gem"
 	if GameManager.player_data.gold > 0:
 		return "gold"
-	return ""
+	# prepare 不扣费。即使当前资源不足，也保留下一次可消费的服务器 roll。
+	return "free"

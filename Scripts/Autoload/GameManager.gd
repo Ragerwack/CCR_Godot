@@ -92,6 +92,8 @@ func apply_login_user(user_data: Dictionary) -> void:
 	player_data.exp = user_data.get("exp", 0)
 	player_data.gold = user_data.get("gold", 100)
 	player_data.gems = user_data.get("gems", 50)
+	player_data.country = str(user_data.get("country", "EARTH"))
+	Localization.apply_account_default(player_data.country, player_data.user_id)
 	free_refresh_count = int(user_data.get("freeRefreshCount", free_refresh_count))
 	newbie_free_refresh_count = int(user_data.get("newbieFreeRefreshCount", newbie_free_refresh_count))
 	_update_free_refresh_max()
@@ -112,6 +114,7 @@ func apply_profile(profile: Dictionary) -> void:
 	player_data.gold = profile.get("gold", player_data.gold)
 	player_data.gems = profile.get("gems", player_data.gems)
 	player_data.combat_power = profile.get("combatPower", player_data.combat_power)
+	player_data.country = str(profile.get("country", player_data.country))
 
 	# 免费刷新
 	var fc = profile.get("freeRefreshCount", null)
@@ -243,7 +246,7 @@ func sync_all_from_server() -> void:
 
 ## 登录后首屏同步：只加载进入抽卡页必需的数据。
 ## 保险箱和博物馆在玩家进入对应页面时再加载，避免阻塞首屏。
-func sync_initial_card_pool_from_server() -> void:
+func sync_initial_card_pool_from_server() -> Dictionary:
 	var started := Time.get_ticks_msec()
 	FileLogger.log("开始首屏同步 (profile + level + pool + hand 并行)")
 	FileLogger.perf("login_initial_sync_start")
@@ -275,8 +278,14 @@ func sync_initial_card_pool_from_server() -> void:
 	if results.get("pool", {}).get("success", false) and results.get("hand", {}).get("success", false):
 		mark_pool_hand_layout_clean("initial_sync")
 
-	FileLogger.perf("login_initial_sync_done", {"total_ms": Time.get_ticks_msec() - started})
+	var sync_success := true
+	sync_success = sync_success and results.get("profile", {}).get("success", false)
+	sync_success = sync_success and results.get("level", {}).get("success", false)
+	sync_success = sync_success and results.get("pool", {}).get("success", false)
+	sync_success = sync_success and results.get("hand", {}).get("success", false)
+	FileLogger.perf("login_initial_sync_done", {"total_ms": Time.get_ticks_msec() - started, "success": sync_success})
 	data_synced.emit()
+	return {"success": sync_success, "results": results}
 
 func sync_optional_login_data_background(include_config: bool = true) -> void:
 	if _optional_login_sync_in_flight or not ApiClient.is_logged_in():

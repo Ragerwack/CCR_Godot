@@ -18,6 +18,7 @@ var pool_slots: int = 8
 var vault_slots: int = 2
 var nickname: String = ""
 var combat_power: int = 0
+var country: String = "EARTH"
 
 # 卡池（当前展示的卡）
 var pool_cards: Array = []

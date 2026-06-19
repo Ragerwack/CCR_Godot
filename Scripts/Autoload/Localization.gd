@@ -1,6 +1,9 @@
 extends Node
 
-const DEFAULT_LOCALE := "zh-CN"
+signal locale_changed(locale: String)
+
+const DEFAULT_LOCALE := "en"
+const SUPPORTED_LOCALES := ["en", "zh-CN"]
 
 var locale: String = DEFAULT_LOCALE
 
@@ -11,6 +14,26 @@ var _texts := {
 		"ui.login.password": "密码",
 		"ui.login.loading": "加载中...",
 		"ui.login.syncing": "同步数据中...",
+		"ui.player.default_name": "玩家",
+		"ui.color.white": "白",
+		"ui.color.green": "绿",
+		"ui.color.blue": "蓝",
+		"ui.color.purple": "紫",
+		"ui.color.orange": "橙",
+		"ui.color.black": "黑",
+		"ui.color.red": "红",
+		"error.draw.translating": "抽卡随机数组翻译失败",
+		"error.draw.reconciling": "网络抖动，抽卡结果正在同步确认",
+		"error.draw.pending": "上一次抽卡仍在确认中",
+		"error.draw.no_stamina": "体力不足",
+		"error.card.not_in_pool": "卡牌不在当前卡池中",
+		"error.card.hand_full": "手牌槽已满",
+		"error.card.invalid_hand_slot": "手牌槽位无效",
+		"error.card.not_in_hand_slot": "卡牌不在此手牌槽位",
+		"error.card.pool_full": "卡池已满",
+		"error.synthesis.need_five": "需要恰好5张卡牌",
+		"error.synthesis.duplicate": "卡牌选择不能重复",
+		"error.synthesis.sync": "卡牌位置同步失败：%s",
 		"ui.login.title.login": "登录",
 		"ui.login.title.register": "注册",
 		"ui.login.submit.login": "登录",
@@ -19,6 +42,8 @@ var _texts := {
 		"ui.login.switch.to_login": "已有账号？登录",
 		"ui.login.error.missing_username_password": "用户名和密码不能为空",
 		"ui.login.error.missing_email": "邮箱不能为空",
+		"ui.login.country": "国籍",
+		"ui.login.country.hint": "国籍（默认：地球）",
 		"ui.login.prepare.title": "登录准备",
 		"ui.login.prepare.waiting": "等待开始",
 		"ui.login.prepare.failed": "登录准备失败",
@@ -51,10 +76,18 @@ var _texts := {
 		"ui.login.prepare.detail.session_saved": "会话已保存",
 		"ui.login.prepare.detail.background": "后台继续加载",
 		"ui.login.prepare.detail.no_saved_session": "本地没有可恢复会话",
+		"ui.login.loading.entering": "正在进入万象卡域",
+		"ui.login.loading.collection": "正在准备收藏空间",
+		"ui.login.loading.cards": "正在整理卡池与手牌",
+		"ui.login.loading.online": "正在建立在线状态",
+		"ui.login.loading.done": "准备完成",
 		"ui.card_pool.refresh.free": "🔄 体力抽卡",
 		"ui.card_pool.refresh.free_newbie": "🔄 赠送体力 %d",
 		"ui.card_pool.refresh.free_regular": "🔄 体力 %d",
 		"ui.card_pool.refresh.next_free": "下次体力 %s",
+		"ui.card_pool.refresh.cost_stamina": "下次花费：%d 体力",
+		"ui.card_pool.refresh.cost_gold": "下次花费：%d 金币",
+		"ui.card_pool.refresh.cost_gem": "下次花费：%d 宝石",
 		"ui.card_pool.refresh.gold": "💛 金币刷新",
 		"ui.card_pool.refresh.gem": "💎 宝石刷新",
 		"ui.menu.title": "菜单",
@@ -63,6 +96,9 @@ var _texts := {
 		"ui.menu.mute": "🔊 静音",
 		"ui.menu.muted": "🔇 已静音",
 		"ui.menu.logout": "🚪 登出",
+		"ui.menu.language": "语言",
+		"ui.language.zh_cn": "简体中文",
+		"ui.language.en": "English",
 		"ui.button.back": "返回",
 		"ui.hand.page": "◀▶ 翻页",
 		"ui.hand.synthesize": "⚗ 合成",
@@ -81,6 +117,7 @@ var _texts := {
 		"ui.vault.unlock_gold_cost": "本次费用：%d 金币",
 		"ui.vault.unlock_gem": "宝石解锁卡槽",
 		"ui.vault.unlock_gem_cost": "本次费用：%d 宝石",
+		"ui.vault.unlock_cost_loading": "费用同步中",
 		"ui.synthesis.title": "合成圣物 [选择5张同系列/同卡组/同色卡牌]",
 		"ui.synthesis.button.count": "合成 (%d/5)",
 		"ui.synthesis.button.valid": "合成 (5/5) ✓",
@@ -111,6 +148,26 @@ var _texts := {
 		"ui.login.password": "Password",
 		"ui.login.loading": "Loading...",
 		"ui.login.syncing": "Syncing...",
+		"ui.player.default_name": "Player",
+		"ui.color.white": "White",
+		"ui.color.green": "Green",
+		"ui.color.blue": "Blue",
+		"ui.color.purple": "Purple",
+		"ui.color.orange": "Orange",
+		"ui.color.black": "Black",
+		"ui.color.red": "Red",
+		"error.draw.translating": "Could not translate the draw roll",
+		"error.draw.reconciling": "Network instability detected; confirming the draw result",
+		"error.draw.pending": "The previous draw is still being confirmed",
+		"error.draw.no_stamina": "Not enough stamina",
+		"error.card.not_in_pool": "This card is not in the current pool",
+		"error.card.hand_full": "Your hand is full",
+		"error.card.invalid_hand_slot": "Invalid hand slot",
+		"error.card.not_in_hand_slot": "The card is not in this hand slot",
+		"error.card.pool_full": "The card pool is full",
+		"error.synthesis.need_five": "Exactly five cards are required",
+		"error.synthesis.duplicate": "The same card cannot be selected twice",
+		"error.synthesis.sync": "Could not sync card positions: %s",
 		"ui.login.title.login": "Login",
 		"ui.login.title.register": "Register",
 		"ui.login.submit.login": "Login",
@@ -119,6 +176,8 @@ var _texts := {
 		"ui.login.switch.to_login": "Back to login",
 		"ui.login.error.missing_username_password": "Username and password are required",
 		"ui.login.error.missing_email": "Email is required",
+		"ui.login.country": "Nationality",
+		"ui.login.country.hint": "Nationality (default: Earth)",
 		"ui.login.prepare.title": "Login Preparation",
 		"ui.login.prepare.waiting": "Waiting",
 		"ui.login.prepare.failed": "Login preparation failed",
@@ -151,10 +210,18 @@ var _texts := {
 		"ui.login.prepare.detail.session_saved": "Session saved",
 		"ui.login.prepare.detail.background": "Continuing in background",
 		"ui.login.prepare.detail.no_saved_session": "No saved session found",
+		"ui.login.loading.entering": "Entering Cosmic Card Realm",
+		"ui.login.loading.collection": "Preparing collection space",
+		"ui.login.loading.cards": "Organizing card pool and hand",
+		"ui.login.loading.online": "Connecting online status",
+		"ui.login.loading.done": "Ready",
 		"ui.card_pool.refresh.free": "🔄 Stamina",
 		"ui.card_pool.refresh.free_newbie": "🔄 Gift %d",
 		"ui.card_pool.refresh.free_regular": "🔄 Stamina %d",
 		"ui.card_pool.refresh.next_free": "Next stamina %s",
+		"ui.card_pool.refresh.cost_stamina": "Next cost: %d stamina",
+		"ui.card_pool.refresh.cost_gold": "Next cost: %d gold",
+		"ui.card_pool.refresh.cost_gem": "Next cost: %d gems",
 		"ui.card_pool.refresh.gold": "💛 Gold",
 		"ui.card_pool.refresh.gem": "💎 Gems",
 		"ui.menu.title": "Menu",
@@ -163,6 +230,9 @@ var _texts := {
 		"ui.menu.mute": "🔊 Mute",
 		"ui.menu.muted": "🔇 Muted",
 		"ui.menu.logout": "🚪 Logout",
+		"ui.menu.language": "Language",
+		"ui.language.zh_cn": "简体中文",
+		"ui.language.en": "English",
 		"ui.button.back": "Back",
 		"ui.hand.page": "◀▶ Page",
 		"ui.hand.synthesize": "⚗ Craft",
@@ -181,6 +251,7 @@ var _texts := {
 		"ui.vault.unlock_gold_cost": "Cost: %d gold",
 		"ui.vault.unlock_gem": "Unlock with Gems",
 		"ui.vault.unlock_gem_cost": "Cost: %d gems",
+		"ui.vault.unlock_cost_loading": "Loading cost",
 		"ui.synthesis.title": "Craft Relic [choose 5 matching cards]",
 		"ui.synthesis.button.count": "Craft (%d/5)",
 		"ui.synthesis.button.valid": "Craft (5/5) ✓",
@@ -206,6 +277,32 @@ var _texts := {
 		"ui.deck_collection.relic_count": "Crafted x%d",
 	},
 }
+
+func _ready() -> void:
+	var saved_locale := str(Config.get_value("localization", "last_locale", DEFAULT_LOCALE))
+	locale = saved_locale if saved_locale in SUPPORTED_LOCALES else DEFAULT_LOCALE
+
+func set_locale(new_locale: String, persist_manual: bool = false, user_id: int = 0) -> void:
+	if new_locale not in SUPPORTED_LOCALES:
+		return
+	var changed := locale != new_locale
+	locale = new_locale
+	Config.set_value("localization", "last_locale", locale)
+	if persist_manual and user_id > 0:
+		Config.set_value("localization", "user_%d" % user_id, locale)
+	if changed:
+		locale_changed.emit(locale)
+
+func apply_account_default(country_code: String, user_id: int) -> void:
+	var preference_key := "user_%d" % user_id
+	var saved_preference := str(Config.get_value("localization", preference_key, ""))
+	if saved_preference in SUPPORTED_LOCALES:
+		set_locale(saved_preference)
+		return
+	set_locale("zh-CN" if country_code.to_upper() == "CN" else "en")
+
+func get_http_locale() -> String:
+	return locale
 
 func t(key: String, params: Array = []) -> String:
 	var table: Dictionary = _texts.get(locale, _texts[DEFAULT_LOCALE])

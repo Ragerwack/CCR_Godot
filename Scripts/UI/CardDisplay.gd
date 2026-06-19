@@ -42,6 +42,7 @@ var hover_uses_slot_bounds: bool = true
 static var CARD_SIZE: Vector2 = Vector2(107, 149)
 static var _shared_color_image_map: Dictionary = {}
 static var _texture_cache: Dictionary = {}
+static var _rounded_mask_shader: Shader = null
 const HOVER_SCALE: float = 2.0
 const DROP_TARGET_SCALE: float = 1.08
 const HOVER_TRANSITION_DURATION: float = 0.3
@@ -52,6 +53,26 @@ const ART_PATH_PREFIX: String = "res://Resources/Cards/"
 const CARD_TEXT_COLOR: Color = Color(0.294118, 0.333333, 0.388235, 1.0)
 const INFO_PANEL_BORDER_COLOR: Color = Color(0.850980, 0.866667, 0.898039, 1.0)
 const INFO_PANEL_BG_COLOR: Color = Color(0.972549, 0.976471, 0.984314, 1.0)
+const CARD_CORNER_RADIUS_RATIO: float = 1.0 / 13.0
+const CARD_ROUNDED_MASK_SHADER: String = """
+shader_type canvas_item;
+
+uniform float aspect_ratio = 0.718;
+uniform float radius_ratio = 0.0769230769;
+
+void fragment() {
+	vec4 source = texture(TEXTURE, UV) * COLOR;
+	vec2 point = vec2(UV.x - 0.5, (UV.y - 0.5) / aspect_ratio);
+	vec2 half_size = vec2(0.5, 0.5 / aspect_ratio);
+	vec2 distance_to_corner = abs(point) - half_size + vec2(radius_ratio);
+	float signed_distance = length(max(distance_to_corner, vec2(0.0)))
+		+ min(max(distance_to_corner.x, distance_to_corner.y), 0.0)
+		- radius_ratio;
+	float edge = max(fwidth(signed_distance), 0.0005);
+	source.a *= 1.0 - smoothstep(-edge, edge, signed_distance);
+	COLOR = source;
+}
+"""
 
 static func configure_card_size(card_size: Vector2) -> void:
 	CARD_SIZE = card_size
@@ -61,21 +82,25 @@ func _ready() -> void:
 	setup_ui()
 
 func setup_ui() -> void:
+	clip_contents = true
 	_card_bg = ColorRect.new()
 	_card_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_card_bg.color = Color(0.2, 0.2, 0.25, 1.0)
+	_card_bg.material = _new_rounded_mask_material(CARD_SIZE)
 	add_child(_card_bg)
 
 	_color_border = TextureRect.new()
 	_color_border.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_color_border.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	_color_border.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_color_border.material = _new_rounded_mask_material(CARD_SIZE)
 	_color_border.visible = show_color_border
 	add_child(_color_border)
 
 	_fallback_color_rect = ColorRect.new()
 	_fallback_color_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_fallback_color_rect.color = Color(1, 1, 1, 0.1)
+	_fallback_color_rect.material = _new_rounded_mask_material(CARD_SIZE)
 	_fallback_color_rect.visible = false
 	add_child(_fallback_color_rect)
 
@@ -169,6 +194,16 @@ func setup_ui() -> void:
 		DragSystem.drag_started.connect(_on_global_drag_started)
 		DragSystem.drag_ended.connect(_on_global_drag_ended)
 		DragSystem.drag_cancelled.connect(_on_global_drag_cancelled)
+
+static func _new_rounded_mask_material(card_size: Vector2) -> ShaderMaterial:
+	if _rounded_mask_shader == null:
+		_rounded_mask_shader = Shader.new()
+		_rounded_mask_shader.code = CARD_ROUNDED_MASK_SHADER
+	var material := ShaderMaterial.new()
+	material.shader = _rounded_mask_shader
+	material.set_shader_parameter("aspect_ratio", card_size.x / maxf(card_size.y, 1.0))
+	material.set_shader_parameter("radius_ratio", CARD_CORNER_RADIUS_RATIO)
+	return material
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
@@ -533,6 +568,7 @@ func _create_drag_preview(card_offset: Vector2) -> Control:
 	bg.position = Vector2(0, 0)
 	bg.size = CARD_SIZE
 	bg.color = Color(0.2, 0.2, 0.25, 1.0)
+	bg.material = _new_rounded_mask_material(CARD_SIZE)
 	card_layer.add_child(bg)
 
 	if _art_image.texture != null:
@@ -554,6 +590,7 @@ func _create_drag_preview(card_offset: Vector2) -> Control:
 		border.texture = _color_border.texture
 		border.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 		border.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		border.material = _new_rounded_mask_material(CARD_SIZE)
 		border.modulate = Color(1, 1, 1, 1)
 		card_layer.add_child(border)
 
