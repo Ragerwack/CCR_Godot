@@ -5,6 +5,7 @@ signal card_clicked(card: CardInfo, index: int)
 signal card_double_clicked(card: CardInfo, index: int)
 signal card_drag_started(card: CardInfo, index: int)
 signal card_drag_ended(card: CardInfo, index: int)
+signal card_hover_changed(display: CardDisplay, active: bool)
 
 @export var show_color_border: bool = true
 @export var show_card_name: bool = true
@@ -38,6 +39,7 @@ var _drag_anchor_ratio: Vector2 = Vector2(0.5, 0.5)
 var _has_drag_anchor: bool = false
 var _scale_tween: Tween = null
 var hover_uses_slot_bounds: bool = true
+var hover_scale_enabled: bool = true
 
 static var CARD_SIZE: Vector2 = Vector2(107, 149)
 static var _shared_color_image_map: Dictionary = {}
@@ -230,6 +232,9 @@ func _on_mouse_entered() -> void:
 		return
 	if card == null:
 		return
+	card_hover_changed.emit(self, true)
+	if not hover_scale_enabled:
+		return
 	_hovered = true
 	_apply_hover_transform()
 
@@ -239,6 +244,8 @@ func _on_mouse_exited() -> void:
 		if parent != null and parent.has_method("set_slot_hovered"):
 			parent.set_slot_hovered(false)
 		return
+	if card != null:
+		card_hover_changed.emit(self, false)
 	_hovered = false
 	_apply_hover_transform()
 

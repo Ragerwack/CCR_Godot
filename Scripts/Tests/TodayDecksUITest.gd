@@ -66,11 +66,31 @@ func _ready() -> void:
 		if absf(first_card.custom_minimum_size.x - expected_size.x) > 0.1 or absf(first_card.custom_minimum_size.y - expected_size.y) > 0.1:
 			_fail("today deck card size is not same as draw card size")
 			return
-		if first_card.mouse_filter != Control.MOUSE_FILTER_STOP or first_card.hover_uses_slot_bounds:
+		if first_card.mouse_filter != Control.MOUSE_FILTER_STOP or first_card.hover_uses_slot_bounds or first_card.hover_scale_enabled:
 			_fail("today deck card hover preview is not enabled")
 			return
 
 	var first_row_cards := (rows[0].find_child("TodayDeckCards", true, false) as HBoxContainer).find_children("Card*", "CardDisplay", false, false)
+	var today_ui := _find_today_decks_ui(center_area)
+	if today_ui == null:
+		_fail("today decks ui missing")
+		return
+	var hover_card := first_row_cards[0] as CardDisplay
+	today_ui._on_card_hover_changed(hover_card, true)
+	await get_tree().process_frame
+	if today_ui._hover_preview == null:
+		_fail("today deck hover preview missing")
+		return
+	var cards_box := hover_card.get_parent() as Control
+	var blank_left := cards_box.global_position.x + cards_box.size.x + 18.0
+	if today_ui._hover_preview.global_position.x + today_ui._hover_preview.size.x * 0.5 <= blank_left:
+		_fail("today deck hover preview is not centered in right blank area")
+		return
+	today_ui._on_card_hover_changed(hover_card, false)
+	if today_ui._hover_preview != null:
+		_fail("today deck hover preview not hidden")
+		return
+
 	var expected_colors := [
 		CardColor.ColorType.WHITE,
 		CardColor.ColorType.WHITE,
@@ -115,6 +135,12 @@ func _mock_draw_key() -> Dictionary:
 		"version": 1,
 		"decks": decks,
 	}
+
+func _find_today_decks_ui(root: Node) -> Node:
+	for child in root.get_children():
+		if child.get_script() == load("res://Scripts/UI/TodayDecksUI.gd"):
+			return child
+	return null
 
 func _fail(message: String) -> void:
 	push_error("TODAY_DECKS_UI " + message)

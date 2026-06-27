@@ -96,6 +96,9 @@ func apply_login_user(user_data: Dictionary) -> void:
 	Localization.apply_account_default(player_data.country, player_data.user_id)
 	free_refresh_count = int(user_data.get("freeRefreshCount", free_refresh_count))
 	newbie_free_refresh_count = int(user_data.get("newbieFreeRefreshCount", newbie_free_refresh_count))
+	var last_free_time = user_data.get("lastFreeRefreshTime", null)
+	if last_free_time is String:
+		last_free_refresh_time_unix = _parse_server_time_unix(last_free_time)
 	_update_free_refresh_max()
 	_update_free_refresh_cooldown_from_state()
 	player_data.changed.emit()

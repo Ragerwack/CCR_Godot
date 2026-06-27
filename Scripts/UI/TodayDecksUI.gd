@@ -19,6 +19,8 @@ const COLOR_API_NAMES: Array[String] = ["white", "green", "blue", "purple", "ora
 
 var _content: VBoxContainer = null
 var _status_label: Label = null
+var _hover_preview: CardDisplay = null
+var _hover_preview_source: CardDisplay = null
 
 func _ready() -> void:
 	_build_shell()
@@ -74,6 +76,7 @@ func _ensure_draw_key() -> void:
 func _render() -> void:
 	if _content == null:
 		return
+	_hide_hover_preview()
 	for child in _content.get_children():
 		_content.remove_child(child)
 		child.queue_free()
@@ -123,11 +126,77 @@ func _configure_card_view(card_view: CardDisplay, card_size: Vector2, card: Card
 	card_view.size = card_size
 	card_view.is_draggable = false
 	card_view.hover_uses_slot_bounds = false
+	card_view.hover_scale_enabled = false
 	card_view.mouse_filter = Control.MOUSE_FILTER_STOP
+	if not card_view.card_hover_changed.is_connected(_on_card_hover_changed):
+		card_view.card_hover_changed.connect(_on_card_hover_changed)
 	if card != null:
 		card_view.set_card(card, card_index)
 	else:
 		card_view.clear()
+
+func _exit_tree() -> void:
+	_hide_hover_preview()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and _hover_preview != null:
+		_layout_hover_preview()
+
+func _on_card_hover_changed(card_view: CardDisplay, active: bool) -> void:
+	if active:
+		_show_hover_preview(card_view)
+	elif card_view == _hover_preview_source:
+		_hide_hover_preview()
+
+func _show_hover_preview(card_view: CardDisplay) -> void:
+	if card_view == null or card_view.card == null or get_tree() == null:
+		return
+	if DragSystem != null and DragSystem.is_dragging():
+		return
+	_hide_hover_preview()
+	_hover_preview_source = card_view
+	_hover_preview = CardDisplay.new()
+	_hover_preview.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_hover_preview.z_index = 4090
+	_hover_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	get_tree().root.add_child(_hover_preview)
+	_layout_hover_preview()
+	_hover_preview.set_card(card_view.card, card_view.card_index)
+	_hover_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func _layout_hover_preview() -> void:
+	if _hover_preview == null or _hover_preview_source == null:
+		return
+	var viewport_size := get_viewport_rect().size
+	var preview_height := viewport_size.y * 0.5
+	var preview_width := preview_height * (CardSlotUI.SLOT_SIZE.x / CardSlotUI.SLOT_SIZE.y)
+	var blank_rect := _right_blank_preview_rect()
+	var center := blank_rect.get_center() if blank_rect.size.x > 0.0 and blank_rect.size.y > 0.0 else Vector2(viewport_size.x * 0.75, viewport_size.y * 0.5)
+	var preview_pos := Vector2(
+		clampf(center.x - preview_width * 0.5, 0.0, maxf(0.0, viewport_size.x - preview_width)),
+		clampf(center.y - preview_height * 0.5, 0.0, maxf(0.0, viewport_size.y - preview_height))
+	)
+	_hover_preview.position = preview_pos
+	_hover_preview.size = Vector2(preview_width, preview_height)
+	_hover_preview.custom_minimum_size = _hover_preview.size
+
+func _right_blank_preview_rect() -> Rect2:
+	var viewport_size := get_viewport_rect().size
+	var cards_box := _hover_preview_source.get_parent() as Control if _hover_preview_source != null else null
+	if cards_box == null:
+		return Rect2()
+	var cards_rect := Rect2(cards_box.global_position, cards_box.size)
+	var left := cards_rect.end.x + 18.0
+	var right := viewport_size.x - 24.0
+	if right <= left:
+		return Rect2()
+	return Rect2(Vector2(left, 0.0), Vector2(right - left, viewport_size.y))
+
+func _hide_hover_preview() -> void:
+	if _hover_preview != null:
+		_hover_preview.queue_free()
+	_hover_preview = null
+	_hover_preview_source = null
 
 func _build_deck_info(row_index: int, deck_data: Dictionary) -> VBoxContainer:
 	var info := VBoxContainer.new()

@@ -366,14 +366,9 @@ func _show_hover_preview() -> void:
 	var viewport_size := get_viewport_rect().size
 	var preview_height := viewport_size.y * 0.5
 	var preview_width := preview_height * (SLOT_SIZE.x / SLOT_SIZE.y)
-	var mid_x := viewport_size.x * 0.5
-	var col := slot_index % 8
-	var preview_x := 0.0
-	if col < 4:
-		preview_x = mid_x + maxf(0.0, (mid_x - preview_width) * 0.5)
-	else:
-		preview_x = maxf(0.0, (mid_x - preview_width) * 0.5)
-	var preview_y := maxf(0.0, (viewport_size.y - preview_height) * 0.5)
+	var preview_center := _hover_preview_center(viewport_size, Vector2(preview_width, preview_height))
+	var preview_x := clampf(preview_center.x - preview_width * 0.5, 0.0, maxf(0.0, viewport_size.x - preview_width))
+	var preview_y := clampf(preview_center.y - preview_height * 0.5, 0.0, maxf(0.0, viewport_size.y - preview_height))
 
 	_hover_preview = CardDisplay.new()
 	_hover_preview.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -385,6 +380,68 @@ func _show_hover_preview() -> void:
 	get_tree().root.add_child(_hover_preview)
 	_hover_preview.set_card(card_display.card, slot_data_index)
 	_hover_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func _hover_preview_center(viewport_size: Vector2, preview_size: Vector2) -> Vector2:
+	if area_type == "pool" or area_type == "hand":
+		var is_left_group := slot_index % 8 < 4
+		var target_rect := _visible_pool_hand_side_rect(not is_left_group)
+		if target_rect.size.x > 0.0 and target_rect.size.y > 0.0:
+			return target_rect.get_center()
+
+	if area_type == "vault":
+		var target_rect := _visible_slot_group_rect("vault")
+		if target_rect.size.x > 0.0 and target_rect.size.y > 0.0:
+			var preview_half := preview_size.x * 0.5
+			var left_space_center := maxf(preview_half, target_rect.position.x * 0.5)
+			var right_space_center := minf(viewport_size.x - preview_half, target_rect.end.x + maxf(0.0, viewport_size.x - target_rect.end.x) * 0.5)
+			var center_x := right_space_center if global_position.x < viewport_size.x * 0.5 else left_space_center
+			return Vector2(center_x, viewport_size.y * 0.5)
+
+	var mid_x := viewport_size.x * 0.5
+	if global_position.x < mid_x:
+		return Vector2(mid_x + mid_x * 0.5, viewport_size.y * 0.5)
+	return Vector2(mid_x * 0.5, viewport_size.y * 0.5)
+
+func _visible_pool_hand_side_rect(left_group: bool) -> Rect2:
+	var found := false
+	var union_rect := Rect2()
+	for node in get_tree().get_nodes_in_group("card_slots"):
+		var slot := node as CardSlotUI
+		if slot == null or slot == self:
+			continue
+		if not slot.visible or not slot.is_inside_tree():
+			continue
+		if not ["pool", "hand"].has(slot.area_type):
+			continue
+		var slot_is_left := slot.slot_index % 8 < 4
+		if slot_is_left != left_group:
+			continue
+		var rect := Rect2(slot.global_position, slot.size)
+		if not found:
+			union_rect = rect
+			found = true
+		else:
+			union_rect = union_rect.merge(rect)
+	return union_rect if found else Rect2()
+
+func _visible_slot_group_rect(target_area: String) -> Rect2:
+	var found := false
+	var union_rect := Rect2()
+	for node in get_tree().get_nodes_in_group("card_slots"):
+		var slot := node as CardSlotUI
+		if slot == null or slot == self:
+			continue
+		if not slot.visible or not slot.is_inside_tree():
+			continue
+		if slot.area_type != target_area:
+			continue
+		var rect := Rect2(slot.global_position, slot.size)
+		if not found:
+			union_rect = rect
+			found = true
+		else:
+			union_rect = union_rect.merge(rect)
+	return union_rect if found else Rect2()
 
 func _hide_hover_preview() -> void:
 	if _hover_preview != null:
