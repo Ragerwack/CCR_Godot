@@ -61,6 +61,18 @@ func _ready() -> void:
 		return _fail("vault_auto_synthesis_indices_missing")
 	if vault_ui._synthesize_btn == null or vault_ui._synthesize_btn.disabled:
 		return _fail("vault_synthesis_button_disabled")
+	if vault_ui._relic_preview == null or not vault_ui._relic_preview.visible:
+		return _fail("relic_preview_missing")
+	if vault_ui._relic_preview.get_slot_count() != 5:
+		return _fail("relic_slot_count_wrong")
+	for color_name in ["green", "blue", "purple", "orange", "black", "red"]:
+		for card in GameManager.player_data.vault_cards:
+			card.color = CardColor.from_string(color_name)
+		vault_ui._update_synthesize_button()
+		if not vault_ui._relic_preview.visible:
+			return _fail(color_name + "_relic_preview_missing")
+		if vault_ui._relic_preview.get_relic_color() != CardColor.from_string(color_name):
+			return _fail(color_name + "_relic_preview_color_wrong")
 
 	print("VAULT_REORDER ok")
 	get_tree().quit(0)

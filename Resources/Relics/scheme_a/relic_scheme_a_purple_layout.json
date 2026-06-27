@@ -1,0 +1,101 @@
+{
+  "rarity": "purple",
+  "source": "res://Resources/Relics/scheme_a/relic_scheme_a_purple_source.png",
+  "frame": "res://Resources/Relics/scheme_a/relic_scheme_a_purple_frame.png",
+  "canvas": {
+    "width": 941,
+    "height": 1672
+  },
+  "pivot": {
+    "x_ratio": 0.5,
+    "y_ratio": 0.5
+  },
+  "slots": [
+    {
+      "id": 1,
+      "x_ratio": 0.3687566418703507,
+      "y_ratio": 0.159688995215311,
+      "width_ratio": 0.2635494155154091,
+      "height_ratio": 0.08074162679425838,
+      "center_x_ratio": 0.5005313496280552,
+      "center_y_ratio": 0.2000598086124402,
+      "mask_shape": "octagon",
+      "bevel_x_ratio_to_width": 0.06048387096774194,
+      "bevel_y_ratio_to_height": 0.1111111111111111
+    },
+    {
+      "id": 2,
+      "x_ratio": 0.3687566418703507,
+      "y_ratio": 0.2631578947368421,
+      "width_ratio": 0.2635494155154091,
+      "height_ratio": 0.07894736842105263,
+      "center_x_ratio": 0.5005313496280552,
+      "center_y_ratio": 0.3026315789473684,
+      "mask_shape": "octagon",
+      "bevel_x_ratio_to_width": 0.06048387096774194,
+      "bevel_y_ratio_to_height": 0.11363636363636363
+    },
+    {
+      "id": 3,
+      "x_ratio": 0.3687566418703507,
+      "y_ratio": 0.3672248803827751,
+      "width_ratio": 0.2635494155154091,
+      "height_ratio": 0.07894736842105263,
+      "center_x_ratio": 0.5005313496280552,
+      "center_y_ratio": 0.40669856459330145,
+      "mask_shape": "octagon",
+      "bevel_x_ratio_to_width": 0.06048387096774194,
+      "bevel_y_ratio_to_height": 0.11363636363636363
+    },
+    {
+      "id": 4,
+      "x_ratio": 0.3687566418703507,
+      "y_ratio": 0.4706937799043062,
+      "width_ratio": 0.2635494155154091,
+      "height_ratio": 0.08074162679425838,
+      "center_x_ratio": 0.5005313496280552,
+      "center_y_ratio": 0.5110645933014354,
+      "mask_shape": "octagon",
+      "bevel_x_ratio_to_width": 0.06048387096774194,
+      "bevel_y_ratio_to_height": 0.1111111111111111
+    },
+    {
+      "id": 5,
+      "x_ratio": 0.3687566418703507,
+      "y_ratio": 0.5741626794258373,
+      "width_ratio": 0.2635494155154091,
+      "height_ratio": 0.0819377990430622,
+      "center_x_ratio": 0.5005313496280552,
+      "center_y_ratio": 0.6151315789473684,
+      "mask_shape": "octagon",
+      "bevel_x_ratio_to_width": 0.06048387096774194,
+      "bevel_y_ratio_to_height": 0.10948905109489052
+    }
+  ],
+  "label_layout": {
+    "series": {
+      "x_ratio": 0.35,
+      "y_ratio": 0.711,
+      "width_ratio": 0.3,
+      "height_ratio": 0.035
+    },
+    "name": {
+      "x_ratio": 0.3,
+      "y_ratio": 0.751,
+      "width_ratio": 0.4,
+      "height_ratio": 0.05
+    },
+    "count": {
+      "x_ratio": 0.34,
+      "y_ratio": 0.807,
+      "width_ratio": 0.32,
+      "height_ratio": 0.04
+    }
+  },
+  "rendering": {
+    "slot_z_index": 0,
+    "frame_z_index": 10,
+    "slot_antialias_px": 3
+  },
+  "source_file": "relic_scheme_a_purple_source.png"
+}

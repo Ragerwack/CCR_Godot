@@ -2,6 +2,7 @@ extends Node
 
 # CCR 数据层
 const _CCRData = preload("res://Scripts/Data/CCRData.gd")
+const THUMBNAIL_CACHE = preload("res://Scripts/UI/MuseumRelicThumbnailCache.gd")
 
 signal deck_updated(deck: Deck)
 signal synthesis_ready(deck: Deck, cards: Array[CardInfo])
@@ -59,6 +60,7 @@ func synthesize(cards: Array[CardInfo]) -> bool:
 	for i in range(1, 6):
 		deck.add_card_number(i)
 	player_decks.append(deck)
+	call_deferred("_prewarm_museum_thumbnail", deck)
 	GameManager.on_exp_gained(exp_reward)
 	synthesis_completed.emit(exp_reward)
 	return true
@@ -66,11 +68,15 @@ func synthesize(cards: Array[CardInfo]) -> bool:
 # 由服务端合成结果添加套牌
 func add_synthesized_deck(deck_data: Dictionary) -> void:
 	var deck_id = deck_data.get("id", "")
+	var deck_def_id := 0
+	var deck_def_key := ""
 	var series_name = ""
 	var deck_name = ""
 
 	var dd = deck_data.get("deck_def", {})
 	if dd is Dictionary:
+		deck_def_id = int(dd.get("id", 0))
+		deck_def_key = str(dd.get("name", ""))
 		deck_name = str(dd.get("description", dd.get("name", "")))
 
 	var s = deck_data.get("series", {})
@@ -81,11 +87,14 @@ func add_synthesized_deck(deck_data: Dictionary) -> void:
 	var combat_power = deck_data.get("combat_power", 0)
 
 	var deck = _CCRData.Deck.new(str(deck_id), series_name, deck_name, color)
+	deck.deck_def_id = deck_def_id
+	deck.deck_def_key = deck_def_key
 	deck.combat_power = combat_power
 	for i in range(1, 6):
 		deck.add_card_number(i)
 	player_decks.append(deck)
 	deck_updated.emit(deck)
+	call_deferred("_prewarm_museum_thumbnail", deck)
 
 func get_player_decks() -> Array[Deck]:
 	return player_decks
@@ -99,3 +108,15 @@ func get_deck_count_by_color(color: CardColor.ColorType) -> int:
 		if d.color == color:
 			count += 1
 	return count
+
+
+func _prewarm_museum_thumbnail(deck: Deck) -> void:
+	if deck == null:
+		return
+	THUMBNAIL_CACHE.prewarm_thumbnail(
+		int(deck.color),
+		deck.deck_def_key,
+		deck.deck_def_id,
+		deck.series_name,
+		deck.deck_name
+	)

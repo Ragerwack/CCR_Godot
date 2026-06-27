@@ -7,8 +7,13 @@ const CARDS_PER_ROW: int = 6
 const CARD_WIDTH: float = 150.0
 const CARD_HEIGHT: float = 200.0
 const CARD_SPACING: float = 24.0
+const CARD_HORIZONTAL_SPACING: float = CARD_SPACING * 0.5
 const SECTION_SPACING: float = 20.0
 const HEADER_HEIGHT: float = 32.0
+const VISUAL_RELIC_LABEL_HEIGHT: float = 72.0
+const RELIC_SCREEN_HEIGHT_RATIO: float = 3.0 / 5.0
+const RELIC_VIEW_SCENE = preload("res://Scenes/UI/RelicView.tscn")
+const THUMBNAIL_CACHE = preload("res://Scripts/UI/MuseumRelicThumbnailCache.gd")
 
 # 颜色排序顺序（从高到低）
 const COLOR_ORDER: Array[int] = [
@@ -24,10 +29,26 @@ const COLOR_ORDER: Array[int] = [
 var _scroll_container: ScrollContainer = null
 var _content: VBoxContainer = null
 var _empty_label: Label = null
+var _last_render_viewport_height: float = 0.0
+var _resize_render_queued: bool = false
 
 func _ready() -> void:
 	setup_ui()
 	render_decks()
+
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_RESIZED or not is_node_ready() or _content == null:
+		return
+	var viewport_height := get_viewport_rect().size.y
+	if absf(viewport_height - _last_render_viewport_height) <= 1.0 or _resize_render_queued:
+		return
+	_resize_render_queued = true
+	call_deferred("_rerender_after_viewport_resize")
+
+func _rerender_after_viewport_resize() -> void:
+	_resize_render_queued = false
+	if is_inside_tree():
+		render_decks()
 
 func setup_ui() -> void:
 	# 标题
@@ -70,6 +91,7 @@ func setup_ui() -> void:
 	_scroll_container.add_child(_content)
 
 func render_decks() -> void:
+	_last_render_viewport_height = get_viewport_rect().size.y
 	var render_started := Time.get_ticks_msec()
 	FileLogger.perf("ui_render_start", {"page": "deck_panel", "component": "deck_grid"})
 	# 清空内容
@@ -127,6 +149,8 @@ func _aggregate_relics(decks: Array[Deck]) -> Array[Dictionary]:
 		if not by_key.has(key):
 			by_key[key] = {
 				"id": d.id,
+				"deck_def_id": d.deck_def_id,
+				"deck_def_key": d.deck_def_key,
 				"series_name": d.series_name,
 				"deck_name": d.deck_name,
 				"color": int(d.color),
@@ -180,7 +204,7 @@ func _create_card_grid(relics: Array) -> Container:
 	# 用 FlowContainer 自动换行
 	var flow = FlowContainer.new()
 	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	flow.add_theme_constant_override("h_separation", CARD_SPACING)
+	flow.add_theme_constant_override("h_separation", CARD_HORIZONTAL_SPACING)
 	flow.add_theme_constant_override("v_separation", CARD_SPACING)
 
 	for relic in relics:
@@ -190,12 +214,15 @@ func _create_card_grid(relics: Array) -> Container:
 	return flow
 
 func _create_relic_card(relic: Dictionary) -> Control:
+	var color_type := int(relic.get("color", CardColor.ColorType.WHITE))
+	if RelicView.supports_color(color_type):
+		return _create_visual_relic_card(relic)
+
 	var card_container = Control.new()
 	card_container.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
 	card_container.size = Vector2(CARD_WIDTH, CARD_HEIGHT)
-	var color_type := int(relic.get("color", CardColor.ColorType.WHITE))
 
-	# 当前暂无圣物专有图片，先用颜色矩形占位；后续美术图实装时替换这一层。
+	# 尚未实装正式图片的其他颜色继续使用颜色矩形占位。
 	var bg = ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.color = _get_card_bg_color(color_type)
@@ -270,6 +297,121 @@ func _create_relic_card(relic: Dictionary) -> Control:
 	card_container.add_child(count_label)
 
 	return card_container
+
+func _create_visual_relic_card(relic: Dictionary) -> Control:
+	var color_type := int(relic.get("color", CardColor.ColorType.WHITE))
+	if not RelicView.supports_color(color_type):
+		return Control.new()
+	var relic_height := get_viewport_rect().size.y * RELIC_SCREEN_HEIGHT_RATIO
+	var relic_width := relic_height * THUMBNAIL_CACHE.get_aspect_ratio(color_type)
+	var container := VBoxContainer.new()
+	container.name = "RelicCard%d" % color_type
+	container.custom_minimum_size = Vector2(relic_width, relic_height + VISUAL_RELIC_LABEL_HEIGHT)
+	container.size = container.custom_minimum_size
+	container.add_theme_constant_override("separation", 4)
+
+	var label_box := VBoxContainer.new()
+	label_box.name = "RelicCardLabels"
+	label_box.custom_minimum_size = Vector2(relic_width, VISUAL_RELIC_LABEL_HEIGHT)
+	label_box.add_theme_constant_override("separation", 0)
+	container.add_child(label_box)
+
+	var series_label := Label.new()
+	series_label.name = "RelicCardSeries"
+	series_label.custom_minimum_size = Vector2(relic_width, 20)
+	series_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	series_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	series_label.text = str(relic.get("series_name", ""))
+	series_label.add_theme_font_size_override("font_size", 14)
+	series_label.add_theme_color_override("font_color", Color(0.76, 0.80, 0.88, 0.9))
+	series_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	series_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label_box.add_child(series_label)
+
+	var name_label := Label.new()
+	name_label.name = "RelicCardName"
+	name_label.custom_minimum_size = Vector2(relic_width, 26)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.text = str(relic.get("deck_name", ""))
+	name_label.add_theme_font_size_override("font_size", 18)
+	name_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.62, 1.0))
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label_box.add_child(name_label)
+
+	var count_label := Label.new()
+	count_label.name = "RelicCardCount"
+	count_label.custom_minimum_size = Vector2(relic_width, 20)
+	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	count_label.text = Localization.t("ui.deck_collection.relic_count", [int(relic.get("count", 1))])
+	count_label.add_theme_font_size_override("font_size", 14)
+	count_label.add_theme_color_override("font_color", Color(0.82, 0.70, 0.44, 0.95))
+	count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label_box.add_child(count_label)
+
+	var relic_host := Control.new()
+	relic_host.name = "RelicHost"
+	relic_host.custom_minimum_size = Vector2(relic_width, relic_height)
+	relic_host.size = relic_host.custom_minimum_size
+	container.add_child(relic_host)
+
+	var cards := _get_relic_cards(relic)
+	var thumbnail := TextureRect.new()
+	thumbnail.name = "RelicThumbnail"
+	thumbnail.set_anchors_preset(Control.PRESET_FULL_RECT)
+	thumbnail.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	thumbnail.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	thumbnail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	thumbnail.texture = THUMBNAIL_CACHE.get_thumbnail_texture(
+		color_type,
+		str(relic.get("deck_def_key", "")),
+		int(relic.get("deck_def_id", 0)),
+		cards
+	)
+	relic_host.add_child(thumbnail)
+
+	if thumbnail.texture == null:
+		var relic_view := RELIC_VIEW_SCENE.instantiate() as RelicView
+		if relic_view.set_relic_color(color_type):
+			relic_view.name = "RelicView"
+			relic_view.set_anchors_preset(Control.PRESET_FULL_RECT)
+			relic_view.offset_left = 0.0
+			relic_view.offset_top = 0.0
+			relic_view.offset_right = 0.0
+			relic_view.offset_bottom = 0.0
+			relic_view.custom_minimum_size = Vector2.ZERO
+			relic_view.set_cards(cards)
+			relic_host.add_child(relic_view)
+
+	return container
+
+
+func _apply_relic_label_rect(label: Label, layout: Dictionary, relic_width: float, relic_height: float) -> void:
+	label.position = Vector2(
+		relic_width * float(layout.get("x_ratio", 0.25)),
+		relic_height * float(layout.get("y_ratio", 0.75))
+	)
+	label.size = Vector2(
+		relic_width * float(layout.get("width_ratio", 0.5)),
+		relic_height * float(layout.get("height_ratio", 0.05))
+	)
+
+func _get_relic_cards(relic: Dictionary) -> Array:
+	var deck_def_key := str(relic.get("deck_def_key", ""))
+	var deck_def_id := int(relic.get("deck_def_id", 0))
+	var cards: Array = CardDataManager.get_cards_by_deck_key(deck_def_key) if deck_def_key != "" else []
+	if cards.is_empty() and deck_def_id > 0:
+		cards = CardDataManager.get_cards_by_deck_id(deck_def_id)
+	if cards.is_empty():
+		cards = CardDataManager.get_cards_by_deck(
+			str(relic.get("series_name", "")),
+			str(relic.get("deck_name", ""))
+		)
+	var ordered := cards.duplicate()
+	ordered.sort_custom(func(a: CardInfo, b: CardInfo): return a.card_number < b.card_number)
+	return ordered.slice(0, mini(5, ordered.size()))
 
 func _get_card_bg_color(color_type: int) -> Color:
 	if color_type == 6:

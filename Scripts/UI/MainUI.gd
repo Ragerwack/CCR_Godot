@@ -3,6 +3,8 @@ class_name MainUI
 
 @export var enable_debug: bool = false
 
+const TodayDecksUIScript = preload("res://Scripts/UI/TodayDecksUI.gd")
+
 const LEFT_PANEL_WIDTH: int = 120
 const TOP_BAR_HEIGHT: int = 90
 const EXP_BAR_RATIO: float = 0.024   # 接近 MMORPG 底部细经验条的屏占比
@@ -15,9 +17,10 @@ var _currency: CurrencyUI
 var _nav_buttons: NavButtons
 var _center_area: Control
 var _exp_bar_ui: ExpBarUI
-var _menu_button: Button
+var _menu_button: Button = null
 
 # 子面板
+var _today_decks_ui: Control = null
 var _card_pool_ui: CardPoolUI = null
 var _hand_area_ui: HandAreaUI = null
 var _vault_ui: VaultUI = null
@@ -206,20 +209,6 @@ func setup_ui() -> void:
 	_currency.offset_bottom = 46   # 10 + 36 高（单行）
 	add_child(_currency)
 
-	# ── 菜单按钮（右上角，currency 右边） ──
-	_menu_button = Button.new()
-	_menu_button.text = "\u2630"
-	_menu_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_menu_button.position = Vector2(0, 10)
-	_menu_button.offset_left = -50
-	_menu_button.offset_right = -5
-	_menu_button.offset_top = 10
-	_menu_button.offset_bottom = 50
-	_menu_button.pressed.connect(_show_menu)
-	_menu_button.z_index = 100
-	_menu_button.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(_menu_button)
-
 	# ── 左侧导航 ──
 	_nav_buttons = NavButtons.new()
 	_nav_buttons.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -267,12 +256,14 @@ func _on_nav_button(id: String) -> void:
 
 	FileLogger.perf("ui_render_start", {"target": id})
 	match id:
+		"today_decks": _show_today_decks()
 		"card_pool": _show_card_pool()
 		"vault": _show_vault()
 		"deck_panel": _show_deck_collection()
 		"auction": _show_message(Localization.t("ui.nav.auction"))
 		"ladder": _show_message(Localization.t("ui.nav.ladder"))
 		"mail": _show_message(Localization.t("ui.nav.mail"))
+		"settings": _show_settings()
 	FileLogger.perf("ui_render_done", {"target": id})
 	FileLogger.perf("scene_switch_done", {"target": id, "total_ms": Time.get_ticks_msec() - switch_started})
 	_refresh_page_data_background.call_deferred(id)
@@ -283,6 +274,7 @@ func _on_nav_button(id: String) -> void:
 
 func _show_card_pool() -> void:
 	_current_view_id = "card_pool"
+	_nav_buttons.select_by_id("card_pool")
 	_clear_center()
 
 	_card_pool_ui = CardPoolUI.new()
@@ -321,6 +313,14 @@ func _show_card_pool() -> void:
 	hand_container.add_child(_hand_area_ui)
 	_hand_area_ui.refresh_display()
 
+func _show_today_decks() -> void:
+	_current_view_id = "today_decks"
+	_nav_buttons.select_by_id("today_decks")
+	_clear_center()
+	_today_decks_ui = TodayDecksUIScript.new()
+	_today_decks_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_center_area.add_child(_today_decks_ui)
+
 func _sync_before_leaving_card_pool() -> Dictionary:
 	if _card_pool_ui == null and _hand_area_ui == null:
 		return {"success": true}
@@ -328,6 +328,7 @@ func _sync_before_leaving_card_pool() -> Dictionary:
 
 func _show_vault() -> void:
 	_current_view_id = "vault"
+	_nav_buttons.select_by_id("vault")
 	_clear_center()
 	_vault_ui = VaultUI.new()
 	_vault_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -335,6 +336,7 @@ func _show_vault() -> void:
 
 func _show_deck_collection() -> void:
 	_current_view_id = "deck_panel"
+	_nav_buttons.select_by_id("deck_panel")
 	_clear_center()
 	_deck_collection_ui = DeckCollectionUI.new()
 	_deck_collection_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -380,9 +382,13 @@ func _show_message(msg: String) -> void:
 	_center_area.add_child(label)
 
 func _show_menu() -> void:
-	if _current_view_id != "menu":
+	_show_settings()
+
+func _show_settings() -> void:
+	if _current_view_id != "settings":
 		_view_before_menu = _current_view_id
-	_current_view_id = "menu"
+	_current_view_id = "settings"
+	_nav_buttons.select_by_id("settings")
 	_clear_center()
 	var menu_panel = _build_menu_panel()
 	_center_area.add_child(menu_panel)
@@ -445,11 +451,6 @@ func _build_menu_panel() -> Control:
 	logout_btn.pressed.connect(_on_logout_pressed)
 	vbox.add_child(logout_btn)
 
-	var back_btn = Button.new()
-	back_btn.text = Localization.t("ui.button.back")
-	back_btn.pressed.connect(_return_from_menu)
-	vbox.add_child(back_btn)
-
 	return panel
 
 func _apply_language_selection(selected_locale: String) -> void:
@@ -457,18 +458,21 @@ func _apply_language_selection(selected_locale: String) -> void:
 
 func _return_from_menu() -> void:
 	match _view_before_menu:
+		"today_decks": _show_today_decks()
 		"vault": _show_vault()
 		"deck_panel": _show_deck_collection()
 		"synthesis": _show_synthesis_panel()
+		"settings": _show_settings()
 		_: _show_card_pool()
 
 func _on_locale_changed(_locale: String) -> void:
 	_nav_buttons.refresh_labels()
 	if not _game_ui_active:
 		return
-	var localized_data_view := _view_before_menu if _current_view_id == "menu" else _current_view_id
+	var localized_data_view := _current_view_id
 	match _current_view_id:
-		"menu": _show_menu()
+		"today_decks": _show_today_decks()
+		"settings": _show_settings()
 		"vault": _show_vault()
 		"deck_panel": _show_deck_collection()
 		"synthesis": _show_synthesis_panel()
@@ -479,6 +483,10 @@ func _refresh_localized_server_data(view_id: String) -> void:
 	if not ApiClient.is_logged_in():
 		return
 	match view_id:
+		"today_decks":
+			var key_resp := await ApiClient.get_draw_key()
+			if key_resp.get("success", false):
+				GameManager.apply_draw_key(key_resp["data"])
 		"card_pool", "synthesis": await GameManager.sync_initial_card_pool_from_server()
 		"vault": await GameManager.sync_vault_from_server()
 		"deck_panel": await GameManager.sync_decks_from_server()
@@ -486,6 +494,7 @@ func _refresh_localized_server_data(view_id: String) -> void:
 	if _current_view_id != view_id:
 		return
 	match view_id:
+		"today_decks": _show_today_decks()
 		"vault": _show_vault()
 		"deck_panel": _show_deck_collection()
 		"synthesis": _show_synthesis_panel()
@@ -777,6 +786,7 @@ func _clear_center() -> void:
 	for child in _center_area.get_children():
 		_center_area.remove_child(child)
 		child.queue_free()
+	_today_decks_ui = null
 	_card_pool_ui = null
 	_hand_area_ui = null
 	_vault_ui = null

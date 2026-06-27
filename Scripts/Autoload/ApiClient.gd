@@ -722,10 +722,26 @@ func synthesize(slot_indices: Array, source_type: String = "hand") -> Dictionary
 	var body := JSON.stringify({
 		"operation_id": _new_operation_id("synthesize"),
 		"source_type": source_type,
+		"draw_key_version": GameManager.draw_key_version,
 		"slot_indices": slot_indices,
 	})
 	var resp := await _asset_request(_api_url("/game/synthesize"), HTTPClient.METHOD_POST, body, "synthesize")
 	if resp["success"]:
+		var data: Dictionary = resp.get("data", {})
+		if data.get("key_stale", false):
+			if data.get("draw_key", {}) is Dictionary:
+				GameManager.apply_draw_key(data["draw_key"])
+			var stale_resp := {
+				"success": false,
+				"error": "抽卡密匙已更新，请重试合成",
+				"error_type": "key_stale",
+				"status_code": 409,
+				"data": data,
+			}
+			synthesis_failed.emit(stale_resp["error"])
+			return stale_resp
+		if data.get("draw_key", {}) is Dictionary:
+			GameManager.apply_draw_key(data["draw_key"])
 		synthesis_completed.emit(resp["data"])
 	else:
 		synthesis_failed.emit(resp["error"])
@@ -847,7 +863,8 @@ static func translate_refresh_roll_to_slots(roll_data: Dictionary, player_level:
 		var deck_index := mini(deck_count - 1, int(floor(deck_roll * float(deck_count))))
 		var deck: Dictionary = decks[deck_index]
 		var number := int(_pick_by_unit_random(number_roll, number_probs, ["1", "2", "3", "4", "5"]))
-		var color := _pick_by_unit_random(color_roll, color_probs, ["white", "green", "blue", "purple", "orange", "black"])
+		var rolled_color := _pick_by_unit_random(color_roll, color_probs, ["white", "green", "blue", "purple", "orange", "black"])
+		var color := _resolve_available_deck_color(deck, rolled_color)
 		var cards: Array = deck.get("cards", [])
 		var card_def: Dictionary = {}
 		for card in cards:
@@ -873,6 +890,23 @@ static func translate_refresh_roll_to_slots(roll_data: Dictionary, player_level:
 			},
 		})
 	return result
+
+static func _resolve_available_deck_color(deck: Dictionary, requested_color: String) -> String:
+	var order: Array[String] = ["black", "orange", "purple", "blue", "green", "white"]
+	var idx := order.find(requested_color)
+	if idx < 0:
+		return "white" if requested_color == "red" else requested_color
+	var caps: Dictionary = deck.get("relic_caps", {})
+	while idx < order.size():
+		var candidate := order[idx]
+		var cap = caps.get(candidate, {})
+		var exhausted := false
+		if cap is Dictionary:
+			exhausted = bool(cap.get("exhausted", false))
+		if not exhausted:
+			return candidate
+		idx += 1
+	return "white"
 
 static func _visible_deck_count(level: int) -> int:
 	if level >= 40:

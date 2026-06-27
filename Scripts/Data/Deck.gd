@@ -2,6 +2,8 @@ class_name Deck
 extends RefCounted
 
 var id: String
+var deck_def_id: int = 0
+var deck_def_key: String = ""
 var series_name: String
 var deck_name: String
 var color: CardColor.ColorType
@@ -41,6 +43,8 @@ func get_missing_numbers() -> Array[int]:
 func to_dict() -> Dictionary:
 	return {
 		"id": id,
+		"deck_def_id": deck_def_id,
+		"deck_def_key": deck_def_key,
 		"series_name": series_name,
 		"deck_name": deck_name,
 		"color": color,

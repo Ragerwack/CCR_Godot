@@ -1,0 +1,70 @@
+{
+  "rarity": "white",
+  "render_mode": "precut_frame_overlay",
+  "canvas": {
+    "width": 793,
+    "height": 1983
+  },
+  "frame": "res://Resources/Relics/final/relic_white_frame.png",
+  "slots": [
+    {
+      "id": 1,
+      "x_ratio": 0.35813366960907944,
+      "y_ratio": 0.17851739788199697,
+      "width_ratio": 0.28247162673392184,
+      "height_ratio": 0.08371154815935451
+    },
+    {
+      "id": 2,
+      "x_ratio": 0.35813366960907944,
+      "y_ratio": 0.28038325769036815,
+      "width_ratio": 0.28247162673392184,
+      "height_ratio": 0.0832072617246596
+    },
+    {
+      "id": 3,
+      "x_ratio": 0.35813366960907944,
+      "y_ratio": 0.3827534039334342,
+      "width_ratio": 0.2812105926860025,
+      "height_ratio": 0.0832072617246596
+    },
+    {
+      "id": 4,
+      "x_ratio": 0.3593947036569987,
+      "y_ratio": 0.48461926374180536,
+      "width_ratio": 0.27994955863808324,
+      "height_ratio": 0.08068582955118507
+    },
+    {
+      "id": 5,
+      "x_ratio": 0.3593947036569987,
+      "y_ratio": 0.5849722642460918,
+      "width_ratio": 0.2812105926860025,
+      "height_ratio": 0.09531013615733737
+    }
+  ],
+  "label_layout": {
+    "series": {
+      "x_ratio": 0.23,
+      "y_ratio": 0.724,
+      "width_ratio": 0.54,
+      "height_ratio": 0.045
+    },
+    "name": {
+      "x_ratio": 0.2,
+      "y_ratio": 0.768,
+      "width_ratio": 0.6,
+      "height_ratio": 0.065
+    },
+    "count": {
+      "x_ratio": 0.25,
+      "y_ratio": 0.835,
+      "width_ratio": 0.5,
+      "height_ratio": 0.05
+    }
+  },
+  "rendering": {
+    "slot_z_index": 0,
+    "frame_z_index": 10
+  }
+}

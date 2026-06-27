@@ -1,0 +1,139 @@
+{
+  "format": "ccr-relic-art-source",
+  "version": 1,
+  "items": [
+    {
+      "rarity": "white",
+      "canvas": {
+        "width": 793,
+        "height": 1983
+      },
+      "source": {
+        "file": "sources/relic_white.png",
+        "sha256": "3e7e895effcbef1edfe459863c8d82b768f653fa639f264b39fec1a2d91686d8"
+      },
+      "cut_scheme": {
+        "file": "cut-schemes/relic_white.json",
+        "sha256": "94084f2a64400237b69777bebbd478d188c338c1952b2e0f01ef944dbdce747c"
+      },
+      "cut_frame": {
+        "file": "cut-frames/relic_white_frame.png",
+        "sha256": "ba4a274ca59fbfc192270d95180e8d78f2e9bf9d0f615305e47e5ae750f6523f"
+      }
+    },
+    {
+      "rarity": "green",
+      "canvas": {
+        "width": 793,
+        "height": 1983
+      },
+      "source": {
+        "file": "sources/relic_green.png",
+        "sha256": "b48fe5f831dda09ae33718b7882677cd42e85e7294a731026cde51684fdc619b"
+      },
+      "cut_scheme": {
+        "file": "cut-schemes/relic_green.json",
+        "sha256": "f77c85553410cc7f938f11e16aed9f90a929dd62b84e0dd7cd952b4c8247d2e8"
+      },
+      "cut_frame": {
+        "file": "cut-frames/relic_green_frame.png",
+        "sha256": "1d4e5368a5d98304337768d9534e4f8d1e8cf1154493df2102d720fad4caf579"
+      }
+    },
+    {
+      "rarity": "blue",
+      "canvas": {
+        "width": 725,
+        "height": 2170
+      },
+      "source": {
+        "file": "sources/relic_blue.png",
+        "sha256": "47906bb33db47cb39d900664b19e2cb91e6d02bf580734c1cd82a84654ea7680"
+      },
+      "cut_scheme": {
+        "file": "cut-schemes/relic_blue.json",
+        "sha256": "292781d2a746d51a3b1c96068cc88d971bb3d6b3b609a304b8742c4ea0008811"
+      },
+      "cut_frame": {
+        "file": "cut-frames/relic_blue_frame.png",
+        "sha256": "769c54508e32bceb9b69c7e6eeb445196644700f9c1f68352681f6ee73ebcf1b"
+      }
+    },
+    {
+      "rarity": "purple",
+      "canvas": {
+        "width": 941,
+        "height": 1672
+      },
+      "source": {
+        "file": "sources/relic_purple.png",
+        "sha256": "deb9bd4bd115b0e7d1a1252a0ada3c9a159d6fbca4b7632e3480b76072526d49"
+      },
+      "cut_scheme": {
+        "file": "cut-schemes/relic_purple.json",
+        "sha256": "a182787e1652e09c278867bf130041b2d8aced65847fd8565e8cc1dbbfb0c75f"
+      },
+      "cut_frame": {
+        "file": "cut-frames/relic_purple_frame.png",
+        "sha256": "2a9b96d25db8648412f572c8c95843d15dd94d07e10378e3aca2a30d412654dd"
+      }
+    },
+    {
+      "rarity": "orange",
+      "canvas": {
+        "width": 941,
+        "height": 1672
+      },
+      "source": {
+        "file": "sources/relic_orange.png",
+        "sha256": "0c270ad6e82f29eac4b98444a3448970b684d99b82dad30532af9538115bf399"
+      },
+      "cut_scheme": {
+        "file": "cut-schemes/relic_orange.json",
+        "sha256": "afa3c6c55696992de6c68d0ee504d2321f5899d545ead56144555cd048d0f721"
+      },
+      "cut_frame": {
+        "file": "cut-frames/relic_orange_frame.png",
+        "sha256": "87376e85bfa65ccc9bf5a5264dcca4da3ae64919b4864363ec388b95a5677c90"
+      }
+    },
+    {
+      "rarity": "black",
+      "canvas": {
+        "width": 941,
+        "height": 1672
+      },
+      "source": {
+        "file": "sources/relic_black.png",
+        "sha256": "e469a55c56727d998e253c957407f0f0b921b73dcb456f62ef8cb6746cd2ae73"
+      },
+      "cut_scheme": {
+        "file": "cut-schemes/relic_black.json",
+        "sha256": "c2eff597657f6543659c148ef7580f8a131e4e9358cc5b40a78792eb64deba93"
+      },
+      "cut_frame": {
+        "file": "cut-frames/relic_black_frame.png",
+        "sha256": "66b2e3798633c764b1c89224794e90da56f77caf309dbd12836aa52d9ec2b306"
+      }
+    },
+    {
+      "rarity": "red",
+      "canvas": {
+        "width": 941,
+        "height": 1672
+      },
+      "source": {
+        "file": "sources/relic_red.png",
+        "sha256": "62ac9ae3f8f516d981d508ccc181d20504d48ebdc5552aa6010df530b749d72d"
+      },
+      "cut_scheme": {
+        "file": "cut-schemes/relic_red.json",
+        "sha256": "c936029e4cabfa8f135c5cf828f806da7810690f0aaedb1ab984c62879024869"
+      },
+      "cut_frame": {
+        "file": "cut-frames/relic_red_frame.png",
+        "sha256": "abd6b7b8819479ec4b314a4276b92ae71d8d4ae9a57efd02c045403276edcdd4"
+      }
+    }
+  ]
+}

@@ -11,8 +11,12 @@ func _ready() -> void:
 
 	var menu_button: Button = main.get("_menu_button")
 	var center_area: Control = main.get("_center_area")
-	if menu_button == null or center_area == null or menu_button.z_index <= center_area.z_index:
-		_fail("menu button is still covered by the center content")
+	var nav_buttons: NavButtons = main.get("_nav_buttons")
+	if menu_button != null:
+		_fail("top-right settings button still exists")
+		return
+	if center_area == null or nav_buttons == null:
+		_fail("main center area or navigation is missing")
 		return
 
 	var splash: Node = null
@@ -25,16 +29,16 @@ func _ready() -> void:
 		return
 
 	main.call("_set_game_ui_visible", true)
-	menu_button.pressed.emit()
+	nav_buttons.nav_button_clicked.emit("settings")
 	await get_tree().process_frame
-	if not _has_text(center_area, "Menu") or not _has_option_button(center_area):
-		_fail("English menu or language selector is missing")
+	if not _has_text(center_area, "Settings") or not _has_option_button(center_area):
+		_fail("English settings page or language selector is missing")
 		return
 
 	Localization.set_locale("zh-CN", true, 1)
 	await get_tree().process_frame
-	if not _has_text(center_area, "菜单"):
-		_fail("menu did not refresh after language change")
+	if not _has_text(center_area, "设置"):
+		_fail("settings page did not refresh after language change")
 		return
 
 	var entries: Array[Dictionary] = CountryCatalogScript.localized_entries("en")

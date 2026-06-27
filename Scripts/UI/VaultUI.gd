@@ -20,9 +20,11 @@ var _unlock_buttons_busy: bool = false
 # ── 选中合成相关 ──
 var _selected_slots: Array[int] = []     # 单选槽位；保留数组形态便于复用现有高亮逻辑
 var _synthesize_btn: Button = null
+var _relic_preview: RelicView = null
 
 
 const SELECT_BORDER_COLOR: Color = Color(1.0, 0.84, 0.0, 0.7)  # 金色
+const RELIC_VIEW_SCENE = preload("res://Scenes/UI/RelicView.tscn")
 const VAULT_COLUMNS: int = 8
 const MAX_VISIBLE_ROWS: int = 4
 const EXTRA_LOCKED_ROWS: int = 1
@@ -76,6 +78,8 @@ func setup_ui() -> void:
 	_slot_canvas.name = "VaultSlotCanvas"
 	_slot_viewport.add_child(_slot_canvas)
 
+	_create_relic_preview()
+
 	# ── 合成按钮（初始隐藏） ──
 	_synthesize_btn = Button.new()
 	_synthesize_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -93,6 +97,28 @@ func setup_ui() -> void:
 	_create_unlock_panel()
 	_create_slot_grid()
 	refresh_display()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		_layout_relic_preview()
+
+func _create_relic_preview() -> void:
+	_relic_preview = RELIC_VIEW_SCENE.instantiate() as RelicView
+	_relic_preview.name = "RelicPreview"
+	_relic_preview.visible = false
+	_relic_preview.z_index = 5
+	add_child(_relic_preview)
+	_layout_relic_preview()
+
+func _layout_relic_preview() -> void:
+	if _relic_preview == null:
+		return
+	var viewport_size := size if size.x > 0.0 and size.y > 0.0 else get_viewport_rect().size
+	var preview_height := minf(450.0, maxf(280.0, viewport_size.y - 250.0))
+	var preview_width := preview_height * _relic_preview.get_aspect_ratio()
+	var right_edge := viewport_size.x - UNLOCK_PANEL_WIDTH - UNLOCK_PANEL_RIGHT_MARGIN - 10.0
+	_relic_preview.size = Vector2(preview_width, preview_height)
+	_relic_preview.position = Vector2(right_edge - preview_width, maxf(80.0, (viewport_size.y - preview_height) * 0.5))
 
 func _create_unlock_panel() -> void:
 	var panel_width := UNLOCK_PANEL_WIDTH
@@ -431,6 +457,7 @@ func _clear_selection() -> void:
 func _update_synthesize_button() -> void:
 	if _synthesize_btn == null:
 		return
+	_update_relic_preview()
 
 	var count = _selected_slots.size()
 	if count <= 0:
@@ -455,6 +482,31 @@ func _update_synthesize_button() -> void:
 	else:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [1])
 		_synthesize_btn.disabled = true
+
+func _update_relic_preview() -> void:
+	if _relic_preview == null:
+		return
+	_relic_preview.visible = false
+	_relic_preview.clear_cards()
+	if _selected_slots.size() != 1:
+		return
+	var vault = GameManager.player_data.vault_cards
+	var selected_idx := int(_selected_slots[0])
+	if selected_idx < 0 or selected_idx >= vault.size():
+		return
+	var selected_card = vault[selected_idx]
+	if selected_card == null or not RelicView.supports_color(int(selected_card.color)):
+		return
+	var indices := _find_synthesizable_indices_for_card(selected_card, selected_idx)
+	if indices.size() != 5:
+		return
+	var cards: Array = []
+	for index in indices:
+		cards.append(vault[int(index)])
+	_relic_preview.set_relic_color(int(selected_card.color))
+	_relic_preview.set_cards(cards)
+	_layout_relic_preview()
+	_relic_preview.visible = true
 
 func _validate_synthesis_cards(cards: Array[CardInfo]) -> bool:
 	if cards.size() != 5:

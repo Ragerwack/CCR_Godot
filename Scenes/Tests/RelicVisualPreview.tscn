@@ -1,0 +1,47 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Tests/RelicVisualPreview.gd" id="1_preview"]
+
+[node name="RelicVisualPreview" type="Node"]
+script = ExtResource("1_preview")
+
+[node name="Background" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.025, 0.035, 0.055, 1)
+
+[node name="Title" type="Label" parent="."]
+offset_left = 32.0
+offset_top = 22.0
+offset_right = 640.0
+offset_bottom = 56.0
+theme_override_colors/font_color = Color(0.75, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "白色 Relic · 标记方案 Godot 实际渲染"
+
+[node name="Hint" type="Label" parent="."]
+offset_left = 34.0
+offset_top = 58.0
+offset_right = 760.0
+offset_bottom = 86.0
+theme_override_colors/font_color = Color(0.45, 0.55, 0.68, 1)
+theme_override_font_sizes/font_size = 14
+text = "正式 RelicView / 七色预裁外框 / 底层完整子卡 / 运行时零裁切"
+
+[node name="Scroll" type="ScrollContainer" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 22.0
+offset_top = 92.0
+offset_right = -22.0
+offset_bottom = -18.0
+horizontal_scroll_mode = 2
+vertical_scroll_mode = 0
+
+[node name="Gallery" type="HBoxContainer" parent="Scroll"]
+layout_mode = 2
+theme_override_constants/separation = 22

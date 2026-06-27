@@ -11,6 +11,8 @@ var all_cards: Array[CardInfo] = []
 var _series_by_name: Dictionary = {}
 var _cards_by_series: Dictionary = {}
 var _cards_by_deck: Dictionary = {}
+var _cards_by_deck_id: Dictionary = {}
+var _cards_by_deck_key: Dictionary = {}
 
 # 编号概率: 1号30%, 2号25%, 3号20%, 4号15%, 5号10%
 const NUMBER_WEIGHTS: Array[float] = [30.0, 25.0, 20.0, 15.0, 10.0]
@@ -55,6 +57,9 @@ func _parse_series_format(series_array: Array) -> void:
 	_series_by_name.clear()
 	_cards_by_series.clear()
 	_cards_by_deck.clear()
+	_cards_by_deck_id.clear()
+	_cards_by_deck_key.clear()
+	var global_deck_def_id := 1
 
 	for series_data in series_array:
 		var sname = series_data.get("name_zh", "")
@@ -95,7 +100,15 @@ func _parse_series_format(series_array: Array) -> void:
 		# Build deck-level lookup
 		for deck_data in series_data.get("decks", []):
 			var dn = deck_data.get("name_zh", "")
-			_cards_by_deck[sname + "/" + dn] = cs.get_deck_cards(dn)
+			var deck_cards = cs.get_deck_cards(dn)
+			_cards_by_deck[sname + "/" + dn] = deck_cards
+			# JSON 的 deck_id 是系列内排序号，会在每个系列从 1 重新开始；
+			# 服务端 DeckDef.id 则按种子文件遍历顺序全局生成。
+			_cards_by_deck_id[global_deck_def_id] = deck_cards
+			var deck_key := _make_deck_key(sen, str(deck_data.get("name_en", "")))
+			if deck_key != "":
+				_cards_by_deck_key[deck_key] = deck_cards
+			global_deck_def_id += 1
 
 func _filter_cards_by_series(series_name: String) -> Array[CardInfo]:
 	var out: Array[CardInfo] = []
@@ -111,6 +124,8 @@ func _parse_old_cards_format(cards_array: Array) -> void:
 	_series_by_name.clear()
 	_cards_by_series.clear()
 	_cards_by_deck.clear()
+	_cards_by_deck_id.clear()
+	_cards_by_deck_key.clear()
 
 	var series_map: Dictionary = {}
 
@@ -149,11 +164,36 @@ func get_series_by_name(name: String) -> CardSeries:
 	return _series_by_name.get(name)
 
 func get_cards_by_series(series_name: String) -> Array[CardInfo]:
-	return _cards_by_series.get(series_name, [])
+	return _to_card_info_array(_cards_by_series.get(series_name, []))
 
 func get_cards_by_deck(series_name: String, deck_name: String) -> Array[CardInfo]:
 	var key = series_name + "/" + deck_name
-	return _cards_by_deck.get(key, [])
+	return _to_card_info_array(_cards_by_deck.get(key, []))
+
+func get_cards_by_deck_id(deck_def_id: int) -> Array[CardInfo]:
+	return _to_card_info_array(_cards_by_deck_id.get(deck_def_id, []))
+
+func get_cards_by_deck_key(deck_def_key: String) -> Array[CardInfo]:
+	return _to_card_info_array(_cards_by_deck_key.get(deck_def_key.strip_edges().to_lower(), []))
+
+func _make_deck_key(series_name_en: String, deck_name_en: String) -> String:
+	var normalized := (series_name_en + "__" + deck_name_en).strip_edges().to_lower()
+	var whitespace := RegEx.new()
+	whitespace.compile("\\s+")
+	normalized = whitespace.sub(normalized, "_", true)
+	var invalid_chars := RegEx.new()
+	invalid_chars.compile("[^a-z0-9_]")
+	return invalid_chars.sub(normalized, "", true)
+
+func _to_card_info_array(value: Variant) -> Array[CardInfo]:
+	# Dictionary.get() 的静态返回类型是 Variant；即使字典中保存的是卡牌数组，
+	# 直接从强类型函数返回仍会在运行时被 Godot 视为普通 Array 并抛错。
+	var cards: Array[CardInfo] = []
+	if value is Array:
+		for card in value:
+			if card is CardInfo:
+				cards.append(card)
+	return cards
 
 # 生成随机颜色
 func roll_color() -> CardColor.ColorType:

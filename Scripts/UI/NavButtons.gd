@@ -4,16 +4,18 @@ class_name NavButtons
 signal nav_button_clicked(id: String)
 
 const NAV_ITEMS: Array[Dictionary] = [
+	{"id": "today_decks", "label_key": "ui.nav.today_decks", "enabled": true},
 	{"id": "card_pool", "label_key": "ui.nav.card_pool", "enabled": true},
 	{"id": "vault", "label_key": "ui.nav.vault", "enabled": true},
 	{"id": "deck_panel", "label_key": "ui.nav.deck_panel", "enabled": true},
 	{"id": "auction", "label_key": "ui.nav.auction", "enabled": false},
 	{"id": "ladder", "label_key": "ui.nav.ladder", "enabled": false},
 	{"id": "mail", "label_key": "ui.nav.mail", "enabled": false},
+	{"id": "settings", "label_key": "ui.nav.settings", "enabled": true},
 ]
 
 var buttons: Array[Button] = []
-var selected_index: int = 0
+var selected_index: int = 1
 
 func _ready() -> void:
 	setup_ui()
@@ -49,6 +51,14 @@ func refresh_labels() -> void:
 		var label := Localization.t(item["label_key"])
 		buttons[i].text = label if item.get("enabled", true) else Localization.t("ui.nav.coming_soon", [label])
 		buttons[i].add_theme_font_size_override("font_size", 11 if Localization.locale == "en" else 14)
+
+func select_by_id(id: String) -> void:
+	for i in range(NAV_ITEMS.size()):
+		if str(NAV_ITEMS[i].get("id", "")) == id:
+			selected_index = i
+			for j in range(buttons.size()):
+				_apply_style(buttons[j], j == selected_index)
+			return
 
 func _on_button_pressed(index: int) -> void:
 	if not NAV_ITEMS[index].get("enabled", true):
