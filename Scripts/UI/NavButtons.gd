@@ -60,6 +60,12 @@ func select_by_id(id: String) -> void:
 				_apply_style(buttons[j], j == selected_index)
 			return
 
+func get_button_global_rect(id: String) -> Rect2:
+	for i in range(mini(NAV_ITEMS.size(), buttons.size())):
+		if str(NAV_ITEMS[i].get("id", "")) == id:
+			return buttons[i].get_global_rect()
+	return Rect2()
+
 func _on_button_pressed(index: int) -> void:
 	if not NAV_ITEMS[index].get("enabled", true):
 		return

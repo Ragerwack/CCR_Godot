@@ -52,8 +52,6 @@ signal level_info_failed(reason: String)
 
 signal heartbeat_succeeded(status: Dictionary)
 signal heartbeat_failed(reason: String)
-signal signin_completed(result: Dictionary)
-signal signin_failed(reason: String)
 signal auth_expired()
 signal network_status_changed(status: String)
 
@@ -546,14 +544,6 @@ func heartbeat(user_id: int = 0) -> Dictionary:
 
 func health_check() -> Dictionary:
 	return await _request(_api_url("/health"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS)
-
-func signin() -> Dictionary:
-	var resp := await _request(_api_url("/signin"), HTTPClient.METHOD_POST, "{}", HTTP_TIMEOUT_SECONDS)
-	if resp.get("success", false):
-		signin_completed.emit(resp["data"])
-	else:
-		signin_failed.emit(resp.get("error", "每日奖励检查失败"))
-	return resp
 
 # ══════════════════════════════════════════════════
 #  用户

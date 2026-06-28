@@ -440,6 +440,12 @@ func _apply_card_art(card_info: CardInfo) -> void:
 			_art_image.texture = tex
 			return
 
+func get_art_texture() -> Texture2D:
+	return _art_image.texture if _art_image != null else null
+
+func get_art_rect() -> Rect2:
+	return Rect2(_art_image.position, _art_image.size) if _art_image != null else Rect2()
+
 static func _load_texture_cached(path: String):
 	if path == "":
 		return null

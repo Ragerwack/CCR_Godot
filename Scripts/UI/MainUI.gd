@@ -4,6 +4,8 @@ class_name MainUI
 @export var enable_debug: bool = false
 
 const TodayDecksUIScript = preload("res://Scripts/UI/TodayDecksUI.gd")
+const LevelUpPopupUIScript = preload("res://Scripts/UI/LevelUpPopupUI.gd")
+const SynthesisAnimationOverlayScript = preload("res://Scripts/UI/SynthesisAnimationOverlay.gd")
 
 const LEFT_PANEL_WIDTH: int = 120
 const TOP_BAR_HEIGHT: int = 90
@@ -18,6 +20,7 @@ var _nav_buttons: NavButtons
 var _center_area: Control
 var _exp_bar_ui: ExpBarUI
 var _menu_button: Button = null
+var _level_up_popup: Control = null
 
 # 子面板
 var _today_decks_ui: Control = null
@@ -32,11 +35,14 @@ var _loading_overlay: ColorRect = null
 var _current_view_id: String = "card_pool"
 var _view_before_menu: String = "card_pool"
 var _game_ui_active: bool = false
+var _synthesis_animation_running: bool = false
+var _hand_action_animation_running: bool = false
 
 func _ready() -> void:
 	setup_ui()
 
 	GameManager.scene_changed.connect(_on_scene_changed)
+	GameManager.player_leveled_up.connect(_on_player_leveled_up)
 	_nav_buttons.nav_button_clicked.connect(_on_nav_button)
 	ApiClient.auth_expired.connect(_on_auth_expired)
 	Localization.locale_changed.connect(_on_locale_changed)
@@ -172,6 +178,16 @@ func _on_login_completed() -> void:
 func _on_auth_expired() -> void:
 	SessionManager.stop_session()
 	_show_splash_screen()
+
+func _on_player_leveled_up(level: int, rewards: Array[String]) -> void:
+	if not _game_ui_active:
+		return
+	if is_instance_valid(_level_up_popup):
+		_level_up_popup.queue_free()
+	_level_up_popup = LevelUpPopupUIScript.new()
+	_level_up_popup.setup(level, rewards)
+	_level_up_popup.dismissed.connect(func(): _level_up_popup = null)
+	add_child(_level_up_popup)
 
 func _on_logout_pressed() -> void:
 	SessionManager.stop_session()
@@ -332,6 +348,8 @@ func _show_vault() -> void:
 	_clear_center()
 	_vault_ui = VaultUI.new()
 	_vault_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+	if is_instance_valid(_nav_buttons):
+		_vault_ui.set_synthesis_nav_target_rect(_nav_buttons.get_button_global_rect("deck_panel"))
 	_center_area.add_child(_vault_ui)
 
 func _show_deck_collection() -> void:
@@ -522,16 +540,21 @@ func _make_slider_row(label_text: String, default_val: float, callback: Callable
 # ══════════════════════════════════════════════════
 
 func _on_hand_synthesize() -> void:
-	if not is_instance_valid(_hand_area_ui):
+	if _synthesis_animation_running or _hand_action_animation_running or not is_instance_valid(_hand_area_ui):
 		return
 	var selected_indices := _hand_area_ui.get_selected_synthesis_indices()
 	if selected_indices.size() != 5:
 		return
+	var animation_sources := _hand_area_ui.get_synthesis_animation_sources(selected_indices)
 
 	var old_pool_cards: Array = CardPoolSystem.current_pool.duplicate()
 	if old_pool_cards.is_empty() and not GameManager.player_data.pool_cards.is_empty():
 		old_pool_cards = GameManager.player_data.pool_cards.duplicate()
 	var old_hand_cards: Array = GameManager.player_data.hand_cards.duplicate()
+
+	_synthesis_animation_running = true
+	await _play_hand_synthesis_animation(animation_sources)
+	_synthesis_animation_running = false
 
 	_apply_hand_synthesis_pending_removal(selected_indices)
 	if is_instance_valid(_hand_area_ui):
@@ -543,6 +566,36 @@ func _on_hand_synthesize() -> void:
 		old_pool_cards,
 		old_hand_cards
 	)
+
+func _play_hand_synthesis_animation(animation_sources: Array[Dictionary]) -> void:
+	if animation_sources.is_empty() or get_tree() == null:
+		return
+	var overlay = SynthesisAnimationOverlayScript.new()
+	overlay.name = "SynthesisAnimationOverlay"
+	overlay.setup(animation_sources, _nav_buttons.get_button_global_rect("deck_panel") if is_instance_valid(_nav_buttons) else Rect2())
+	get_tree().root.add_child(overlay)
+	await overlay.play()
+
+func _play_hand_card_store_animation(animation_source: Dictionary) -> void:
+	await _play_hand_single_card_animation([animation_source], "store")
+
+func _play_hand_card_discard_animation(animation_source: Dictionary) -> void:
+	await _play_hand_single_card_animation([animation_source], "discard")
+
+func _play_hand_single_card_animation(animation_sources: Array[Dictionary], mode: String) -> void:
+	if animation_sources.is_empty() or get_tree() == null:
+		return
+	var overlay = SynthesisAnimationOverlayScript.new()
+	overlay.name = "HandCardActionAnimationOverlay"
+	overlay.setup(animation_sources, _nav_buttons.get_button_global_rect("deck_panel") if is_instance_valid(_nav_buttons) else Rect2())
+	get_tree().root.add_child(overlay)
+	match mode:
+		"store":
+			await overlay.play_store_to_nav()
+		"discard":
+			await overlay.play_discard()
+		_:
+			overlay.queue_free()
 
 func _confirm_hand_synthesis_background(selected_indices: Array, old_pool_cards: Array, old_hand_cards: Array) -> void:
 	var sync_resp := await ApiClient.sync_pool_hand_layout(old_pool_cards, old_hand_cards)
@@ -596,7 +649,7 @@ func _recover_after_synthesis_failure() -> void:
 		_hand_area_ui.refresh_display()
 
 func _on_hand_discard() -> void:
-	if not is_instance_valid(_hand_area_ui):
+	if _synthesis_animation_running or _hand_action_animation_running or not is_instance_valid(_hand_area_ui):
 		return
 	var idx := _hand_area_ui.get_selected_hand_index()
 	if idx < 0:
@@ -610,6 +663,11 @@ func _on_hand_discard() -> void:
 	if old_pool_cards.is_empty() and not GameManager.player_data.pool_cards.is_empty():
 		old_pool_cards = GameManager.player_data.pool_cards.duplicate(true)
 	var old_hand_cards: Array = hand_cards.duplicate(true)
+	var animation_source := _hand_area_ui.get_synthesis_animation_sources([idx])[0]
+
+	_hand_action_animation_running = true
+	await _play_hand_card_discard_animation(animation_source)
+	_hand_action_animation_running = false
 
 	if not ApiClient.is_logged_in():
 		hand_cards[idx] = null
@@ -642,7 +700,7 @@ func _confirm_hand_discard_background(idx: int, old_pool_cards: Array, old_hand_
 		await _recover_after_hand_action_failure("discard")
 
 func _on_hand_save_to_vault() -> void:
-	if not is_instance_valid(_hand_area_ui):
+	if _synthesis_animation_running or _hand_action_animation_running or not is_instance_valid(_hand_area_ui):
 		return
 	var source_idx := _hand_area_ui.get_selected_hand_index()
 	if source_idx < 0:
@@ -653,6 +711,7 @@ func _on_hand_save_to_vault() -> void:
 		return
 
 	var card = hand_cards[source_idx]
+	var animation_source := _hand_area_ui.get_synthesis_animation_sources([source_idx])[0]
 
 	var vault_cards = GameManager.player_data.vault_cards
 	var vault_idx := _find_first_local_vault_space()
@@ -662,6 +721,10 @@ func _on_hand_save_to_vault() -> void:
 		if vault_idx < 0:
 			print("保险箱已满")
 			return
+
+		_hand_action_animation_running = true
+		await _play_hand_card_store_animation(animation_source)
+		_hand_action_animation_running = false
 
 		# 离线模式：直接本地移动
 		hand_cards[source_idx] = null
@@ -677,6 +740,10 @@ func _on_hand_save_to_vault() -> void:
 	if vault_idx < 0:
 		print("保险箱已满，请先购买保险箱槽位")
 		return
+
+	_hand_action_animation_running = true
+	await _play_hand_card_store_animation(animation_source)
+	_hand_action_animation_running = false
 
 	var old_pool_cards: Array = CardPoolSystem.current_pool.duplicate(true)
 	if old_pool_cards.is_empty() and not GameManager.player_data.pool_cards.is_empty():

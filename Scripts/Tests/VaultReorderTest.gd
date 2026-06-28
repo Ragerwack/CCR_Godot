@@ -61,18 +61,27 @@ func _ready() -> void:
 		return _fail("vault_auto_synthesis_indices_missing")
 	if vault_ui._synthesize_btn == null or vault_ui._synthesize_btn.disabled:
 		return _fail("vault_synthesis_button_disabled")
-	if vault_ui._relic_preview == null or not vault_ui._relic_preview.visible:
-		return _fail("relic_preview_missing")
-	if vault_ui._relic_preview.get_slot_count() != 5:
-		return _fail("relic_slot_count_wrong")
+	if vault_ui._relic_preview != null and vault_ui._relic_preview.visible:
+		return _fail("relic_preview_visible_before_synthesis")
+	var animation_sources := vault_ui.get_synthesis_animation_sources(indices)
+	if animation_sources.size() != 5:
+		return _fail("vault_synthesis_animation_sources_missing")
+	for source in animation_sources:
+		if not (source.get("card") is CardInfo):
+			return _fail("vault_synthesis_animation_source_card_missing")
+		if not bool(source.get("visible", false)):
+			return _fail("vault_synthesis_animation_source_not_visible")
+	vault_ui.set_synthesis_nav_target_rect(Rect2(Vector2(12, 140), Vector2(96, 42)))
+	await vault_ui._play_vault_synthesis_animation(animation_sources)
+	await get_tree().process_frame
+	if get_tree().root.find_child("VaultSynthesisAnimationOverlay", true, false) != null:
+		return _fail("vault_synthesis_animation_overlay_not_cleaned")
 	for color_name in ["green", "blue", "purple", "orange", "black", "red"]:
 		for card in GameManager.player_data.vault_cards:
 			card.color = CardColor.from_string(color_name)
 		vault_ui._update_synthesize_button()
-		if not vault_ui._relic_preview.visible:
-			return _fail(color_name + "_relic_preview_missing")
-		if vault_ui._relic_preview.get_relic_color() != CardColor.from_string(color_name):
-			return _fail(color_name + "_relic_preview_color_wrong")
+		if vault_ui._relic_preview != null and vault_ui._relic_preview.visible:
+			return _fail(color_name + "_relic_preview_visible_before_synthesis")
 
 	print("VAULT_REORDER ok")
 	get_tree().quit(0)

@@ -367,6 +367,26 @@ func get_selected_synthesis_indices() -> Array[int]:
 		return []
 	return _find_synthesizable_indices_for_card(cards[_selected_hand_index])
 
+func get_synthesis_animation_sources(indices: Array) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var cards = GameManager.player_data.hand_cards
+	for global_idx in indices:
+		var idx := int(global_idx)
+		var card: CardInfo = cards[idx] if idx >= 0 and idx < cards.size() else null
+		var visible_slot: CardSlotUI = null
+		var local_idx := idx - current_page * slot_count
+		if local_idx >= 0 and local_idx < slots.size():
+			var slot := slots[local_idx]
+			if slot != null and slot.is_inside_tree() and slot.is_occupied:
+				visible_slot = slot
+		result.append({
+			"index": idx,
+			"card": card,
+			"global_rect": visible_slot.get_global_rect() if visible_slot != null else Rect2(),
+			"visible": visible_slot != null,
+		})
+	return result
+
 
 func _select_hand_slot(global_idx: int) -> void:
 	_selected_hand_index = global_idx

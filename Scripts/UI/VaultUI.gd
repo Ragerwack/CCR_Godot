@@ -25,12 +25,15 @@ var _relic_preview: RelicView = null
 
 const SELECT_BORDER_COLOR: Color = Color(1.0, 0.84, 0.0, 0.7)  # 金色
 const RELIC_VIEW_SCENE = preload("res://Scenes/UI/RelicView.tscn")
+const SynthesisAnimationOverlayScript = preload("res://Scripts/UI/SynthesisAnimationOverlay.gd")
 const VAULT_COLUMNS: int = 8
 const MAX_VISIBLE_ROWS: int = 4
 const EXTRA_LOCKED_ROWS: int = 1
 const VAULT_GRID_LEFT_MARGIN: float = 40.0
 const UNLOCK_PANEL_WIDTH: float = 130.0
 const UNLOCK_PANEL_RIGHT_MARGIN: float = 10.0
+var _nav_target_rect: Rect2 = Rect2()
+var _vault_synthesis_animation_running: bool = false
 
 func _ready() -> void:
 	columns = VAULT_COLUMNS
@@ -42,6 +45,9 @@ func _ready() -> void:
 	if DragSystem != null:
 		DragSystem.drag_ended.connect(_on_drag_ended)
 		DragSystem.drag_cancelled.connect(_on_drag_cancelled)
+
+func set_synthesis_nav_target_rect(rect: Rect2) -> void:
+	_nav_target_rect = rect
 
 func _load_from_server() -> void:
 	await GameManager.sync_vault_from_server()
@@ -457,7 +463,9 @@ func _clear_selection() -> void:
 func _update_synthesize_button() -> void:
 	if _synthesize_btn == null:
 		return
-	_update_relic_preview()
+	if _relic_preview != null:
+		_relic_preview.visible = false
+		_relic_preview.clear_cards()
 
 	var count = _selected_slots.size()
 	if count <= 0:
@@ -483,31 +491,6 @@ func _update_synthesize_button() -> void:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [1])
 		_synthesize_btn.disabled = true
 
-func _update_relic_preview() -> void:
-	if _relic_preview == null:
-		return
-	_relic_preview.visible = false
-	_relic_preview.clear_cards()
-	if _selected_slots.size() != 1:
-		return
-	var vault = GameManager.player_data.vault_cards
-	var selected_idx := int(_selected_slots[0])
-	if selected_idx < 0 or selected_idx >= vault.size():
-		return
-	var selected_card = vault[selected_idx]
-	if selected_card == null or not RelicView.supports_color(int(selected_card.color)):
-		return
-	var indices := _find_synthesizable_indices_for_card(selected_card, selected_idx)
-	if indices.size() != 5:
-		return
-	var cards: Array = []
-	for index in indices:
-		cards.append(vault[int(index)])
-	_relic_preview.set_relic_color(int(selected_card.color))
-	_relic_preview.set_cards(cards)
-	_layout_relic_preview()
-	_relic_preview.visible = true
-
 func _validate_synthesis_cards(cards: Array[CardInfo]) -> bool:
 	if cards.size() != 5:
 		return false
@@ -526,6 +509,8 @@ func _validate_synthesis_cards(cards: Array[CardInfo]) -> bool:
 	return numbers == [1, 2, 3, 4, 5]
 
 func _on_synthesize_pressed() -> void:
+	if _vault_synthesis_animation_running:
+		return
 	if _selected_slots.size() != 1:
 		return
 
@@ -540,8 +525,50 @@ func _on_synthesize_pressed() -> void:
 	_synthesize_btn.disabled = true
 	_synthesize_btn.text = Localization.t("ui.synthesis.vault.done")
 
+	var animation_sources := get_synthesis_animation_sources(selected_slots)
+	_vault_synthesis_animation_running = true
+	await _play_vault_synthesis_animation(animation_sources)
+	_vault_synthesis_animation_running = false
+
 	_apply_vault_synthesis_pending_removal(selected_slots)
 	_confirm_vault_synthesis_background(selected_slots)
+
+func get_synthesis_animation_sources(indices: Array) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var vault = GameManager.player_data.vault_cards
+	for global_idx in indices:
+		var idx := int(global_idx)
+		var card: CardInfo = vault[idx] if idx >= 0 and idx < vault.size() else null
+		var visible_slot: CardSlotUI = null
+		if idx >= 0 and idx < slots.size():
+			var slot := slots[idx]
+			if _is_slot_visible_for_animation(slot):
+				visible_slot = slot
+		result.append({
+			"index": idx,
+			"card": card,
+			"global_rect": visible_slot.get_global_rect() if visible_slot != null else Rect2(),
+			"visible": visible_slot != null,
+		})
+	return result
+
+func _play_vault_synthesis_animation(animation_sources: Array[Dictionary]) -> void:
+	if animation_sources.is_empty() or get_tree() == null:
+		return
+	var overlay = SynthesisAnimationOverlayScript.new()
+	overlay.name = "VaultSynthesisAnimationOverlay"
+	overlay.setup(animation_sources, _nav_target_rect)
+	get_tree().root.add_child(overlay)
+	await overlay.play()
+
+func _is_slot_visible_for_animation(slot: CardSlotUI) -> bool:
+	if slot == null or not slot.is_inside_tree() or not slot.visible or not slot.is_occupied:
+		return false
+	if _slot_viewport == null or not _slot_viewport.is_inside_tree():
+		return true
+	var slot_rect := slot.get_global_rect()
+	var viewport_rect := _slot_viewport.get_global_rect()
+	return viewport_rect.intersects(slot_rect)
 
 func _find_synthesizable_indices_for_card(selected_card: CardInfo, selected_idx: int) -> Array[int]:
 	if selected_card == null:

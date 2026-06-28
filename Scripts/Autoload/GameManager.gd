@@ -5,6 +5,7 @@ signal pool_refreshed()
 signal free_refresh_ready()
 signal free_refresh_cooldown_updated(remaining: float)
 signal data_synced()
+signal player_leveled_up(level: int, rewards: Array[String])
 
 enum Scene { MAIN, CARD_POOL, HAND_AREA, VAULT, DECK_PANEL, MENU }
 
@@ -40,6 +41,7 @@ var vault_slot_quote: Dictionary = {}
 var _layout_sync_in_flight: bool = false
 var _optional_login_sync_in_flight: bool = false
 var _pool_hand_layout_dirty: bool = false
+var _last_announced_level: int = 1
 
 const NAV_BUTTONS: Array[Dictionary] = [
 	{"id": "card_pool", "label": "抽牌"},
@@ -89,6 +91,7 @@ func apply_login_user(user_data: Dictionary) -> void:
 	player_data.user_id = int(user_data.get("id", player_data.user_id))
 	player_data.nickname = user_data.get("username", "玩家")
 	player_data.level = user_data.get("level", 1)
+	_last_announced_level = int(player_data.level)
 	player_data.exp = user_data.get("exp", 0)
 	player_data.gold = user_data.get("gold", 100)
 	player_data.gems = user_data.get("gems", 50)
@@ -110,6 +113,7 @@ func apply_draw_key(key_data: Dictionary) -> void:
 
 	## 从 profile 响应同步完整数据
 func apply_profile(profile: Dictionary) -> void:
+	var old_level := int(player_data.level)
 	player_data.user_id = int(profile.get("id", player_data.user_id))
 	player_data.nickname = profile.get("username", player_data.nickname)
 	player_data.level = profile.get("level", player_data.level)
@@ -134,10 +138,13 @@ func apply_profile(profile: Dictionary) -> void:
 
 	player_data.changed.emit()
 	data_synced.emit()
+	if int(player_data.level) > old_level and (_cache_loaded.get("profile", false) or _cache_loaded.get("level", false)):
+		_emit_level_up(old_level, int(player_data.level))
 	_cache_loaded["profile"] = true
 
 ## 从 /user/level API 响应应用等级阈值信息
 func _apply_level_info(level_info: Dictionary) -> void:
+	var old_level := int(player_data.level)
 	var lvl = level_info.get("level", player_data.level)
 	var exp = level_info.get("exp", player_data.exp)
 	exp_in_level = level_info.get("expInLevel", 0)
@@ -150,6 +157,22 @@ func _apply_level_info(level_info: Dictionary) -> void:
 	_update_free_refresh_cooldown_from_state()
 	player_data.changed.emit()
 	_cache_loaded["level"] = true
+	if int(lvl) > old_level:
+		_emit_level_up(old_level, int(lvl))
+
+func _emit_level_up(old_level: int, new_level: int) -> void:
+	if new_level <= old_level or new_level <= _last_announced_level:
+		return
+	_last_announced_level = new_level
+	player_leveled_up.emit(new_level, _build_level_rewards(old_level, new_level))
+
+func _build_level_rewards(old_level: int, new_level: int) -> Array[String]:
+	var rewards: Array[String] = []
+	var gained_stamina := maxi(0, new_level - old_level)
+	if gained_stamina > 0:
+		rewards.append(Localization.t("ui.level_up.reward.stamina_cap", [gained_stamina]))
+	rewards.append(Localization.t("ui.level_up.reward.deck_visibility"))
+	return rewards
 
 func is_cache_loaded(key: String) -> bool:
 	return bool(_cache_loaded.get(key, false))
@@ -303,7 +326,6 @@ func sync_optional_login_data_background(include_config: bool = true) -> void:
 		{"key": "level", "url": base + "/player/level", "timeout": 20.0},
 		{"key": "vault", "url": base + "/game/cards?type=vault", "timeout": 20.0},
 		{"key": "decks", "url": base + "/game/decks", "timeout": 20.0},
-		{"key": "daily", "url": base + "/signin", "method": HTTPClient.METHOD_POST, "body": "{}", "timeout": 20.0},
 	]
 	if include_config:
 		requests.append({"key": "config", "url": base + "/game/config", "timeout": 20.0})
@@ -334,15 +356,6 @@ func sync_optional_login_data_background(include_config: bool = true) -> void:
 	else:
 		FileLogger.warn("登录后台博物馆同步失败: " + decks_resp.get("error", ""))
 
-	var daily_resp: Dictionary = results.get("daily", {})
-	var daily_error := str(daily_resp.get("error", ""))
-	if daily_resp.get("success", false):
-		_apply_daily_reward(daily_resp["data"])
-	elif daily_error.find("今日已签到") >= 0:
-		FileLogger.log("登录后台每日奖励已检查: " + daily_error)
-	else:
-		FileLogger.warn("登录后台每日奖励检查失败: " + daily_error)
-
 	if include_config:
 		var config_resp: Dictionary = results.get("config", {})
 		if config_resp.get("success", false):
@@ -356,19 +369,11 @@ func sync_optional_login_data_background(include_config: bool = true) -> void:
 		"total_ms": Time.get_ticks_msec() - started,
 		"vault": vault_resp.get("success", false),
 		"decks": decks_resp.get("success", false),
-		"daily": daily_resp.get("success", false) or daily_error.find("今日已签到") >= 0,
 		"profile": profile_resp.get("success", false),
 		"level": level_resp.get("success", false),
 		"config": results.get("config", {}).get("success", false) if include_config else null,
 	})
 	data_synced.emit()
-
-func _apply_daily_reward(daily_data: Dictionary) -> void:
-	if daily_data.has("newGold"):
-		player_data.gold = int(str(daily_data.get("newGold", player_data.gold)))
-	if daily_data.has("newGems"):
-		player_data.gems = int(str(daily_data.get("newGems", player_data.gems)))
-	player_data.changed.emit()
 
 func sync_decks_from_server() -> void:
 	var started := Time.get_ticks_msec()
