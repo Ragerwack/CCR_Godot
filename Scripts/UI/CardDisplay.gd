@@ -1,6 +1,8 @@
 extends Control
 class_name CardDisplay
 
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+
 signal card_clicked(card: CardInfo, index: int)
 signal card_double_clicked(card: CardInfo, index: int)
 signal card_drag_started(card: CardInfo, index: int)
@@ -20,6 +22,7 @@ var drag_source: String = ""   # "pool" / "hand" / "vault"
 var is_draggable: bool = true   # 锁定时为 false
 
 var _card_bg: ColorRect
+var _card_shadow: Panel
 var _art_image: TextureRect
 var _card_name_label: Label
 var _deck_name_label: Label
@@ -85,7 +88,13 @@ func _ready() -> void:
 	setup_ui()
 
 func setup_ui() -> void:
-	clip_contents = true
+	clip_contents = false
+	_card_shadow = CCRVisualStyle.make_shadow_panel("CardShadow", int(roundf(CARD_SIZE.x * 0.08)), 14, Vector2(5, 8), CCRVisualStyle.CARD_SHADOW)
+	_card_shadow.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_card_shadow.position = Vector2.ZERO
+	_card_shadow.size = CARD_SIZE
+	add_child(_card_shadow)
+
 	_card_bg = ColorRect.new()
 	_card_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_card_bg.color = Color(0.2, 0.2, 0.25, 1.0)
@@ -319,6 +328,8 @@ func _apply_card_layout() -> void:
 
 	if size.x <= 0 or size.y <= 0:
 		size = CARD_SIZE
+	if _card_shadow != null:
+		_card_shadow.size = size
 
 	_apply_rect(_art_image, _canvas_rect(90, 190, 820, 740))
 	_apply_rect(_deck_name_label, _canvas_rect(90, 40, 720, 120))
@@ -581,6 +592,11 @@ func _create_drag_preview(card_offset: Vector2) -> Control:
 	card_layer.z_index = 4096
 	card_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	preview.add_child(card_layer)
+
+	var shadow := CCRVisualStyle.make_shadow_panel("DragPreviewShadow", int(roundf(CARD_SIZE.x * 0.08)), 18, Vector2(7, 10), CCRVisualStyle.CARD_SHADOW)
+	shadow.position = Vector2.ZERO
+	shadow.size = CARD_SIZE
+	card_layer.add_child(shadow)
 
 	# 背景 — 不设锚点，手动设 size
 	var bg = ColorRect.new()

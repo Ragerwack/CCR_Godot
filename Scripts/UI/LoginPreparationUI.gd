@@ -23,16 +23,19 @@ var _setup_done: bool = false
 func _ready() -> void:
 	_setup_ui()
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and is_node_ready():
+		_apply_layout()
+
 func _setup_ui() -> void:
 	if _setup_done:
 		return
 	_setup_done = true
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_force_full_rect(self)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	_panel = Panel.new()
 	_panel.size = Vector2(520, 500)
-	_panel.position = (get_viewport_rect().size - _panel.size) / 2.0
 	add_child(_panel)
 
 	var vbox := VBoxContainer.new()
@@ -81,6 +84,7 @@ func _setup_ui() -> void:
 	_back_button.visible = false
 	_back_button.pressed.connect(func(): back_requested.emit())
 	buttons.add_child(_back_button)
+	_apply_layout()
 
 func set_steps(steps: Array[Dictionary]) -> void:
 	if _steps_box == null:
@@ -160,6 +164,26 @@ func show_success() -> void:
 	_retry_button.visible = false
 	_back_button.visible = false
 	set_current(Localization.t("ui.login.prepare.done"))
+
+func _apply_layout() -> void:
+	_force_full_rect(self)
+	if _panel != null:
+		_panel.position = (_viewport_size() - _panel.size) / 2.0
+
+func _force_full_rect(control: Control) -> void:
+	if control == null:
+		return
+	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	control.offset_left = 0.0
+	control.offset_top = 0.0
+	control.position = Vector2.ZERO
+	control.size = _viewport_size()
+
+func _viewport_size() -> Vector2:
+	var vp_size := get_viewport_rect().size
+	if vp_size.x <= 0.0 or vp_size.y <= 0.0:
+		return DisplayServer.window_get_size()
+	return vp_size
 
 func _status_text(status: String) -> String:
 	match status:

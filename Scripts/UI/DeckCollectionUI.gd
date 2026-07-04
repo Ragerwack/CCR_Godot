@@ -1,6 +1,8 @@
 extends Control
 class_name DeckCollectionUI
 
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+
 # 博物馆 — 展示所有已合成圣物，按颜色分组
 
 const CARDS_PER_ROW: int = 6
@@ -10,10 +12,11 @@ const CARD_SPACING: float = 24.0
 const CARD_HORIZONTAL_SPACING: float = CARD_SPACING * 0.5
 const SECTION_SPACING: float = 20.0
 const HEADER_HEIGHT: float = 32.0
-const FILTER_BAR_TOP: float = 48.0
+const FILTER_BAR_TOP: float = 12.0
 const FILTER_BAR_HEIGHT: float = 38.0
 const VISUAL_RELIC_LABEL_HEIGHT: float = 72.0
-const RELIC_SCREEN_HEIGHT_RATIO: float = 3.0 / 5.0
+const RELIC_SCALE_MULTIPLIER: float = 1.30
+const RELIC_SCREEN_HEIGHT_RATIO: float = (3.0 / 5.0) * RELIC_SCALE_MULTIPLIER
 const RELIC_VIEW_SCENE = preload("res://Scenes/UI/RelicView.tscn")
 const THUMBNAIL_CACHE = preload("res://Scripts/UI/MuseumRelicThumbnailCache.gd")
 const CardDisplayScript = preload("res://Scripts/UI/CardDisplay.gd")
@@ -65,6 +68,7 @@ var _resize_render_queued: bool = false
 var _view_overlay: Control = null
 var _view_blur: ColorRect = null
 var _view_relic: TextureRect = null
+var _view_relic_shadow: TextureRect = null
 var _view_source_card: Control = null
 var _view_source_card_modulate: Color = Color.WHITE
 var _view_card_displays: Array[CardDisplay] = []
@@ -105,18 +109,6 @@ func _rerender_after_viewport_resize() -> void:
 		render_decks()
 
 func setup_ui() -> void:
-	# 标题
-	var title = Label.new()
-	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	title.position = Vector2(0, 10)
-	title.size = Vector2(400, 32)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.text = Localization.t("ui.deck_collection.title")
-	title.add_theme_font_size_override("font_size", 20)
-	title.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0, 1.0))  # 金色
-	title.name = "MuseumTitle"
-	add_child(title)
-
 	_create_filter_bar()
 
 	# 空状态提示（初始隐藏）
@@ -135,7 +127,7 @@ func setup_ui() -> void:
 	# 滚动容器
 	_scroll_container = ScrollContainer.new()
 	_scroll_container.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_scroll_container.offset_top = 94
+	_scroll_container.offset_top = 58
 	_scroll_container.offset_bottom = 0
 	_scroll_container.offset_left = 10
 	_scroll_container.offset_right = -10
@@ -603,6 +595,8 @@ func _create_visual_relic_card(relic: Dictionary) -> Control:
 		int(relic.get("deck_def_id", 0)),
 		cards
 	)
+	var relic_shadow := CCRVisualStyle.make_texture_shadow(thumbnail, "RelicThumbnailShadow", Vector2(10, 16), CCRVisualStyle.RELIC_SHADOW)
+	relic_host.add_child(relic_shadow)
 	relic_host.add_child(thumbnail)
 
 	if thumbnail.texture == null:
@@ -690,13 +684,18 @@ func _start_relic_view(relic: Dictionary, thumbnail: TextureRect, source_card: C
 	_view_relic.position = relic_rect.position
 	_view_relic.size = relic_rect.size
 	_view_relic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_view_relic_shadow = CCRVisualStyle.make_texture_shadow(_view_relic, "MuseumViewedRelicShadow", Vector2(12, 18), CCRVisualStyle.RELIC_SHADOW)
+	_view_overlay.add_child(_view_relic_shadow)
 	_view_overlay.add_child(_view_relic)
 
 	_view_state = ViewState.RELIC_CENTERED
 	_view_busy = true
 	var target_center := Vector2(get_viewport_rect().size.x / 7.0, get_viewport_rect().size.y * 0.5)
 	var tween := create_tween()
+	tween.set_parallel(true)
 	tween.tween_property(_view_relic, "position", target_center - relic_rect.size * 0.5, VIEW_RELIC_MOVE_SECONDS).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	if is_instance_valid(_view_relic_shadow):
+		tween.tween_property(_view_relic_shadow, "position", target_center - relic_rect.size * 0.5 + Vector2(12, 18), VIEW_RELIC_MOVE_SECONDS).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	await tween.finished
 	if _view_cancel_requested:
 		_finish_relic_view()
@@ -798,7 +797,10 @@ func _finish_relic_view() -> void:
 		_view_busy = true
 	var target_pos := _view_source_rect.position
 	var tween := create_tween()
+	tween.set_parallel(true)
 	tween.tween_property(_view_relic, "position", target_pos, VIEW_RELIC_MOVE_SECONDS).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	if is_instance_valid(_view_relic_shadow):
+		tween.tween_property(_view_relic_shadow, "position", target_pos + Vector2(12, 18), VIEW_RELIC_MOVE_SECONDS).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	await tween.finished
 	_reset_relic_view_state()
 
@@ -815,6 +817,7 @@ func _reset_relic_view_state() -> void:
 	_view_overlay = null
 	_view_blur = null
 	_view_relic = null
+	_view_relic_shadow = null
 	if is_instance_valid(_view_source_card):
 		_view_source_card.modulate = _view_source_card_modulate
 	_view_source_card = null

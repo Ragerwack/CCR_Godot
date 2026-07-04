@@ -1,6 +1,8 @@
 extends Control
 class_name CardSlotUI
 
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+
 signal slot_clicked(index: int)
 signal slot_double_clicked(index: int)
 signal card_dropped(target_index: int, card: CardInfo, source: String, source_index: int)
@@ -25,6 +27,8 @@ var _lock_label: Label = null
 var _lock_overlay: ColorRect = null
 var _glow_effect: ColorRect = null
 var _selected_highlight: Panel = null
+var _focus_highlight: Panel = null
+var _slot_shadow: Panel = null
 
 # ── 拖拽视觉状态 ──
 var _drag_out_overlay: ColorRect = null   # 卡牌被拖出时的灰色遮罩
@@ -62,11 +66,15 @@ func _ready() -> void:
 	custom_minimum_size = SLOT_SIZE
 	size = SLOT_SIZE
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	focus_mode = Control.FOCUS_ALL
 	set_process(false)
 	if register_drag_slot:
 		add_to_group("card_slots")
+		add_to_group("controller_focusable")
 	setup_ui()
 	gui_input.connect(_on_gui_input)
+	focus_entered.connect(_on_focus_entered)
+	focus_exited.connect(_on_focus_exited)
 
 	# 监听全局拖拽状态（用于清理视觉状态）
 	if DragSystem != null:
@@ -75,6 +83,12 @@ func _ready() -> void:
 		DragSystem.return_to_source_requested.connect(_on_return_to_source_requested)
 
 func setup_ui() -> void:
+	_slot_shadow = CCRVisualStyle.make_shadow_panel("SlotShadow", int(roundf(SLOT_SIZE.x * 0.08)), 12, Vector2(4, 7), Color(0, 0, 0, 0.24))
+	_slot_shadow.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_slot_shadow.position = Vector2.ZERO
+	_slot_shadow.size = SLOT_SIZE
+	add_child(_slot_shadow)
+
 	_bg_rect = ColorRect.new()
 	_bg_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_bg_rect.color = empty_color
@@ -182,6 +196,25 @@ func setup_ui() -> void:
 	_selected_highlight.add_theme_stylebox_override("panel", selected_style)
 	add_child(_selected_highlight)
 
+	_focus_highlight = Panel.new()
+	_focus_highlight.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_focus_highlight.position = Vector2(-10, -10)
+	_focus_highlight.size = SLOT_SIZE + Vector2(20, 20)
+	_focus_highlight.visible = false
+	_focus_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var focus_style = StyleBoxFlat.new()
+	focus_style.bg_color = Color(0.35, 0.78, 1.0, 0.04)
+	focus_style.border_color = Color(0.5, 0.88, 1.0, 0.95)
+	focus_style.set_border_width_all(2)
+	focus_style.corner_radius_top_left = 9
+	focus_style.corner_radius_top_right = 9
+	focus_style.corner_radius_bottom_left = 9
+	focus_style.corner_radius_bottom_right = 9
+	focus_style.shadow_color = Color(0.35, 0.75, 1.0, 0.55)
+	focus_style.shadow_size = 10
+	_focus_highlight.add_theme_stylebox_override("panel", focus_style)
+	add_child(_focus_highlight)
+
 	# mouse_entered → 隐藏光晕
 	mouse_entered.connect(_on_mouse_entered)
 	mouse_exited.connect(_on_mouse_exited)
@@ -191,6 +224,15 @@ func setup_ui() -> void:
 
 func _exit_tree() -> void:
 	_hide_hover_preview()
+
+func is_controller_focusable() -> bool:
+	return _unlocked and (is_occupied or show_empty)
+
+func controller_activate() -> void:
+	if not _unlocked:
+		slot_unlock_requested.emit(slot_index)
+	else:
+		slot_clicked.emit(slot_index)
 
 func set_card(card: CardInfo, idx: int = -1) -> void:
 	if idx >= 0:
@@ -384,25 +426,22 @@ func _show_hover_preview() -> void:
 func _hover_preview_center(viewport_size: Vector2, preview_size: Vector2) -> Vector2:
 	if area_type == "pool" or area_type == "hand":
 		var is_left_group := slot_index % 8 < 4
-		var target_rect := _visible_pool_hand_side_rect(not is_left_group)
+		var target_rect := _visible_area_side_rect(["pool", "hand"], not is_left_group)
 		if target_rect.size.x > 0.0 and target_rect.size.y > 0.0:
 			return target_rect.get_center()
 
 	if area_type == "vault":
-		var target_rect := _visible_slot_group_rect("vault")
+		var is_left_group := slot_index % 8 < 4
+		var target_rect := _visible_area_side_rect(["vault"], not is_left_group)
 		if target_rect.size.x > 0.0 and target_rect.size.y > 0.0:
-			var preview_half := preview_size.x * 0.5
-			var left_space_center := maxf(preview_half, target_rect.position.x * 0.5)
-			var right_space_center := minf(viewport_size.x - preview_half, target_rect.end.x + maxf(0.0, viewport_size.x - target_rect.end.x) * 0.5)
-			var center_x := right_space_center if global_position.x < viewport_size.x * 0.5 else left_space_center
-			return Vector2(center_x, viewport_size.y * 0.5)
+			return target_rect.get_center()
 
 	var mid_x := viewport_size.x * 0.5
 	if global_position.x < mid_x:
 		return Vector2(mid_x + mid_x * 0.5, viewport_size.y * 0.5)
 	return Vector2(mid_x * 0.5, viewport_size.y * 0.5)
 
-func _visible_pool_hand_side_rect(left_group: bool) -> Rect2:
+func _visible_area_side_rect(area_types: Array, left_group: bool) -> Rect2:
 	var found := false
 	var union_rect := Rect2()
 	for node in get_tree().get_nodes_in_group("card_slots"):
@@ -411,7 +450,7 @@ func _visible_pool_hand_side_rect(left_group: bool) -> Rect2:
 			continue
 		if not slot.visible or not slot.is_inside_tree():
 			continue
-		if not ["pool", "hand"].has(slot.area_type):
+		if not area_types.has(slot.area_type):
 			continue
 		var slot_is_left := slot.slot_index % 8 < 4
 		if slot_is_left != left_group:
@@ -495,6 +534,14 @@ func _on_card_clicked(card: CardInfo, index: int) -> void:
 func _on_card_double_clicked(card: CardInfo, index: int) -> void:
 	# 向上传播双击信号给父级（CardPoolUI / HandAreaUI）
 	slot_double_clicked.emit(slot_index)
+
+func _on_focus_entered() -> void:
+	if _focus_highlight != null:
+		_focus_highlight.visible = true
+
+func _on_focus_exited() -> void:
+	if _focus_highlight != null:
+		_focus_highlight.visible = false
 
 
 # ══════════════════════════════════════════════════

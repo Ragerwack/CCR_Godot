@@ -23,8 +23,15 @@ var _selected_hand_index: int = -1
 var _btn_synth: Button = null
 var _btn_discard: Button = null
 var _btn_vault: Button = null
+var _synth_cooldown: Control = null
+var _discard_cooldown: Control = null
+var _vault_cooldown: Control = null
+
+const AssetActionCooldownScript = preload("res://Scripts/UI/AssetActionCooldown.gd")
 
 const PAGE_ROLL_DURATION: float = 0.32
+const SLOT_SPACING: float = 8.0
+const SLOT_CLIP_PADDING: Vector2 = Vector2(24.0, 24.0)
 
 func _ready() -> void:
 	setup_ui()
@@ -42,25 +49,24 @@ func setup_ui() -> void:
 func _create_slot_grid() -> void:
 	_slots_clip = Control.new()
 	_slots_clip.clip_contents = true
-	_slots_clip.position = Vector2.ZERO
-	_slots_clip.size = _grid_size()
+	_slots_clip.position = Vector2(_centered_grid_start_x(), 0.0) - SLOT_CLIP_PADDING
+	_slots_clip.size = _grid_size() + SLOT_CLIP_PADDING * 2.0
 	add_child(_slots_clip)
 
 	_slots_layer = Control.new()
-	_slots_layer.position = Vector2.ZERO
+	_slots_layer.position = SLOT_CLIP_PADDING
 	_slots_layer.size = _grid_size()
 	_slots_clip.add_child(_slots_layer)
 
 	var slot_size = CardSlotUI.SLOT_SIZE
-	var slot_spacing = 8
-	var start_x = 40
+	var start_x = 0.0
 	var start_y = 0
 
 	for i in range(slot_count):  # 16 可见槽
 		var row = i / columns
 		var col = i % columns
-		var x = start_x + col * (slot_size.x + slot_spacing)
-		var y = start_y + row * (slot_size.y + slot_spacing)
+		var x = start_x + col * (slot_size.x + SLOT_SPACING)
+		var y = start_y + row * (slot_size.y + SLOT_SPACING)
 
 		var slot = CardSlotUI.new()
 		slot.slot_index = i
@@ -96,24 +102,36 @@ func _create_action_column() -> void:
 	_btn_synth.text = Localization.t("ui.hand.synthesize")
 	_btn_synth.custom_minimum_size = Vector2(100, 36)
 	_btn_synth.disabled = true
-	_btn_synth.pressed.connect(func(): synthesize_requested.emit())
 	vbox.add_child(_btn_synth)
+	_synth_cooldown = _attach_action_cooldown(_btn_synth)
+	_btn_synth.pressed.connect(func():
+		if _try_start_button_cooldown(_synth_cooldown):
+			synthesize_requested.emit()
+	)
 
 	# 丢弃
 	_btn_discard = Button.new()
 	_btn_discard.text = Localization.t("ui.hand.discard")
 	_btn_discard.custom_minimum_size = Vector2(100, 36)
 	_btn_discard.disabled = true
-	_btn_discard.pressed.connect(func(): discard_requested.emit())
 	vbox.add_child(_btn_discard)
+	_discard_cooldown = _attach_action_cooldown(_btn_discard)
+	_btn_discard.pressed.connect(func():
+		if _try_start_button_cooldown(_discard_cooldown):
+			discard_requested.emit()
+	)
 
 	# 存入保险箱
 	_btn_vault = Button.new()
 	_btn_vault.text = Localization.t("ui.hand.store_vault")
 	_btn_vault.custom_minimum_size = Vector2(100, 36)
 	_btn_vault.disabled = true
-	_btn_vault.pressed.connect(func(): vault_save_requested.emit())
 	vbox.add_child(_btn_vault)
+	_vault_cooldown = _attach_action_cooldown(_btn_vault)
+	_btn_vault.pressed.connect(func():
+		if _try_start_button_cooldown(_vault_cooldown):
+			vault_save_requested.emit()
+	)
 
 # ── 翻页 ──
 func _on_page_flip() -> void:
@@ -127,12 +145,17 @@ func _on_page_flip() -> void:
 
 func _grid_size() -> Vector2:
 	var slot_size = CardSlotUI.SLOT_SIZE
-	var slot_spacing = 8
-	var start_x = 40
 	return Vector2(
-		start_x + columns * slot_size.x + (columns - 1) * slot_spacing,
-		rows_visible * slot_size.y + (rows_visible - 1) * slot_spacing
+		columns * slot_size.x + (columns - 1) * SLOT_SPACING,
+		rows_visible * slot_size.y + (rows_visible - 1) * SLOT_SPACING
 	)
+
+
+func _centered_grid_start_x() -> float:
+	var viewport_width := get_viewport_rect().size.x
+	var centered_global_left := maxf(0.0, (viewport_width - _grid_size().x) * 0.5)
+	var parent_global_x := global_position.x if is_inside_tree() else 0.0
+	return maxf(0.0, centered_global_left - parent_global_x)
 
 
 func _roll_to_page(next_page: int) -> void:
@@ -151,18 +174,18 @@ func _roll_to_page(next_page: int) -> void:
 
 	var incoming_layer := Control.new()
 	incoming_layer.size = _grid_size()
-	incoming_layer.position = Vector2(0, roll_distance * direction)
+	incoming_layer.position = SLOT_CLIP_PADDING + Vector2(0, roll_distance * direction)
 	_slots_clip.add_child(incoming_layer)
 	_populate_page_layer(incoming_layer, next_page, false)
 
 	var tween := create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(_slots_layer, "position:y", -roll_distance * direction, PAGE_ROLL_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	tween.tween_property(incoming_layer, "position:y", 0.0, PAGE_ROLL_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(_slots_layer, "position:y", SLOT_CLIP_PADDING.y - roll_distance * direction, PAGE_ROLL_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(incoming_layer, "position:y", SLOT_CLIP_PADDING.y, PAGE_ROLL_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	tween.finished.connect(func():
 		current_page = next_page
 		refresh_display()
-		_slots_layer.position = Vector2.ZERO
+		_slots_layer.position = SLOT_CLIP_PADDING
 		incoming_layer.queue_free()
 		_page_animating = false
 	)
@@ -173,8 +196,7 @@ func _populate_page_layer(layer: Control, page: int, register_slots: bool = true
 	var hand_slots_unlocked = GameManager.player_data.hand_slots
 	var start_idx = page * slot_count
 	var slot_size = CardSlotUI.SLOT_SIZE
-	var slot_spacing = 8
-	var start_x = 40
+	var start_x = 0.0
 	var start_y = 0
 
 	for i in range(slot_count):
@@ -183,7 +205,7 @@ func _populate_page_layer(layer: Control, page: int, register_slots: bool = true
 		var col = i % columns
 		var slot := CardSlotUI.new()
 		slot.slot_index = i
-		slot.position = Vector2(start_x + col * (slot_size.x + slot_spacing), start_y + row * (slot_size.y + slot_spacing))
+		slot.position = Vector2(start_x + col * (slot_size.x + SLOT_SPACING), start_y + row * (slot_size.y + SLOT_SPACING))
 		slot.area_type = "hand"
 		slot.can_drag_from = false
 		slot.register_drag_slot = register_slots
@@ -388,6 +410,25 @@ func get_synthesis_animation_sources(indices: Array) -> Array[Dictionary]:
 	return result
 
 
+func hide_synthesis_slots_for_animation(indices: Array) -> void:
+	for global_idx in indices:
+		var idx := int(global_idx)
+		var local_idx := idx - current_page * slot_count
+		if local_idx < 0 or local_idx >= slots.size():
+			continue
+		var slot := slots[local_idx] as CardSlotUI
+		if slot == null:
+			continue
+		slot.clear_slot()
+		slot.set_selected(false)
+	if _btn_synth != null:
+		_btn_synth.disabled = true
+	if _btn_discard != null:
+		_btn_discard.disabled = true
+	if _btn_vault != null:
+		_btn_vault.disabled = true
+
+
 func _select_hand_slot(global_idx: int) -> void:
 	_selected_hand_index = global_idx
 	refresh_display()
@@ -405,11 +446,39 @@ func _update_action_buttons() -> void:
 	_ensure_selection_valid()
 	var has_selection := _selected_hand_index >= 0
 	if _btn_discard != null:
-		_btn_discard.disabled = not has_selection
+		_btn_discard.disabled = (not has_selection) or _is_button_cooling_down(_discard_cooldown)
 	if _btn_vault != null:
-		_btn_vault.disabled = not (has_selection and _has_unlocked_vault_space())
+		_btn_vault.disabled = (not (has_selection and _has_unlocked_vault_space())) or _is_button_cooling_down(_vault_cooldown)
 	if _btn_synth != null:
-		_btn_synth.disabled = not (has_selection and get_selected_synthesis_indices().size() == 5)
+		_btn_synth.disabled = (not (has_selection and get_selected_synthesis_indices().size() == 5)) or _is_button_cooling_down(_synth_cooldown)
+
+
+func _try_start_button_cooldown(cooldown: Control) -> bool:
+	if cooldown == null:
+		return true
+	var accepted: bool = cooldown.try_start()
+	_update_action_buttons()
+	if accepted:
+		var timer := get_tree().create_timer(cooldown.duration_seconds)
+		timer.timeout.connect(_update_action_buttons)
+	return accepted
+
+
+func _is_button_cooling_down(cooldown: Control) -> bool:
+	return cooldown != null and cooldown.is_cooling_down()
+
+
+func _attach_action_cooldown(button: Button) -> Control:
+	var existing := button.get_node_or_null("AssetActionCooldown") as Control
+	if existing != null:
+		return existing
+	var cooldown := AssetActionCooldownScript.new() as Control
+	cooldown.name = "AssetActionCooldown"
+	cooldown.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cooldown.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cooldown.z_index = 128
+	button.add_child(cooldown)
+	return cooldown
 
 
 func _has_unlocked_vault_space() -> bool:

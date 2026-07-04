@@ -14,6 +14,10 @@ func setup(level: int, rewards: Array[String]) -> void:
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	offset_left = 0
+	offset_top = 0
+	offset_right = 0
+	offset_bottom = 0
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	z_index = 900
 
@@ -24,11 +28,20 @@ func _ready() -> void:
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(shade)
 
+	var center := CenterContainer.new()
+	center.name = "LevelUpCenter"
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.offset_left = 0
+	center.offset_top = 0
+	center.offset_right = 0
+	center.offset_bottom = 0
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(center)
+
 	var panel := Panel.new()
 	panel.name = "LevelUpPanel"
-	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.size = Vector2(420, 250)
-	panel.position = -panel.size / 2.0
+	panel.custom_minimum_size = Vector2(420, 250)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.07, 0.075, 0.10, 0.96)
 	style.border_color = Color(1.0, 0.78, 0.28, 1.0)
@@ -40,7 +53,7 @@ func _ready() -> void:
 	style.shadow_color = Color(0, 0, 0, 0.55)
 	style.shadow_size = 12
 	panel.add_theme_stylebox_override("panel", style)
-	add_child(panel)
+	center.add_child(panel)
 
 	var box := VBoxContainer.new()
 	box.name = "LevelUpContent"

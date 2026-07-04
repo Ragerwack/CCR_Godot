@@ -3,6 +3,7 @@ class_name SynthesisAnimationOverlay
 
 const CardDisplayScript = preload("res://Scripts/UI/CardDisplay.gd")
 const RelicViewScene = preload("res://Scenes/UI/RelicView.tscn")
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
 
 const CARD_FLOAT_DURATION: float = 0.31
 const SURFACE_DISSOLVE_DURATION: float = 0.30
@@ -10,8 +11,10 @@ const ART_MIN_FLIGHT: float = 0.90
 const ART_MAX_FLIGHT: float = 1.30
 const ART_FLIGHT_INTERVAL: float = 0.10
 const RELIC_FORM_DURATION: float = 0.30
+const RELIC_HOLD_DURATION: float = 0.50
 const RELIC_TO_NAV_DURATION: float = 0.50
-const RELIC_SCREEN_HEIGHT_RATIO: float = 3.0 / 5.0
+const RELIC_SCALE_MULTIPLIER: float = 1.30
+const RELIC_SCREEN_HEIGHT_RATIO: float = (3.0 / 5.0) * RELIC_SCALE_MULTIPLIER
 const SINGLE_CARD_FADE_DURATION: float = 0.50
 
 var _sources: Array[Dictionary] = []
@@ -51,6 +54,7 @@ func play() -> void:
 	_relic_rect = _get_centered_relic_rect()
 	await _fly_art_to_relic_slots(art_nodes, _relic_rect)
 	var relic := await _form_relic(art_nodes)
+	await _hold_relic_before_nav(relic)
 	await _send_relic_to_nav(relic)
 	queue_free()
 
@@ -161,7 +165,10 @@ func _dissolve_to_art(card_nodes: Array[Control]) -> Array[TextureRect]:
 		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		art.clip_contents = true
 		art.pivot_offset = art.size * 0.5
+		var shadow := CCRVisualStyle.make_texture_shadow(art, "SynthesisArtShadow", Vector2(8, 10), Color(0, 0, 0, 0.34))
+		add_child(shadow)
 		add_child(art)
+		art.set_meta("shadow", shadow)
 		art_nodes.append(art)
 
 		var tween := create_tween()
@@ -200,10 +207,17 @@ func _fly_art_to_relic_slots(art_nodes: Array[TextureRect], relic_rect: Rect2) -
 		tween.set_parallel(true)
 		tween.tween_method(func(t: float):
 			if is_instance_valid(art):
-				art.position = _cubic_bezier(start_pos, control_a, control_b, target_rect.position, t)
+				var next_pos := _cubic_bezier(start_pos, control_a, control_b, target_rect.position, t)
+				art.position = next_pos
 				art.pivot_offset = art.size * 0.5
+				var shadow = art.get_meta("shadow", null)
+				if shadow is TextureRect and is_instance_valid(shadow):
+					shadow.position = next_pos + Vector2(8, 10)
 		, 0.0, 1.0, duration).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		tween.tween_property(art, "size", target_rect.size, duration).set_delay(delay)
+		var shadow = art.get_meta("shadow", null)
+		if shadow is TextureRect and is_instance_valid(shadow):
+			tween.tween_property(shadow, "size", target_rect.size, duration).set_delay(delay)
 	await get_tree().create_timer(ART_FLIGHT_INTERVAL * maxf(float(art_nodes.size() - 1), 0.0) + ART_MAX_FLIGHT).timeout
 
 
@@ -229,11 +243,23 @@ func _form_relic(art_nodes: Array[TextureRect]) -> Control:
 	for art in art_nodes:
 		if is_instance_valid(art):
 			tween.tween_property(art, "modulate:a", 0.0, RELIC_FORM_DURATION * 0.7)
+			var shadow = art.get_meta("shadow", null)
+			if shadow is TextureRect and is_instance_valid(shadow):
+				tween.tween_property(shadow, "modulate:a", 0.0, RELIC_FORM_DURATION * 0.7)
 	await get_tree().create_timer(RELIC_FORM_DURATION).timeout
 	for art in art_nodes:
 		if is_instance_valid(art):
+			var shadow = art.get_meta("shadow", null)
+			if shadow is TextureRect and is_instance_valid(shadow):
+				shadow.queue_free()
 			art.queue_free()
 	return relic
+
+
+func _hold_relic_before_nav(relic: Control) -> void:
+	if not is_instance_valid(relic):
+		return
+	await get_tree().create_timer(RELIC_HOLD_DURATION).timeout
 
 
 func _get_centered_relic_rect() -> Rect2:

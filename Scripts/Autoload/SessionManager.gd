@@ -58,6 +58,12 @@ func _send_heartbeat() -> void:
 		FileLogger.perf("heartbeat_done", {"success": true, "status": _last_status})
 		return
 
+	if resp.get("error_code", "") == "SESSION_IDLE_TIMEOUT":
+		_failure_count = HEARTBEAT_FAILURE_THRESHOLD
+		FileLogger.perf("heartbeat_idle_timeout", {"reason": resp.get("error", "")})
+		_set_status("reconnecting")
+		return
+
 	if resp.get("error_type", "") == "auth" and ApiClient.has_refresh_token():
 		FileLogger.warn("心跳发现 access token 失效，尝试刷新会话")
 		var refresh_resp: Dictionary = await ApiClient.refresh_session()

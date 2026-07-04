@@ -5,6 +5,8 @@ func _ready() -> void:
 	var pool_right := _add_slot("pool", 4, Vector2(520, 60), 2)
 	var hand_left := _add_slot("hand", 0, Vector2(40, 300), 3)
 	var hand_right := _add_slot("hand", 4, Vector2(520, 300), 4)
+	var vault_left := _add_slot("vault", 0, Vector2(40, 540), 5)
+	var vault_right := _add_slot("vault", 4, Vector2(520, 540), 6)
 
 	await get_tree().process_frame
 
@@ -12,6 +14,8 @@ func _ready() -> void:
 	var preview_size := Vector2(260, 360)
 	var left_rect := Rect2(pool_left.global_position, pool_left.size).merge(Rect2(hand_left.global_position, hand_left.size))
 	var right_rect := Rect2(pool_right.global_position, pool_right.size).merge(Rect2(hand_right.global_position, hand_right.size))
+	var vault_left_rect := Rect2(vault_left.global_position, vault_left.size)
+	var vault_right_rect := Rect2(vault_right.global_position, vault_right.size)
 
 	if not _centers_close(pool_left._hover_preview_center(viewport_size, preview_size), right_rect.get_center()):
 		return _fail("pool_left_preview_not_at_right_group_center")
@@ -24,6 +28,12 @@ func _ready() -> void:
 
 	if not _centers_close(hand_right._hover_preview_center(viewport_size, preview_size), left_rect.get_center()):
 		return _fail("hand_right_preview_not_at_left_group_center")
+
+	if not _centers_close(vault_left._hover_preview_center(viewport_size, preview_size), vault_right_rect.get_center()):
+		return _fail("vault_left_preview_not_at_right_group_center")
+
+	if not _centers_close(vault_right._hover_preview_center(viewport_size, preview_size), vault_left_rect.get_center()):
+		return _fail("vault_right_preview_not_at_left_group_center")
 
 	print("HOVER_PREVIEW_POSITION ok")
 	get_tree().quit(0)

@@ -20,16 +20,19 @@ var _unlock_buttons_busy: bool = false
 # ── 选中合成相关 ──
 var _selected_slots: Array[int] = []     # 单选槽位；保留数组形态便于复用现有高亮逻辑
 var _synthesize_btn: Button = null
+var _synthesize_cooldown: Control = null
 var _relic_preview: RelicView = null
 
 
 const SELECT_BORDER_COLOR: Color = Color(1.0, 0.84, 0.0, 0.7)  # 金色
 const RELIC_VIEW_SCENE = preload("res://Scenes/UI/RelicView.tscn")
 const SynthesisAnimationOverlayScript = preload("res://Scripts/UI/SynthesisAnimationOverlay.gd")
+const AssetActionCooldownScript = preload("res://Scripts/UI/AssetActionCooldown.gd")
 const VAULT_COLUMNS: int = 8
 const MAX_VISIBLE_ROWS: int = 4
 const EXTRA_LOCKED_ROWS: int = 1
 const VAULT_GRID_LEFT_MARGIN: float = 40.0
+const SLOT_SPACING: float = 8.0
 const UNLOCK_PANEL_WIDTH: float = 130.0
 const UNLOCK_PANEL_RIGHT_MARGIN: float = 10.0
 var _nav_target_rect: Rect2 = Rect2()
@@ -56,19 +59,10 @@ func _load_from_server() -> void:
 	refresh_display()
 
 func setup_ui() -> void:
-	# 标题
-	var title = Label.new()
-	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	title.position = Vector2(0, 10)
-	title.size = Vector2(400, 30)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.text = Localization.t("ui.vault.title")
-	add_child(title)
-
 	# 槽位标签
 	var slot_label = Label.new()
 	slot_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	slot_label.position = Vector2(0, 45)
+	slot_label.position = Vector2(0, 16)
 	slot_label.size = Vector2(200, 25)
 	slot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	slot_label.text = Localization.t("ui.vault.slot_count", [GameManager.player_data.vault_cards.size(), slot_count])
@@ -97,8 +91,9 @@ func setup_ui() -> void:
 	_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
 	_synthesize_btn.visible = true
 	_synthesize_btn.disabled = true
-	_synthesize_btn.pressed.connect(_on_synthesize_pressed)
 	add_child(_synthesize_btn)
+	_synthesize_cooldown = _attach_action_cooldown(_synthesize_btn)
+	_synthesize_btn.pressed.connect(_on_synthesize_pressed)
 
 	_create_unlock_panel()
 	_create_slot_grid()
@@ -165,18 +160,17 @@ func _create_unlock_panel() -> void:
 
 func _create_slot_grid() -> void:
 	var slot_size = CardSlotUI.SLOT_SIZE
-	var slot_spacing = 8
 	var render_rows := maxi(1, int(ceil(float(slot_count) / float(columns))))
 	var visible_rows := mini(MAX_VISIBLE_ROWS, render_rows)
-	var total_width = columns * slot_size.x + (columns - 1) * slot_spacing
-	var content_height = render_rows * slot_size.y + (render_rows - 1) * slot_spacing
-	var viewport_height = visible_rows * slot_size.y + (visible_rows - 1) * slot_spacing
+	var total_width = columns * slot_size.x + (columns - 1) * SLOT_SPACING
+	var content_height = render_rows * slot_size.y + (render_rows - 1) * SLOT_SPACING
+	var viewport_height = visible_rows * slot_size.y + (visible_rows - 1) * SLOT_SPACING
 	var available_width = size.x if size.x > 0.0 else get_viewport_rect().size.x
 	var right_reserved = UNLOCK_PANEL_WIDTH + UNLOCK_PANEL_RIGHT_MARGIN + 10.0
-	var start_x = VAULT_GRID_LEFT_MARGIN
+	var start_x = _centered_grid_start_x(total_width)
 	if start_x + total_width + right_reserved > available_width:
-		start_x = maxf(8.0, (available_width - total_width - right_reserved) / 2.0)
-	var start_y = 85.0
+		start_x = maxf(VAULT_GRID_LEFT_MARGIN, available_width - total_width - right_reserved)
+	var start_y = 56.0
 
 	if _slot_viewport != null:
 		_slot_viewport.position = Vector2(start_x, start_y)
@@ -204,10 +198,17 @@ func _create_slot_grid() -> void:
 	for i in range(slots.size()):
 		var row = i / columns
 		var col = i % columns
-		var x = col * (slot_size.x + slot_spacing)
-		var y = row * (slot_size.y + slot_spacing)
+		var x = col * (slot_size.x + SLOT_SPACING)
+		var y = row * (slot_size.y + SLOT_SPACING)
 		slots[i].position = Vector2(x, y)
 		slots[i].visible = i < slot_count
+
+
+func _centered_grid_start_x(total_width: float) -> float:
+	var viewport_width := get_viewport_rect().size.x
+	var centered_global_left := maxf(0.0, (viewport_width - total_width) * 0.5)
+	var parent_global_x := global_position.x if is_inside_tree() else 0.0
+	return maxf(0.0, centered_global_left - parent_global_x)
 
 func _on_player_data_changed() -> void:
 	refresh_display()
@@ -486,10 +487,13 @@ func _update_synthesize_button() -> void:
 	_synthesize_btn.visible = true
 	if synthesis_indices.size() == 5:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.valid")
-		_synthesize_btn.disabled = false
+		_synthesize_btn.disabled = _is_synthesize_cooling_down()
 	else:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [1])
 		_synthesize_btn.disabled = true
+
+func controller_synthesize() -> void:
+	_on_synthesize_pressed()
 
 func _validate_synthesis_cards(cards: Array[CardInfo]) -> bool:
 	if cards.size() != 5:
@@ -511,6 +515,8 @@ func _validate_synthesis_cards(cards: Array[CardInfo]) -> bool:
 func _on_synthesize_pressed() -> void:
 	if _vault_synthesis_animation_running:
 		return
+	if not _try_start_synthesize_cooldown():
+		return
 	if _selected_slots.size() != 1:
 		return
 
@@ -527,11 +533,37 @@ func _on_synthesize_pressed() -> void:
 
 	var animation_sources := get_synthesis_animation_sources(selected_slots)
 	_vault_synthesis_animation_running = true
+	hide_synthesis_slots_for_animation(selected_slots)
 	await _play_vault_synthesis_animation(animation_sources)
 	_vault_synthesis_animation_running = false
 
 	_apply_vault_synthesis_pending_removal(selected_slots)
 	_confirm_vault_synthesis_background(selected_slots)
+
+func _try_start_synthesize_cooldown() -> bool:
+	if _synthesize_cooldown == null:
+		return true
+	var accepted: bool = _synthesize_cooldown.try_start()
+	_update_synthesize_button()
+	if accepted:
+		var timer := get_tree().create_timer(_synthesize_cooldown.duration_seconds)
+		timer.timeout.connect(_update_synthesize_button)
+	return accepted
+
+func _is_synthesize_cooling_down() -> bool:
+	return _synthesize_cooldown != null and _synthesize_cooldown.is_cooling_down()
+
+func _attach_action_cooldown(button: Button) -> Control:
+	var existing := button.get_node_or_null("AssetActionCooldown") as Control
+	if existing != null:
+		return existing
+	var cooldown := AssetActionCooldownScript.new() as Control
+	cooldown.name = "AssetActionCooldown"
+	cooldown.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cooldown.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cooldown.z_index = 128
+	button.add_child(cooldown)
+	return cooldown
 
 func get_synthesis_animation_sources(indices: Array) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
@@ -551,6 +583,17 @@ func get_synthesis_animation_sources(indices: Array) -> Array[Dictionary]:
 			"visible": visible_slot != null,
 		})
 	return result
+
+func hide_synthesis_slots_for_animation(indices: Array) -> void:
+	for global_idx in indices:
+		var idx := int(global_idx)
+		if idx < 0 or idx >= slots.size():
+			continue
+		var slot := slots[idx] as CardSlotUI
+		if slot == null:
+			continue
+		slot.clear_slot()
+		_update_slot_selection_visual(idx)
 
 func _play_vault_synthesis_animation(animation_sources: Array[Dictionary]) -> void:
 	if animation_sources.is_empty() or get_tree() == null:
@@ -638,6 +681,10 @@ func _apply_vault_synthesis_confirmed_result(result_data: Dictionary) -> void:
 	var gems := int(rewards.get("gems", 0))
 	if gems > 0:
 		GameManager.player_data.add_gems(gems)
+
+	var exp_result: Dictionary = result_data.get("exp_result", {})
+	if not exp_result.is_empty():
+		GameManager.apply_exp_result(exp_result)
 
 	var deck_data = result_data.get("deck", {})
 	if not deck_data.is_empty():

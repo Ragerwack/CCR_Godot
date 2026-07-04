@@ -24,6 +24,7 @@ var _roll_ensure_elapsed: float = 0.0
 
 const DRAW_DROP_STAGGER_PER_CARD: float = 0.0625
 const ROLL_ENSURE_INTERVAL_SECONDS: float = 10.0
+const SLOT_SPACING: float = 8.0
 
 func _ready() -> void:
 	setup_ui()
@@ -64,15 +65,14 @@ func setup_ui() -> void:
 
 func _create_slot_grid() -> void:
 	var slot_size = CardSlotUI.SLOT_SIZE
-	var slot_spacing = 8
-	var start_x = 40
+	var start_x = _centered_grid_start_x()
 	var start_y = 0
 
 	for i in range(slot_count):
 		var row = i / columns
 		var col = i % columns
-		var x = start_x + col * (slot_size.x + slot_spacing)
-		var y = start_y + row * (slot_size.y + slot_spacing)
+		var x = start_x + col * (slot_size.x + SLOT_SPACING)
+		var y = start_y + row * (slot_size.y + SLOT_SPACING)
 
 		var slot = CardSlotUI.new()
 		slot.slot_index = i
@@ -84,6 +84,17 @@ func _create_slot_grid() -> void:
 		slot.slot_unlock_requested.connect(func(idx: int): GameManager.handle_unlock_slot("pool", idx))
 		slots.append(slot)
 		add_child(slot)
+
+
+func _grid_width() -> float:
+	return columns * CardSlotUI.SLOT_SIZE.x + (columns - 1) * SLOT_SPACING
+
+
+func _centered_grid_start_x() -> float:
+	var viewport_width := get_viewport_rect().size.x
+	var centered_global_left := maxf(0.0, (viewport_width - _grid_width()) * 0.5)
+	var parent_global_x := global_position.x if is_inside_tree() else 0.0
+	return maxf(0.0, centered_global_left - parent_global_x)
 
 func _create_refresh_column() -> void:
 	var vbox = VBoxContainer.new()
@@ -142,6 +153,15 @@ func _create_refresh_cost_label() -> Label:
 	label.add_theme_font_size_override("font_size", 11)
 	label.add_theme_color_override("font_color", Color(0.88, 0.92, 1.0, 0.92))
 	return label
+
+func controller_refresh(refresh_type: String) -> void:
+	match refresh_type:
+		"free":
+			_on_free_refresh()
+		"gem":
+			_on_gem_refresh()
+		"gold":
+			_on_gold_refresh()
 
 # ── 刷新回调 ──
 func _on_free_refresh() -> void:

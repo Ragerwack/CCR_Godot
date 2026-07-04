@@ -67,7 +67,7 @@ func _ready() -> void:
 	if series_option == null or series_option.get_item_count() < 2:
 		return _fail("filter_series_missing")
 
-	var expected_height := get_viewport().get_visible_rect().size.y * 3.0 / 5.0
+	var expected_height := get_viewport().get_visible_rect().size.y * (3.0 / 5.0) * 1.30
 	for color_type in ALL_RELIC_COLORS:
 		var relic_card := museum.find_child("RelicCard%d" % color_type, true, false) as Control
 		if relic_card == null:
@@ -93,11 +93,16 @@ func _ready() -> void:
 		var relic_host := relic_card.find_child("RelicHost", true, false) as Control
 		if relic_host == null:
 			return _fail("relic_host_missing_%d" % color_type)
+		var relic_shadow := relic_card.find_child("RelicThumbnailShadow", true, false) as TextureRect
+		if relic_shadow == null:
+			return _fail("relic_shadow_missing_%d" % color_type)
 		if absf(relic_host.custom_minimum_size.y - expected_height) > 1.0:
 			return _fail("relic_height_wrong_%d" % color_type)
 		var thumbnail := relic_card.find_child("RelicThumbnail", true, false) as TextureRect
 		if thumbnail == null or thumbnail.texture == null:
 			return _fail("relic_thumbnail_missing_%d" % color_type)
+		if relic_shadow.texture == null or relic_shadow.texture != thumbnail.texture:
+			return _fail("relic_shadow_texture_wrong_%d" % color_type)
 		var cache_path: String = THUMBNAIL_CACHE.get_cache_path(color_type, "solar_system__sun", 21)
 		if not FileAccess.file_exists(cache_path):
 			return _fail("relic_thumbnail_cache_missing_%d" % color_type)
@@ -121,6 +126,8 @@ func _ready() -> void:
 		return _fail("view_relic_not_centered")
 	if museum._view_blur == null or not museum._view_blur.visible:
 		return _fail("view_blur_missing")
+	if museum._view_relic_shadow == null:
+		return _fail("view_relic_shadow_missing")
 	if not first_relic.visible:
 		return _fail("source_relic_layout_not_reserved")
 	if first_relic.modulate.a > 0.01:

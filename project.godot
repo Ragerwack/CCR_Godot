@@ -22,6 +22,8 @@ CardDataManager="*res://Scripts/Autoload/CardDataManager.gd"
 GameManager="*res://Scripts/Autoload/GameManager.gd"
 AudioManager="*res://Scripts/Autoload/AudioManager.gd"
 Config="*res://Scripts/Autoload/Config.gd"
+DisplaySettings="*res://Scripts/Autoload/DisplaySettings.gd"
+ControllerInput="*res://Scripts/Autoload/ControllerInput.gd"
 Localization="*res://Scripts/Autoload/Localization.gd"
 CardPoolSystem="*res://Scripts/Systems/CardPoolSystem.gd"
 DeckSystem="*res://Scripts/Systems/DeckSystem.gd"
@@ -32,9 +34,10 @@ SynthesisSystem="*res://Scripts/Systems/SynthesisSystem.gd"
 
 [display]
 
-window/size/viewport_width=1280
-window/size/viewport_height=720
+window/size/viewport_width=1920
+window/size/viewport_height=1200
 window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [editor_plugins]
 

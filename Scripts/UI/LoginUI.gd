@@ -8,6 +8,17 @@ class_name LoginUI
 signal login_completed()
 
 const CountryCatalogScript = preload("res://Scripts/Data/CountryCatalog.gd")
+const LoadingTutorialUIScript = preload("res://Scripts/UI/LoadingTutorialUI.gd")
+const LoadingScreenScene = preload("res://Scenes/UI/LoadingScreen.tscn")
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+const LOGIN_BACKGROUND_PATH := "res://Resources/Backgrounds/login_background.png"
+const LOADING_BACKGROUND_PATHS: Array[String] = [
+	"res://Resources/Backgrounds/loading_appraisal_workbench.png",
+	"res://Resources/Backgrounds/loading_collection_showcase.png",
+	"res://Resources/Backgrounds/loading_cosmic_archive_corridor.png",
+	"res://Resources/Backgrounds/loading_deep_space_museum_dome.png",
+	"res://Resources/Backgrounds/loading_star_map_corridor.png",
+]
 
 # ══════════════════════════════════════════════════
 #  状态
@@ -28,6 +39,9 @@ var _country_select: OptionButton
 var _submit_button: Button
 var _switch_button: Button
 var _loading_label: Label
+var _login_background: TextureRect = null
+var _loading_screen_ui: LoadingScreenUI = null
+const LOGIN_QUEUE_MAX_POLLS := 180
 
 # ══════════════════════════════════════════════════
 #  生命周期
@@ -37,20 +51,26 @@ func _ready() -> void:
 	_setup_ui()
 	_update_mode()
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and is_node_ready():
+		_apply_fullscreen_layout()
+
 # ══════════════════════════════════════════════════
 #  界面搭建
 # ══════════════════════════════════════════════════
 
 func _setup_ui() -> void:
 	# 全屏覆盖
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_force_full_rect(self)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
-	# 半透明背景遮罩
-	var bg := ColorRect.new()
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0, 0, 0, 0.5)
-	add_child(bg)
+	_login_background = TextureRect.new()
+	_login_background.name = "LoginBackgroundImage"
+	_force_full_rect(_login_background)
+	_login_background.texture = load(LOGIN_BACKGROUND_PATH)
+	_login_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_login_background.stretch_mode = TextureRect.STRETCH_SCALE
+	add_child(_login_background)
 
 	# 居中面板
 	_panel = Panel.new()
@@ -59,6 +79,7 @@ func _setup_ui() -> void:
 		(get_viewport_rect().size.y - 350) / 2.0
 	)
 	_panel.size = Vector2(400, 350)
+	_panel.add_theme_stylebox_override("panel", _make_login_panel_style())
 	add_child(_panel)
 
 	# VBox 布局
@@ -73,6 +94,7 @@ func _setup_ui() -> void:
 	_title = Label.new()
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_title.add_theme_font_size_override("font_size", 24)
+	CCRVisualStyle.apply_dark_label(_title)
 	vbox.add_child(_title)
 
 	vbox.add_child(_make_spacer(4))
@@ -102,6 +124,7 @@ func _setup_ui() -> void:
 	_country_label = Label.new()
 	_country_label.custom_minimum_size = Vector2(100, 36)
 	_country_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	CCRVisualStyle.apply_dark_label(_country_label)
 	_country_row.add_child(_country_label)
 	_country_select = OptionButton.new()
 	_country_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -112,7 +135,7 @@ func _setup_ui() -> void:
 
 	# ── 错误提示 ──
 	_error_label = Label.new()
-	_error_label.add_theme_color_override("font_color", Color.RED)
+	CCRVisualStyle.apply_dark_label(_error_label, CCRVisualStyle.TEXT_ERROR)
 	_error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_error_label.visible = false
 	vbox.add_child(_error_label)
@@ -121,6 +144,7 @@ func _setup_ui() -> void:
 	_loading_label = Label.new()
 	_loading_label.text = Localization.t("ui.login.loading")
 	_loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	CCRVisualStyle.apply_dark_label(_loading_label, CCRVisualStyle.TEXT_DARK_MUTED)
 	_loading_label.visible = false
 	vbox.add_child(_loading_label)
 
@@ -139,6 +163,7 @@ func _setup_ui() -> void:
 
 	# 首次聚焦用户名输入框
 	_username_input.grab_focus()
+	_apply_fullscreen_layout()
 
 # ══════════════════════════════════════════════════
 #  模式切换
@@ -164,10 +189,7 @@ func _update_mode() -> void:
 		_panel.size.y = 455
 
 	# 重新居中
-	_panel.position = Vector2(
-		(get_viewport_rect().size.x - 400) / 2.0,
-		(get_viewport_rect().size.y - _panel.size.y) / 2.0
-	)
+	_center_login_panel()
 
 	_username_input.grab_focus()
 
@@ -206,17 +228,13 @@ func _do_login(username: String, password: String) -> void:
 	_set_loading(false)
 
 	if resp["success"]:
-		var data: Dictionary = resp["data"]
-		if data.has("user") and data["user"] is Dictionary:
-			GameManager.apply_login_user(data["user"])
-		if data.has("draw_key") and data["draw_key"] is Dictionary:
-			GameManager.apply_draw_key(data["draw_key"])
-		_loading_label.text = Localization.t("ui.login.syncing")
-		_loading_label.visible = true
-		await GameManager.sync_initial_card_pool_from_server()
-		_loading_label.visible = false
-		login_completed.emit()
-		_close()
+		await _finish_successful_auth(resp)
+	elif str(resp.get("error_code", "")) == "QUEUE_REQUIRED":
+		var retry := await _wait_for_queue(func(): return await ApiClient.login(username, password), resp)
+		if retry.get("success", false):
+			await _finish_successful_auth(retry)
+		else:
+			_show_error(retry.get("error", resp["error"]))
 	else:
 		_show_error(resp["error"])
 
@@ -226,19 +244,48 @@ func _do_register(username: String, password: String, email: String, country: St
 	_set_loading(false)
 
 	if resp["success"]:
-		var data: Dictionary = resp["data"]
-		if data.has("user") and data["user"] is Dictionary:
-			GameManager.apply_login_user(data["user"])
-		if data.has("draw_key") and data["draw_key"] is Dictionary:
-			GameManager.apply_draw_key(data["draw_key"])
-		_loading_label.text = Localization.t("ui.login.syncing")
-		_loading_label.visible = true
-		await GameManager.sync_initial_card_pool_from_server()
-		_loading_label.visible = false
-		login_completed.emit()
-		_close()
+		await _finish_successful_auth(resp)
+	elif str(resp.get("error_code", "")) == "QUEUE_REQUIRED":
+		var retry := await _wait_for_queue(func(): return await ApiClient.register(username, password, email, country), resp)
+		if retry.get("success", false):
+			await _finish_successful_auth(retry)
+		else:
+			_show_error(retry.get("error", resp["error"]))
 	else:
 		_show_error(resp["error"])
+
+func _finish_successful_auth(resp: Dictionary) -> void:
+	var data: Dictionary = resp["data"]
+	if data.has("user") and data["user"] is Dictionary:
+		GameManager.apply_login_user(data["user"])
+	if data.has("draw_key") and data["draw_key"] is Dictionary:
+		GameManager.apply_draw_key(data["draw_key"])
+	_loading_label.text = Localization.t("ui.login.syncing")
+	_loading_label.visible = true
+	_show_loading_screen_ui(Localization.t("ui.login.syncing"), 55.0)
+	await GameManager.sync_initial_card_pool_from_server()
+	_loading_label.visible = false
+	login_completed.emit()
+	_close()
+
+func _wait_for_queue(retry_callable: Callable, auth_resp: Dictionary) -> Dictionary:
+	var queue_data: Dictionary = auth_resp.get("data", {}) if auth_resp.get("data", {}) is Dictionary else {}
+	var ticket_id := str(queue_data.get("ticket_id", ""))
+	if ticket_id == "":
+		return auth_resp
+	Config.set_value("queue", "ticket_id", ticket_id)
+	for _poll_index in range(LOGIN_QUEUE_MAX_POLLS):
+		var position := int(queue_data.get("position", 0))
+		var wait_seconds := int(queue_data.get("estimated_wait_seconds", 0))
+		_show_error(Localization.t("ui.login.queue.waiting", [position, wait_seconds]))
+		await get_tree().create_timer(maxf(2.0, float(queue_data.get("poll_after_seconds", 10)))).timeout
+		var status_resp := await ApiClient.queue_status(ticket_id)
+		if not status_resp.get("success", false):
+			return status_resp
+		queue_data = status_resp.get("data", {}) if status_resp.get("data", {}) is Dictionary else {}
+		if bool(queue_data.get("admitted", false)):
+			return await retry_callable.call()
+	return {"success": false, "error": Localization.t("ui.login.queue.timeout"), "error_type": "network", "status_code": 0}
 
 func _populate_country_options() -> void:
 	var selected_code := _selected_country_code()
@@ -278,6 +325,40 @@ func _show_error(msg: String) -> void:
 	_error_label.text = msg
 	_error_label.visible = true
 
+func _apply_fullscreen_layout() -> void:
+	_force_full_rect(self)
+	if _login_background != null:
+		_force_full_rect(_login_background)
+	if _loading_screen_ui != null:
+		_force_full_rect(_loading_screen_ui)
+		if _loading_screen_ui.has_method("apply_fullscreen_layout"):
+			_loading_screen_ui.call("apply_fullscreen_layout")
+	_center_login_panel()
+
+func _center_login_panel() -> void:
+	if _panel == null:
+		return
+	var vp_size := _viewport_size()
+	_panel.position = Vector2(
+		(vp_size.x - _panel.size.x) / 2.0,
+		(vp_size.y - _panel.size.y) / 2.0
+	)
+
+func _force_full_rect(control: Control) -> void:
+	if control == null:
+		return
+	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	control.offset_left = 0.0
+	control.offset_top = 0.0
+	control.position = Vector2.ZERO
+	control.size = _viewport_size()
+
+func _viewport_size() -> Vector2:
+	var vp_size := get_viewport_rect().size
+	if vp_size.x <= 0.0 or vp_size.y <= 0.0:
+		return DisplayServer.window_get_size()
+	return vp_size
+
 func _close() -> void:
 	var parent := get_parent()
 	if parent:
@@ -292,3 +373,34 @@ func _make_spacer(height: float) -> Control:
 	var c := Control.new()
 	c.custom_minimum_size = Vector2(0, height)
 	return c
+
+func _show_loading_screen_ui(status: String, progress: float) -> void:
+	if _login_background != null:
+		_login_background.texture = load(LOGIN_BACKGROUND_PATH)
+	if _loading_screen_ui == null:
+		_loading_screen_ui = LoadingScreenScene.instantiate() as LoadingScreenUI
+		_force_full_rect(_loading_screen_ui)
+		add_child(_loading_screen_ui)
+	_force_full_rect(_loading_screen_ui)
+	if _loading_screen_ui.has_method("apply_fullscreen_layout"):
+		_loading_screen_ui.call("apply_fullscreen_layout")
+	var path := LOADING_BACKGROUND_PATHS[randi() % LOADING_BACKGROUND_PATHS.size()] if not LOADING_BACKGROUND_PATHS.is_empty() else ""
+	if path != "":
+		_loading_screen_ui.set_background(load(path))
+	var tip := LoadingTutorialUIScript.pick_tip_for_locale(maxi(1, GameManager.player_data.level), Localization.locale)
+	var category := str(tip.get("category", "tip" if Localization.locale == "en" else "收藏提示"))
+	_loading_screen_ui.set_tip(category, str(tip.get("title", Localization.t("ui.login.prepare.title"))), str(tip.get("body", "")))
+	_loading_screen_ui.set_progress(progress, status)
+	_loading_screen_ui.set_server_status(Localization.t("ui.login.loading.online"))
+	_loading_screen_ui.set_version("CCR")
+
+func _make_login_panel_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(1, 1, 1, 0.74)
+	style.border_color = Color(0.08, 0.10, 0.13, 0.24)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(14)
+	style.shadow_color = Color(0, 0, 0, 0.24)
+	style.shadow_size = 18
+	style.shadow_offset = Vector2(0, 8)
+	return style

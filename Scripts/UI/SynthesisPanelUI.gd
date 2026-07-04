@@ -13,6 +13,7 @@ var _hand_slots: Array[CardSlotUI] = []
 var _selected_indices: Array[int] = []
 var _all_hand_cards: Array = []  # 手牌数据 [{slot_index, card_def_id, color, card_def}]
 var _synthesize_button: Button = null
+var _synthesize_cooldown: Control = null
 var _status_label: Label = null
 var _error_label: Label = null
 var _title_label: Label = null
@@ -20,6 +21,9 @@ var _back_button: Button = null
 var _select_all_button: Button = null
 var _highlight_color: Color = Color(0.2, 0.8, 0.2, 0.3)  # 可合成高亮
 var _selected_highlight: Color = Color(0.2, 0.5, 1.0, 0.4)  # 选中高亮
+var _synthesis_request_pending: bool = false
+
+const AssetActionCooldownScript = preload("res://Scripts/UI/AssetActionCooldown.gd")
 
 func _ready() -> void:
 	setup_ui()
@@ -42,8 +46,9 @@ func setup_ui() -> void:
 	_synthesize_button.size = Vector2(120, 40)
 	_synthesize_button.text = Localization.t("ui.synthesis.button.count", [0])
 	_synthesize_button.disabled = true
-	_synthesize_button.pressed.connect(_on_synthesize_pressed)
 	add_child(_synthesize_button)
+	_synthesize_cooldown = _attach_action_cooldown(_synthesize_button)
+	_synthesize_button.pressed.connect(_on_synthesize_pressed)
 
 	# 一键选择按钮
 	_select_all_button = Button.new()
@@ -178,7 +183,7 @@ func _on_slot_clicked(idx: int) -> void:
 func update_button_state() -> void:
 	var count = _selected_indices.size()
 	_synthesize_button.text = Localization.t("ui.synthesis.button.count", [count])
-	_synthesize_button.disabled = (count != 5)
+	_synthesize_button.disabled = (count != 5) or _is_synthesize_cooling_down() or _synthesis_request_pending
 
 	if count == 5:
 		# 检查是否满足合成条件
@@ -186,8 +191,10 @@ func update_button_state() -> void:
 		if valid:
 			_synthesize_button.text = Localization.t("ui.synthesis.button.valid")
 			_error_label.text = ""
+			_synthesize_button.disabled = _is_synthesize_cooling_down() or _synthesis_request_pending
 		else:
 			_synthesize_button.text = Localization.t("ui.synthesis.button.invalid")
+			_synthesize_button.disabled = true
 			_error_label.text = Localization.t("ui.synthesis.invalid_selected")
 	else:
 		_error_label.text = ""
@@ -275,16 +282,20 @@ func _on_synthesize_pressed() -> void:
 	if not _validate_selection():
 		_error_label.text = Localization.t("ui.synthesis.invalid_detail")
 		return
+	if not _try_start_synthesize_cooldown():
+		return
 
 	_synthesize_button.disabled = true
 	_synthesize_button.text = Localization.t("ui.synthesis.crafting")
 	_status_label.text = Localization.t("ui.synthesis.crafting_status")
 	_error_label.text = ""
+	_synthesis_request_pending = true
 
 	# 调用合成系统（请求后端API，从手牌合成）
 	SynthesisSystem.synthesize(_selected_indices.duplicate(), "hand")
 
 func _on_synthesis_succeeded(result: Dictionary) -> void:
+	_synthesis_request_pending = false
 	_status_label.text = Localization.t("ui.synthesis.success_gold", [result.get("gold_reward", 0)])
 	_synthesize_button.disabled = true
 	_synthesize_button.text = Localization.t("ui.synthesis.done")
@@ -305,6 +316,15 @@ func _on_synthesis_succeeded(result: Dictionary) -> void:
 	if gold > 0:
 		GameManager.player_data.add_gold(gold)
 
+	var rewards: Dictionary = result.get("rewards", {})
+	var gems := int(rewards.get("gems", 0))
+	if gems > 0:
+		GameManager.player_data.add_gems(gems)
+
+	var exp_result: Dictionary = result.get("exp_result", {})
+	if not exp_result.is_empty():
+		GameManager.apply_exp_result(exp_result)
+
 	# 更新套牌
 	var deck_data = result.get("deck", {})
 	if not deck_data.is_empty():
@@ -319,9 +339,9 @@ func _on_synthesis_succeeded(result: Dictionary) -> void:
 	_selected_indices.clear()
 
 func _on_synthesis_failed(reason: String) -> void:
+	_synthesis_request_pending = false
 	_status_label.text = ""
 	_error_label.text = Localization.t("ui.synthesis.failed", [reason])
-	_synthesize_button.disabled = _selected_indices.size() != 5
 	update_button_state()
 
 	await get_tree().create_timer(3.0).timeout
@@ -329,3 +349,31 @@ func _on_synthesis_failed(reason: String) -> void:
 
 func _on_back_pressed() -> void:
 	synthesis_cancelled.emit()
+
+
+func _try_start_synthesize_cooldown() -> bool:
+	if _synthesize_cooldown == null:
+		return true
+	var accepted: bool = _synthesize_cooldown.try_start()
+	update_button_state()
+	if accepted:
+		var timer := get_tree().create_timer(_synthesize_cooldown.duration_seconds)
+		timer.timeout.connect(update_button_state)
+	return accepted
+
+
+func _is_synthesize_cooling_down() -> bool:
+	return _synthesize_cooldown != null and _synthesize_cooldown.is_cooling_down()
+
+
+func _attach_action_cooldown(button: Button) -> Control:
+	var existing := button.get_node_or_null("AssetActionCooldown") as Control
+	if existing != null:
+		return existing
+	var cooldown := AssetActionCooldownScript.new() as Control
+	cooldown.name = "AssetActionCooldown"
+	cooldown.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cooldown.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cooldown.z_index = 128
+	button.add_child(cooldown)
+	return cooldown

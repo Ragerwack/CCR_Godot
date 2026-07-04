@@ -66,6 +66,16 @@ func get_button_global_rect(id: String) -> Rect2:
 			return buttons[i].get_global_rect()
 	return Rect2()
 
+func select_next_enabled(direction: int) -> void:
+	if NAV_ITEMS.is_empty():
+		return
+	var step := 1 if direction >= 0 else -1
+	for offset in range(1, NAV_ITEMS.size() + 1):
+		var index := wrapi(selected_index + offset * step, 0, NAV_ITEMS.size())
+		if NAV_ITEMS[index].get("enabled", true):
+			_on_button_pressed(index)
+			return
+
 func _on_button_pressed(index: int) -> void:
 	if not NAV_ITEMS[index].get("enabled", true):
 		return

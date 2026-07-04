@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://asset_action_cooldown_test"]
+
+[ext_resource type="Script" path="res://Scripts/Tests/AssetActionCooldownTest.gd" id="1"]
+
+[node name="AssetActionCooldownTest" type="Node"]
+script = ExtResource("1")

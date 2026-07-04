@@ -53,6 +53,7 @@ signal level_info_failed(reason: String)
 signal heartbeat_succeeded(status: Dictionary)
 signal heartbeat_failed(reason: String)
 signal auth_expired()
+signal session_reconnect_required(reason: String)
 signal network_status_changed(status: String)
 
 # ══════════════════════════════════════════════════
@@ -455,15 +456,20 @@ func _parse_response(result_arr: Array, _url: String = "") -> Dictionary:
 
 	# 失败响应
 	var err: String = data.get("error", "未知错误")
+	var error_code := str(data.get("error_code", ""))
+	var error_data = data.get("data", {})
 	if code == 401:
 		# 认证过期 — 清除 token 并通知
 		_auth_token = ""
 		Config.set_value("auth", "token", "")
+		if error_code == "SESSION_IDLE_TIMEOUT":
+			session_reconnect_required.emit(err)
+			return {"success": false, "error": err, "error_type": "auth", "error_code": error_code, "data": error_data, "status_code": code}
 		if not _url.ends_with("/auth/refresh") and not _url.ends_with("/auth/heartbeat"):
 			auth_expired.emit()
-		return {"success": false, "error": err, "error_type": "auth", "status_code": code}
+		return {"success": false, "error": err, "error_type": "auth", "error_code": error_code, "data": error_data, "status_code": code}
 
-	return {"success": false, "error": err, "error_type": "business", "status_code": code}
+	return {"success": false, "error": err, "error_type": "business", "error_code": error_code, "data": error_data, "status_code": code}
 
 # ══════════════════════════════════════════════════
 #  认证
@@ -471,10 +477,15 @@ func _parse_response(result_arr: Array, _url: String = "") -> Dictionary:
 
 ## 登录 — 成功时自动保存 token
 func login(username: String, password: String) -> Dictionary:
-	var body := JSON.stringify({"email": username, "password": password})
+	var payload := {"email": username, "password": password}
+	var queue_ticket := str(Config.get_value("queue", "ticket_id", ""))
+	if queue_ticket != "":
+		payload["queue_ticket_id"] = queue_ticket
+	var body := JSON.stringify(payload)
 	var resp := await _request(_api_url("/auth/login"), HTTPClient.METHOD_POST, body, AUTH_TIMEOUT_SECONDS)
 
 	if resp["success"]:
+		Config.set_value("queue", "ticket_id", "")
 		var data: Dictionary = resp["data"]
 		if data.has("token") or data.has("access_token"):
 			_store_login_tokens(data)
@@ -488,10 +499,15 @@ func login(username: String, password: String) -> Dictionary:
 
 ## 注册
 func register(username: String, password: String, email: String, country: String = "EARTH") -> Dictionary:
-	var body := JSON.stringify({"username": username, "password": password, "email": email, "country": country})
+	var payload := {"username": username, "password": password, "email": email, "country": country}
+	var queue_ticket := str(Config.get_value("queue", "ticket_id", ""))
+	if queue_ticket != "":
+		payload["queue_ticket_id"] = queue_ticket
+	var body := JSON.stringify(payload)
 	var resp := await _request(_api_url("/auth/register"), HTTPClient.METHOD_POST, body, AUTH_TIMEOUT_SECONDS)
 
 	if resp["success"]:
+		Config.set_value("queue", "ticket_id", "")
 		var data: Dictionary = resp["data"]
 		if data.has("token") or data.has("access_token"):
 			_store_login_tokens(data)
@@ -541,6 +557,12 @@ func heartbeat(user_id: int = 0) -> Dictionary:
 	else:
 		heartbeat_failed.emit(resp.get("error", "心跳失败"))
 	return resp
+
+func queue_status(ticket_id: String = "") -> Dictionary:
+	var path := "/queue/status"
+	if ticket_id.strip_edges() != "":
+		path += "?ticket_id=" + ticket_id.uri_encode()
+	return await _request(_api_url(path), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 
 func health_check() -> Dictionary:
 	return await _request(_api_url("/health"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS)
@@ -719,8 +741,7 @@ func synthesize(slot_indices: Array, source_type: String = "hand") -> Dictionary
 	if resp["success"]:
 		var data: Dictionary = resp.get("data", {})
 		if data.get("key_stale", false):
-			if data.get("draw_key", {}) is Dictionary:
-				GameManager.apply_draw_key(data["draw_key"])
+			_apply_optional_draw_key(data)
 			var stale_resp := {
 				"success": false,
 				"error": "抽卡密匙已更新，请重试合成",
@@ -730,12 +751,18 @@ func synthesize(slot_indices: Array, source_type: String = "hand") -> Dictionary
 			}
 			synthesis_failed.emit(stale_resp["error"])
 			return stale_resp
-		if data.get("draw_key", {}) is Dictionary:
-			GameManager.apply_draw_key(data["draw_key"])
+		_apply_optional_draw_key(data)
 		synthesis_completed.emit(resp["data"])
 	else:
 		synthesis_failed.emit(resp["error"])
 	return resp
+
+func _apply_optional_draw_key(data: Dictionary) -> bool:
+	var returned_draw_key = data.get("draw_key", null)
+	if returned_draw_key is Dictionary and not returned_draw_key.is_empty():
+		GameManager.apply_draw_key(returned_draw_key)
+		return true
+	return false
 
 ## 获取已合成套牌列表
 func get_decks() -> Dictionary:

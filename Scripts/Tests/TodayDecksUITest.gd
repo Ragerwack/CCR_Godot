@@ -93,15 +93,36 @@ func _ready() -> void:
 
 	var expected_colors := [
 		CardColor.ColorType.WHITE,
-		CardColor.ColorType.WHITE,
 		CardColor.ColorType.GREEN,
 		CardColor.ColorType.BLUE,
 		CardColor.ColorType.ORANGE,
+		CardColor.ColorType.BLACK,
 	]
 	for i in range(expected_colors.size()):
 		var card_display := first_row_cards[i] as CardDisplay
 		if card_display.card == null or int(card_display.card.color) != int(expected_colors[i]):
 			_fail("sold out color shift is wrong at card " + str(i + 1))
+			return
+
+	var second_row_cards := (rows[1].find_child("TodayDeckCards", true, false) as HBoxContainer).find_children("Card*", "CardDisplay", false, false)
+	var expected_two_sold_out := [
+		CardColor.ColorType.WHITE,
+		CardColor.ColorType.WHITE,
+		CardColor.ColorType.GREEN,
+		CardColor.ColorType.BLUE,
+		CardColor.ColorType.BLACK,
+	]
+	for i in range(expected_two_sold_out.size()):
+		var card_display := second_row_cards[i] as CardDisplay
+		if card_display.card == null or int(card_display.card.color) != int(expected_two_sold_out[i]):
+			_fail("two sold out colors shift is wrong at card " + str(i + 1))
+			return
+
+	var third_row_cards := (rows[2].find_child("TodayDeckCards", true, false) as HBoxContainer).find_children("Card*", "CardDisplay", false, false)
+	for i in range(third_row_cards.size()):
+		var card_display := third_row_cards[i] as CardDisplay
+		if card_display.card == null or int(card_display.card.color) != int(CardColor.ColorType.WHITE):
+			_fail("all advanced colors sold out should display white at card " + str(i + 1))
 			return
 
 	print("TODAY_DECKS_UI ok")
@@ -125,9 +146,7 @@ func _mock_draw_key() -> Dictionary:
 			"deck_def_key": "mock__deck_%d" % deck_index,
 			"series_name": "测试系列",
 			"deck_name": "测试卡组%d" % (deck_index + 1),
-			"relic_caps": {
-				"purple": {"exhausted": deck_index == 0, "current": 900 if deck_index == 0 else 0, "max": 900},
-			},
+			"relic_caps": _mock_relic_caps(deck_index),
 			"cards": cards,
 		})
 	return {
@@ -135,6 +154,28 @@ func _mock_draw_key() -> Dictionary:
 		"version": 1,
 		"decks": decks,
 	}
+
+func _mock_relic_caps(deck_index: int) -> Dictionary:
+	match deck_index:
+		0:
+			return {
+				"purple": {"exhausted": true, "current": 900, "max": 900},
+			}
+		1:
+			return {
+				"purple": {"exhausted": true, "current": 900, "max": 900},
+				"orange": {"exhausted": true, "current": 30, "max": 30},
+			}
+		2:
+			return {
+				"green": {"exhausted": true, "current": 1000000, "max": 1000000},
+				"blue": {"exhausted": true, "current": 30000, "max": 30000},
+				"purple": {"exhausted": true, "current": 900, "max": 900},
+				"orange": {"exhausted": true, "current": 30, "max": 30},
+				"black": {"exhausted": true, "current": 1, "max": 1},
+			}
+		_:
+			return {}
 
 func _find_today_decks_ui(root: Node) -> Node:
 	for child in root.get_children():

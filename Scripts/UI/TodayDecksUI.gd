@@ -9,13 +9,13 @@ const TOP_PAD: int = 18
 const CARD_SPACING: int = 8
 const INFO_WIDTH: int = 190
 const BASE_COLORS: Array[CardColor.ColorType] = [
-	CardColor.ColorType.WHITE,
 	CardColor.ColorType.GREEN,
 	CardColor.ColorType.BLUE,
 	CardColor.ColorType.PURPLE,
 	CardColor.ColorType.ORANGE,
+	CardColor.ColorType.BLACK,
 ]
-const COLOR_API_NAMES: Array[String] = ["white", "green", "blue", "purple", "orange"]
+const COLOR_API_NAMES: Array[String] = ["green", "blue", "purple", "orange", "black"]
 
 var _content: VBoxContainer = null
 var _status_label: Label = null
@@ -105,9 +105,11 @@ func _build_deck_row(row_index: int, deck_data: Dictionary) -> Control:
 	var cards := HBoxContainer.new()
 	cards.name = "TodayDeckCards"
 	cards.add_theme_constant_override("separation", CARD_SPACING)
+	cards.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	row.add_child(cards)
 
 	var card_size := CardSlotUI.SLOT_SIZE
+	cards.custom_minimum_size = Vector2(card_size.x * CARDS_PER_DECK + CARD_SPACING * (CARDS_PER_DECK - 1), card_size.y)
 	var colors := _display_colors(deck_data)
 	for card_number in range(1, CARDS_PER_DECK + 1):
 		var card := _card_for_number(deck_data, card_number, colors[card_number - 1])
@@ -167,7 +169,7 @@ func _show_hover_preview(card_view: CardDisplay) -> void:
 func _layout_hover_preview() -> void:
 	if _hover_preview == null or _hover_preview_source == null:
 		return
-	var viewport_size := get_viewport_rect().size
+	var viewport_size := get_viewport().get_visible_rect().size
 	var preview_height := viewport_size.y * 0.5
 	var preview_width := preview_height * (CardSlotUI.SLOT_SIZE.x / CardSlotUI.SLOT_SIZE.y)
 	var blank_rect := _right_blank_preview_rect()
@@ -181,7 +183,7 @@ func _layout_hover_preview() -> void:
 	_hover_preview.custom_minimum_size = _hover_preview.size
 
 func _right_blank_preview_rect() -> Rect2:
-	var viewport_size := get_viewport_rect().size
+	var viewport_size := get_viewport().get_visible_rect().size
 	var cards_box := _hover_preview_source.get_parent() as Control if _hover_preview_source != null else null
 	if cards_box == null:
 		return Rect2()

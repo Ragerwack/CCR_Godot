@@ -43,6 +43,49 @@ var _optional_login_sync_in_flight: bool = false
 var _pool_hand_layout_dirty: bool = false
 var _last_announced_level: int = 1
 
+const _LEVEL_REWARD_TOTALS: Dictionary = {
+	1: {"gold": 100, "gems": 50},
+	2: {"gold": 150, "gems": 55, "slot_type": "hand"},
+	3: {"gold": 200, "gems": 60, "slot_type": "pool"},
+	4: {"gold": 250, "gems": 65, "slot_type": "hand"},
+	5: {"gold": 280, "gems": 68, "slot_type": "vault"},
+	6: {"gold": 310, "gems": 71, "slot_type": "hand"},
+	7: {"gold": 340, "gems": 74, "slot_type": "pool"},
+	8: {"gold": 390, "gems": 79, "slot_type": "hand"},
+	9: {"gold": 440, "gems": 84, "slot_type": "hand"},
+	10: {"gold": 490, "gems": 89, "slot_type": "pool"},
+	11: {"gold": 540, "gems": 94, "slot_type": "hand"},
+	12: {"gold": 590, "gems": 99, "slot_type": "vault"},
+	13: {"gold": 640, "gems": 104, "slot_type": "hand"},
+	14: {"gold": 690, "gems": 109, "slot_type": "pool"},
+	15: {"gold": 740, "gems": 114, "slot_type": "hand"},
+	16: {"gold": 790, "gems": 119, "slot_type": "hand"},
+	17: {"gold": 840, "gems": 124, "slot_type": "pool"},
+	18: {"gold": 890, "gems": 129, "slot_type": "vault"},
+	19: {"gold": 940, "gems": 134, "slot_type": "hand"},
+	20: {"gold": 990, "gems": 139, "slot_type": "hand"},
+	21: {"gold": 1040, "gems": 144, "slot_type": "pool"},
+	22: {"gold": 1090, "gems": 149, "slot_type": "hand"},
+	23: {"gold": 1140, "gems": 154, "slot_type": "vault"},
+	24: {"gold": 1190, "gems": 159, "slot_type": "hand"},
+	25: {"gold": 1240, "gems": 164, "slot_type": "pool"},
+	26: {"gold": 1290, "gems": 169, "slot_type": "hand"},
+	27: {"gold": 1340, "gems": 174, "slot_type": "hand"},
+	28: {"gold": 1390, "gems": 179, "slot_type": "pool"},
+	29: {"gold": 1440, "gems": 184, "slot_type": "vault"},
+	30: {"gold": 1490, "gems": 189, "slot_type": "hand"},
+	31: {"gold": 1540, "gems": 194, "slot_type": "hand"},
+	32: {"gold": 1590, "gems": 199, "slot_type": "vault"},
+	33: {"gold": 1640, "gems": 204, "slot_type": "hand"},
+	34: {"gold": 1690, "gems": 209, "slot_type": "hand"},
+	35: {"gold": 1740, "gems": 214, "slot_type": "hand"},
+	36: {"gold": 1790, "gems": 219, "slot_type": "vault"},
+	37: {"gold": 1840, "gems": 224, "slot_type": "hand"},
+	38: {"gold": 1890, "gems": 229, "slot_type": "hand"},
+	39: {"gold": 1940, "gems": 234, "slot_type": "hand"},
+	40: {"gold": 1990, "gems": 239, "slot_type": "hand"},
+}
+
 const NAV_BUTTONS: Array[Dictionary] = [
 	{"id": "card_pool", "label": "抽牌"},
 	{"id": "vault", "label": "保险箱"},
@@ -166,13 +209,111 @@ func _emit_level_up(old_level: int, new_level: int) -> void:
 	_last_announced_level = new_level
 	player_leveled_up.emit(new_level, _build_level_rewards(old_level, new_level))
 
-func _build_level_rewards(old_level: int, new_level: int) -> Array[String]:
+func apply_exp_result(exp_result: Dictionary) -> void:
+	if exp_result.is_empty():
+		return
+	var old_level := int(exp_result.get("old_level", player_data.level))
+	var new_level := int(exp_result.get("new_level", old_level))
+	player_data.level = new_level
+	player_data.exp = int(exp_result.get("new_exp", player_data.exp))
+	player_data.exp_in_level = int(exp_result.get("exp_in_level", player_data.exp_in_level))
+	player_data.exp_for_next = int(exp_result.get("exp_for_next", player_data.exp_for_next))
+	exp_in_level = player_data.exp_in_level
+	exp_for_next = player_data.exp_for_next
+	_apply_level_rewards_to_local_state(exp_result.get("rewards", []))
+	_update_free_refresh_max()
+	_update_free_refresh_cooldown_from_state()
+	player_data.changed.emit()
+	if bool(exp_result.get("leveled_up", false)) and new_level > old_level and new_level > _last_announced_level:
+		_last_announced_level = new_level
+		player_leveled_up.emit(new_level, _build_level_rewards(old_level, new_level, exp_result.get("rewards", [])))
+
+func _build_level_rewards(old_level: int, new_level: int, server_rewards: Array = []) -> Array[String]:
 	var rewards: Array[String] = []
+	var formatted_server_rewards := _format_server_level_rewards(server_rewards)
+	rewards.append_array(formatted_server_rewards)
+	if rewards.is_empty():
+		rewards.append_array(_build_fallback_level_rewards(old_level, new_level))
 	var gained_stamina := maxi(0, new_level - old_level)
 	if gained_stamina > 0:
 		rewards.append(Localization.t("ui.level_up.reward.stamina_cap", [gained_stamina]))
 	rewards.append(Localization.t("ui.level_up.reward.deck_visibility"))
 	return rewards
+
+func _format_server_level_rewards(server_rewards: Array) -> Array[String]:
+	var lines: Array[String] = []
+	var gold := 0
+	var gems := 0
+	var slot_counts := {"hand": 0, "pool": 0, "vault": 0}
+	for raw in server_rewards:
+		if not (raw is Dictionary):
+			continue
+		var reward: Dictionary = raw
+		match str(reward.get("type", "")):
+			"gold":
+				gold += int(reward.get("amount", 0))
+			"gem":
+				gems += int(reward.get("amount", 0))
+			"slot":
+				var slot_type := str(reward.get("slot_type", reward.get("slotType", "")))
+				if slot_counts.has(slot_type):
+					slot_counts[slot_type] = int(slot_counts[slot_type]) + 1
+	if gold > 0:
+		lines.append(Localization.t("ui.level_up.reward.gold", [gold]))
+	if gems > 0:
+		lines.append(Localization.t("ui.level_up.reward.gems", [gems]))
+	for slot_type in ["hand", "pool", "vault"]:
+		var count := int(slot_counts[slot_type])
+		if count > 0:
+			lines.append(Localization.t("ui.level_up.reward.slot_" + slot_type, [count]))
+	return lines
+
+func _apply_level_rewards_to_local_state(server_rewards: Array) -> void:
+	for raw in server_rewards:
+		if not (raw is Dictionary):
+			continue
+		var reward: Dictionary = raw
+		match str(reward.get("type", "")):
+			"gold":
+				var gold := int(reward.get("amount", 0))
+				if gold > 0:
+					player_data.gold += gold
+			"gem":
+				var gems := int(reward.get("amount", 0))
+				if gems > 0:
+					player_data.gems += gems
+			"slot":
+				var slot_type := str(reward.get("slot_type", reward.get("slotType", "")))
+				var slot_index := int(reward.get("slot_index", reward.get("slotIndex", -1)))
+				match slot_type:
+					"hand":
+						player_data.hand_slots = maxi(player_data.hand_slots, slot_index + 1)
+					"pool":
+						player_data.pool_slots = maxi(player_data.pool_slots, slot_index + 1)
+					"vault":
+						player_data.vault_slots = maxi(player_data.vault_slots, slot_index + 1)
+
+func _build_fallback_level_rewards(old_level: int, new_level: int) -> Array[String]:
+	var lines: Array[String] = []
+	var old_info: Dictionary = _LEVEL_REWARD_TOTALS.get(clampi(old_level, 1, 40), _LEVEL_REWARD_TOTALS[1])
+	var new_info: Dictionary = _LEVEL_REWARD_TOTALS.get(clampi(new_level, 1, 40), old_info)
+	var gold := int(new_info.get("gold", old_info.get("gold", 0))) - int(old_info.get("gold", 0))
+	var gems := int(new_info.get("gems", old_info.get("gems", 0))) - int(old_info.get("gems", 0))
+	if gold > 0:
+		lines.append(Localization.t("ui.level_up.reward.gold", [gold]))
+	if gems > 0:
+		lines.append(Localization.t("ui.level_up.reward.gems", [gems]))
+	var slot_counts := {"hand": 0, "pool": 0, "vault": 0}
+	for level in range(old_level + 1, new_level + 1):
+		var info: Dictionary = _LEVEL_REWARD_TOTALS.get(level, {})
+		var slot_type := str(info.get("slot_type", ""))
+		if slot_counts.has(slot_type):
+			slot_counts[slot_type] = int(slot_counts[slot_type]) + 1
+	for slot_type in ["hand", "pool", "vault"]:
+		var count := int(slot_counts[slot_type])
+		if count > 0:
+			lines.append(Localization.t("ui.level_up.reward.slot_" + slot_type, [count]))
+	return lines
 
 func is_cache_loaded(key: String) -> bool:
 	return bool(_cache_loaded.get(key, false))

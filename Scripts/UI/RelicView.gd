@@ -1,6 +1,8 @@
 extends Control
 class_name RelicView
 
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+
 const RELIC_CONFIGS := {
 	CardColor.ColorType.WHITE: {
 		"layout": "res://Resources/Relics/final/relic_white_layout.json",
@@ -34,6 +36,7 @@ const RELIC_CONFIGS := {
 const CARD_ART_PREFIX := "res://Resources/Cards/"
 
 var _layout: Dictionary = {}
+var _shadow_texture: TextureRect = null
 var _slot_views: Array[TextureRect] = []
 var _frame: TextureRect = null
 var _pending_cards: Array = []
@@ -147,6 +150,9 @@ func _rebuild_view() -> void:
 		if is_instance_valid(slot):
 			slot.free()
 	_slot_views.clear()
+	if is_instance_valid(_shadow_texture):
+		_shadow_texture.free()
+	_shadow_texture = null
 	if is_instance_valid(_frame):
 		_frame.free()
 	_frame = null
@@ -178,6 +184,9 @@ func _build_view() -> void:
 	_frame.z_index = int(_layout.get("rendering", {}).get("frame_z_index", 10))
 	var config: Dictionary = RELIC_CONFIGS.get(_relic_color, {})
 	_frame.texture = load(str(config.get("frame", "")))
+	_shadow_texture = CCRVisualStyle.make_texture_shadow(_frame, "RelicShadow", Vector2(12, 18), CCRVisualStyle.RELIC_SHADOW)
+	_shadow_texture.z_index = -5
+	add_child(_shadow_texture)
 	add_child(_frame)
 
 

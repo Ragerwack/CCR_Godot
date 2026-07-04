@@ -71,6 +71,14 @@ func _ready() -> void:
 			return _fail("vault_synthesis_animation_source_card_missing")
 		if not bool(source.get("visible", false)):
 			return _fail("vault_synthesis_animation_source_not_visible")
+	vault_ui.hide_synthesis_slots_for_animation(indices)
+	await get_tree().process_frame
+	for idx in indices:
+		var slot := vault_ui.slots[int(idx)] as CardSlotUI
+		if slot != null and slot.is_occupied:
+			return _fail("vault_synthesis_source_slot_still_visible")
+		if GameManager.player_data.vault_cards[int(idx)] == null:
+			return _fail("vault_synthesis_hidden_slot_changed_data")
 	vault_ui.set_synthesis_nav_target_rect(Rect2(Vector2(12, 140), Vector2(96, 42)))
 	await vault_ui._play_vault_synthesis_animation(animation_sources)
 	await get_tree().process_frame

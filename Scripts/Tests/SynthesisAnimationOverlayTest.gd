@@ -8,11 +8,34 @@ func _ready() -> void:
 	if cards.size() != 5:
 		return _fail("cards_missing")
 	var sources := _make_sources(cards)
+	if ApiClient._apply_optional_draw_key({"deck": {"id": 1}}):
+		return _fail("missing_draw_key_applied")
 
 	var overlay = SynthesisAnimationOverlayScript.new()
 	overlay.setup(sources, Rect2(Vector2(8, 210), Vector2(104, 36)))
 	await get_tree().process_frame
 	get_tree().root.add_child(overlay)
+	await get_tree().process_frame
+	var expected_relic_height := get_viewport().get_visible_rect().size.y * (3.0 / 5.0) * 1.30
+	var relic_rect := overlay._get_centered_relic_rect()
+	if absf(relic_rect.size.y - expected_relic_height) > 1.0:
+		return _fail("relic_height_wrong")
+	if absf(overlay.RELIC_HOLD_DURATION - 0.50) > 0.001:
+		return _fail("relic_hold_duration_wrong")
+	var preview_nodes := overlay._create_card_nodes()
+	overlay._bind_card_nodes(preview_nodes)
+	var art_nodes := await overlay._dissolve_to_art(preview_nodes)
+	if art_nodes.is_empty():
+		return _fail("art_nodes_missing")
+	var art_shadow = art_nodes[0].get_meta("shadow", null)
+	if not (art_shadow is TextureRect) or not is_instance_valid(art_shadow):
+		return _fail("art_shadow_missing")
+	for art in art_nodes:
+		var shadow = art.get_meta("shadow", null)
+		if shadow is TextureRect and is_instance_valid(shadow):
+			shadow.queue_free()
+		if is_instance_valid(art):
+			art.queue_free()
 	await overlay.play()
 	await get_tree().process_frame
 	if is_instance_valid(overlay):

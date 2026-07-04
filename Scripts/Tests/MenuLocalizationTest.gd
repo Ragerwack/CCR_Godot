@@ -31,13 +31,13 @@ func _ready() -> void:
 	main.call("_set_game_ui_visible", true)
 	nav_buttons.nav_button_clicked.emit("settings")
 	await get_tree().process_frame
-	if not _has_text(center_area, "Settings") or not _has_option_button(center_area):
-		_fail("English settings page or language selector is missing")
+	if not _has_text(center_area, "Settings") or not _has_text(center_area, "Resolution") or not _has_resolution_option(center_area):
+		_fail("English settings page, language selector, or resolution selector is missing")
 		return
 
 	Localization.set_locale("zh-CN", true, 1)
 	await get_tree().process_frame
-	if not _has_text(center_area, "设置"):
+	if not _has_text(center_area, "设置") or not _has_text(center_area, "分辨率"):
 		_fail("settings page did not refresh after language change")
 		return
 
@@ -65,8 +65,15 @@ func _has_text(root: Node, expected: String) -> bool:
 			return true
 	return false
 
-func _has_option_button(root: Node) -> bool:
-	return not root.find_children("*", "OptionButton", true, false).is_empty()
+func _has_resolution_option(root: Node) -> bool:
+	var resolution_select: OptionButton = root.find_child("ResolutionSelect", true, false)
+	if resolution_select == null or resolution_select.item_count != DisplaySettings.get_supported_resolutions().size():
+		return false
+	for i in range(resolution_select.item_count):
+		var resolution: Vector2i = resolution_select.get_item_metadata(i)
+		if not DisplaySettings.is_supported_resolution(resolution):
+			return false
+	return true
 
 func _fail(message: String) -> void:
 	push_error("MENU_LOCALIZATION " + message)

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Tests/LoadingBackgroundTest.gd" id="1_loading_background_test"]
+
+[node name="LoadingBackgroundTest" type="Node"]
+script = ExtResource("1_loading_background_test")

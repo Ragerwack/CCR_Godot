@@ -1,4 +1,4 @@
-extends Control
+extends LoadingScreenUI
 class_name LoadingTutorialUI
 
 const LOADING_TUTORIAL_TIPS: Array[Dictionary] = [
@@ -38,110 +38,41 @@ const LOADING_TUTORIAL_TIPS_EN: Array[Dictionary] = [
 	{"id": "loading_tip_history_en", "min_level": 30, "max_level": 999, "title": "A Persistent Collection", "body": "CCR records when a relic was created and who created it. A relic is part of the world's history, even if its owner changes in future systems.", "short_tip": "Relics preserve history as well as rarity."},
 ]
 
-var _title_label: Label = null
-var _body_label: Label = null
-var _short_tip_label: Label = null
-var _progress_bar: ProgressBar = null
-var _status_label: Label = null
-var _progress_tween: Tween = null
-var _setup_done: bool = false
+const LOADING_BACKGROUND_PATHS: Array[String] = [
+	"res://Resources/Backgrounds/loading_appraisal_workbench.png",
+	"res://Resources/Backgrounds/loading_collection_showcase.png",
+	"res://Resources/Backgrounds/loading_cosmic_archive_corridor.png",
+	"res://Resources/Backgrounds/loading_deep_space_museum_dome.png",
+	"res://Resources/Backgrounds/loading_star_map_corridor.png",
+]
 
 func _ready() -> void:
-	_setup_ui()
+	super._ready()
 
 func setup_for_level(level: int) -> void:
-	if _title_label == null:
-		_setup_ui()
+	apply_fullscreen_layout()
+	if LOADING_BACKGROUND_PATHS.size() > 0:
+		var background_path := LOADING_BACKGROUND_PATHS[randi() % LOADING_BACKGROUND_PATHS.size()]
+		set_background(load(background_path))
 	var tip := _pick_tip(level)
-	_title_label.text = str(tip.get("title", "Collection Tip" if Localization.locale == "en" else "收藏提示"))
-	_body_label.text = str(tip.get("body", ""))
-	_short_tip_label.text = str(tip.get("short_tip", ""))
-	_body_label.add_theme_font_size_override("font_size", 15 if _body_label.text.length() > 260 else 17)
+	var category := str(tip.get("category", "tip" if Localization.locale == "en" else "收藏提示"))
+	set_tip(category, str(tip.get("title", "Collection Tip" if Localization.locale == "en" else "收藏提示")), str(tip.get("body", "")))
 	set_progress(0.0, Localization.t("ui.login.loading.entering"))
+	set_server_status(Localization.t("ui.login.loading.online"))
+	set_version(_project_version_text())
 
 func set_progress(value: float, status: String = "") -> void:
-	if _progress_bar == null:
-		_setup_ui()
-	var next_value := clampf(value, 0.0, 100.0)
-	if _progress_tween != null:
-		_progress_tween.kill()
-	_progress_tween = create_tween()
-	_progress_tween.tween_property(_progress_bar, "value", next_value, 0.22).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	if status != "" and _status_label != null:
-		_status_label.text = status
+	super.set_progress(value, status)
 
 func finish() -> void:
 	set_progress(100.0, Localization.t("ui.login.loading.done"))
 	await get_tree().create_timer(0.35).timeout
 
-func _setup_ui() -> void:
-	if _setup_done:
-		return
-	_setup_done = true
-	set_anchors_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_STOP
-
-	var bg := ColorRect.new()
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.03, 0.035, 0.055, 1.0)
-	add_child(bg)
-
-	var center := VBoxContainer.new()
-	center.set_anchors_preset(Control.PRESET_CENTER)
-	center.size = Vector2(760, 360)
-	center.position = -center.size / 2.0
-	center.alignment = BoxContainer.ALIGNMENT_CENTER
-	center.add_theme_constant_override("separation", 22)
-	add_child(center)
-
-	_title_label = Label.new()
-	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_label.add_theme_font_size_override("font_size", 28)
-	_title_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.52, 1.0))
-	center.add_child(_title_label)
-
-	_body_label = Label.new()
-	_body_label.custom_minimum_size = Vector2(720, 120)
-	_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_body_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_body_label.add_theme_font_size_override("font_size", 17)
-	_body_label.add_theme_color_override("font_color", Color(0.9, 0.93, 1.0, 1.0))
-	center.add_child(_body_label)
-
-	_short_tip_label = Label.new()
-	_short_tip_label.custom_minimum_size = Vector2(720, 52)
-	_short_tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_short_tip_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_short_tip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_short_tip_label.add_theme_font_size_override("font_size", 15)
-	_short_tip_label.add_theme_color_override("font_color", Color(0.66, 0.78, 1.0, 1.0))
-	center.add_child(_short_tip_label)
-
-	var bottom := VBoxContainer.new()
-	bottom.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bottom.offset_left = 160
-	bottom.offset_right = -160
-	bottom.offset_top = -92
-	bottom.offset_bottom = -34
-	bottom.add_theme_constant_override("separation", 8)
-	add_child(bottom)
-
-	_status_label = Label.new()
-	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status_label.add_theme_color_override("font_color", Color(0.72, 0.82, 1.0, 1.0))
-	bottom.add_child(_status_label)
-
-	_progress_bar = ProgressBar.new()
-	_progress_bar.min_value = 0.0
-	_progress_bar.max_value = 100.0
-	_progress_bar.value = 0.0
-	_progress_bar.show_percentage = false
-	_progress_bar.custom_minimum_size = Vector2(0, 14)
-	bottom.add_child(_progress_bar)
-
 func _pick_tip(level: int) -> Dictionary:
-	var source: Array[Dictionary] = LOADING_TUTORIAL_TIPS_EN if Localization.locale == "en" else LOADING_TUTORIAL_TIPS
+	return pick_tip_for_locale(level, Localization.locale)
+
+static func pick_tip_for_locale(level: int, target_locale: String) -> Dictionary:
+	var source: Array[Dictionary] = LOADING_TUTORIAL_TIPS_EN if target_locale == "en" else LOADING_TUTORIAL_TIPS
 	var available: Array[Dictionary] = []
 	for tip in source:
 		if level >= int(tip.get("min_level", 1)) and level <= int(tip.get("max_level", 999)):
@@ -149,3 +80,9 @@ func _pick_tip(level: int) -> Dictionary:
 	if available.is_empty():
 		return source[0]
 	return available[randi() % available.size()]
+
+func _project_version_text() -> String:
+	var version := str(ProjectSettings.get_setting("application/config/version", "dev"))
+	if version == "" or version == "dev":
+		return "CCR dev"
+	return "CCR v" + version

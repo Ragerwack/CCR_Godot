@@ -6,6 +6,8 @@ class_name MainUI
 const TodayDecksUIScript = preload("res://Scripts/UI/TodayDecksUI.gd")
 const LevelUpPopupUIScript = preload("res://Scripts/UI/LevelUpPopupUI.gd")
 const SynthesisAnimationOverlayScript = preload("res://Scripts/UI/SynthesisAnimationOverlay.gd")
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+const MAIN_BACKGROUND_PATH := "res://Resources/Backgrounds/main_background.png"
 
 const LEFT_PANEL_WIDTH: int = 120
 const TOP_BAR_HEIGHT: int = 90
@@ -21,6 +23,8 @@ var _center_area: Control
 var _exp_bar_ui: ExpBarUI
 var _menu_button: Button = null
 var _level_up_popup: Control = null
+var _main_background: TextureRect = null
+var _reconnect_overlay: Control = null
 
 # 子面板
 var _today_decks_ui: Control = null
@@ -37,6 +41,7 @@ var _view_before_menu: String = "card_pool"
 var _game_ui_active: bool = false
 var _synthesis_animation_running: bool = false
 var _hand_action_animation_running: bool = false
+var _layout_refresh_queued: bool = false
 
 func _ready() -> void:
 	setup_ui()
@@ -45,10 +50,18 @@ func _ready() -> void:
 	GameManager.player_leveled_up.connect(_on_player_leveled_up)
 	_nav_buttons.nav_button_clicked.connect(_on_nav_button)
 	ApiClient.auth_expired.connect(_on_auth_expired)
+	ApiClient.session_reconnect_required.connect(_on_session_reconnect_required)
+	SessionManager.session_status_changed.connect(_on_session_status_changed)
 	Localization.locale_changed.connect(_on_locale_changed)
+	DisplaySettings.resolution_changed.connect(_on_display_resolution_changed)
+	ControllerInput.controller_action_pressed.connect(_on_controller_action_pressed)
 
 	# 总是先显示开机界面（全屏覆盖在一切之上）
 	_show_splash_screen()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and is_node_ready():
+		_queue_layout_refresh()
 
 # ══════════════════════════════════════════════════
 #  开机界面（Splash Screen）
@@ -59,12 +72,15 @@ func _show_splash_screen() -> void:
 	_set_game_ui_visible(false)
 
 	var splash := Control.new()
+	splash.name = "SplashScreenUI"
 	splash.set_script(load("res://Scripts/UI/SplashScreenUI.gd"))
 	splash.connect("login_completed", _on_splash_completed)
 	add_child(splash)
 
 func _set_game_ui_visible(visible: bool) -> void:
 	_game_ui_active = visible
+	if _main_background: _main_background.visible = visible
+	if _center_area: _center_area.visible = visible
 	if _player_info: _player_info.visible = visible
 	if _currency: _currency.visible = visible
 	if _nav_buttons: _nav_buttons.visible = visible
@@ -163,11 +179,12 @@ func _show_loading_light(show: bool) -> void:
 # ══════════════════════════════════════════════════
 
 func _show_login() -> void:
+	_set_game_ui_visible(false)
 	var login_ui := Control.new()
 	login_ui.set_script(load("res://Scripts/UI/LoginUI.gd"))
 	login_ui.connect("login_completed", _on_login_completed)
 	login_ui.name = "LoginUI"
-	get_tree().root.call_deferred("add_child", login_ui)
+	add_child(login_ui)
 
 func _on_login_completed() -> void:
 	_set_game_ui_visible(true)
@@ -178,6 +195,107 @@ func _on_login_completed() -> void:
 func _on_auth_expired() -> void:
 	SessionManager.stop_session()
 	_show_splash_screen()
+
+func _on_session_reconnect_required(reason: String) -> void:
+	SessionManager.stop_session()
+	_show_reconnect_overlay(reason)
+
+func _on_session_status_changed(status: String) -> void:
+	if status == "reconnecting":
+		_show_reconnect_overlay(Localization.t("ui.reconnect.reason_unstable"))
+	elif status == "online":
+		_hide_reconnect_overlay()
+
+func _show_reconnect_overlay(reason: String = "") -> void:
+	if is_instance_valid(_reconnect_overlay):
+		var reason_label := _reconnect_overlay.get_node_or_null("Panel/VBox/ReasonLabel") as Label
+		if reason_label != null:
+			reason_label.text = reason
+		return
+	_reconnect_overlay = Control.new()
+	_reconnect_overlay.name = "ReconnectOverlay"
+	_reconnect_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_reconnect_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var shade := ColorRect.new()
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.color = Color(0, 0, 0, 0.52)
+	_reconnect_overlay.add_child(shade)
+
+	var panel := Panel.new()
+	panel.name = "Panel"
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.size = Vector2(460, 220)
+	panel.position = -panel.size / 2.0
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.05, 0.06, 0.09, 0.94)
+	panel_style.border_color = Color(0.55, 0.72, 1.0, 0.55)
+	panel_style.set_border_width_all(2)
+	panel_style.set_corner_radius_all(8)
+	panel.add_theme_stylebox_override("panel", panel_style)
+	_reconnect_overlay.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.name = "VBox"
+	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vbox.offset_left = 24
+	vbox.offset_top = 22
+	vbox.offset_right = -24
+	vbox.offset_bottom = -22
+	vbox.add_theme_constant_override("separation", 14)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = Localization.t("ui.reconnect.title")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(title)
+
+	var reason_label := Label.new()
+	reason_label.name = "ReasonLabel"
+	reason_label.text = reason if reason != "" else Localization.t("ui.reconnect.reason_idle")
+	reason_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	reason_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	reason_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.86))
+	vbox.add_child(reason_label)
+
+	var reconnect_btn := Button.new()
+	reconnect_btn.name = "ReconnectButton"
+	reconnect_btn.text = Localization.t("ui.reconnect.button")
+	reconnect_btn.pressed.connect(_on_reconnect_pressed)
+	vbox.add_child(reconnect_btn)
+
+	add_child(_reconnect_overlay)
+
+func _hide_reconnect_overlay() -> void:
+	if is_instance_valid(_reconnect_overlay):
+		_reconnect_overlay.queue_free()
+	_reconnect_overlay = null
+
+func _on_reconnect_pressed() -> void:
+	if not ApiClient.has_refresh_token():
+		_hide_reconnect_overlay()
+		_on_auth_expired()
+		return
+	var button := _reconnect_overlay.get_node_or_null("Panel/VBox/ReconnectButton") as Button if is_instance_valid(_reconnect_overlay) else null
+	if button != null:
+		button.disabled = true
+		button.text = Localization.t("ui.reconnect.connecting")
+	var resp := await ApiClient.refresh_session()
+	if not resp.get("success", false):
+		_hide_reconnect_overlay()
+		_on_auth_expired()
+		return
+	var data: Dictionary = resp.get("data", {}) if resp.get("data", {}) is Dictionary else {}
+	if data.has("user") and data["user"] is Dictionary:
+		GameManager.apply_login_user(data["user"])
+	if data.has("draw_key") and data["draw_key"] is Dictionary:
+		GameManager.apply_draw_key(data["draw_key"])
+	SessionManager.start_session()
+	await GameManager.sync_all_from_server()
+	_hide_reconnect_overlay()
+	refresh_current_view()
 
 func _on_player_leveled_up(level: int, rewards: Array[String]) -> void:
 	if not _game_ui_active:
@@ -208,6 +326,15 @@ func setup_ui() -> void:
 	var vp_size = get_viewport_rect().size
 	var exp_bar_h = clampi(int(vp_size.y * EXP_BAR_RATIO), EXP_BAR_MIN_HEIGHT, EXP_BAR_MAX_HEIGHT)
 	_configure_card_slot_size(vp_size)
+
+	_main_background = TextureRect.new()
+	_main_background.name = "MainBackgroundImage"
+	_main_background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_main_background.texture = load(MAIN_BACKGROUND_PATH)
+	_main_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_main_background.stretch_mode = TextureRect.STRETCH_SCALE
+	_main_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_main_background)
 
 	# ── 顶部栏：PlayerInfo（左上）+ Currency（右上贴边） ──
 	_player_info = PlayerInfoUI.new()
@@ -249,14 +376,59 @@ func setup_ui() -> void:
 
 	# 默认视图
 	_show_card_pool()
+	_apply_game_text_color()
 
 	if enable_debug:
 		_setup_debug_panel()
 
+func _on_display_resolution_changed(_size: Vector2i) -> void:
+	_queue_layout_refresh()
+
+func _queue_layout_refresh() -> void:
+	if _layout_refresh_queued:
+		return
+	_layout_refresh_queued = true
+	call_deferred("_refresh_layout_after_resize")
+
+func _refresh_layout_after_resize() -> void:
+	_layout_refresh_queued = false
+	if _center_area == null:
+		return
+	_apply_shell_layout()
+	_rebuild_current_view()
+	_apply_game_text_color()
+
+func _apply_shell_layout() -> void:
+	var vp_size := get_viewport_rect().size
+	var exp_bar_h := clampi(int(vp_size.y * EXP_BAR_RATIO), EXP_BAR_MIN_HEIGHT, EXP_BAR_MAX_HEIGHT)
+	_configure_card_slot_size(vp_size)
+	if is_instance_valid(_nav_buttons):
+		_nav_buttons.offset_left = 0
+		_nav_buttons.offset_right = LEFT_PANEL_WIDTH
+		_nav_buttons.offset_top = TOP_BAR_HEIGHT
+		_nav_buttons.offset_bottom = vp_size.y - exp_bar_h
+	if is_instance_valid(_center_area):
+		_center_area.position = Vector2(LEFT_PANEL_WIDTH, 0)
+		_center_area.size = Vector2(vp_size.x - LEFT_PANEL_WIDTH, vp_size.y - exp_bar_h)
+	if is_instance_valid(_exp_bar_ui):
+		_exp_bar_ui.offset_top = -exp_bar_h
+
+func _rebuild_current_view() -> void:
+	match _current_view_id:
+		"today_decks": _show_today_decks()
+		"card_pool": _show_card_pool()
+		"vault": _show_vault()
+		"deck_panel": _show_deck_collection()
+		"synthesis": _show_synthesis_panel()
+		"settings": _show_settings()
+		_: pass
 
 func _configure_card_slot_size(vp_size: Vector2) -> void:
-	var slot_h := maxf(1.0, vp_size.y * CARD_SLOT_HEIGHT_RATIO)
 	var aspect := CardSlotUI.SLOT_SIZE.x / CardSlotUI.SLOT_SIZE.y
+	var slot_h_by_height := maxf(1.0, vp_size.y * CARD_SLOT_HEIGHT_RATIO)
+	var available_width := maxf(320.0, vp_size.x - LEFT_PANEL_WIDTH - 64.0)
+	var max_slot_width := maxf(1.0, (available_width - 7.0 * 8.0) / 8.0)
+	var slot_h := minf(slot_h_by_height, max_slot_width / aspect)
 	var slot_size := Vector2(roundf(slot_h * aspect), roundf(slot_h))
 	CardSlotUI.configure_slot_size(slot_size)
 
@@ -328,6 +500,7 @@ func _show_card_pool() -> void:
 	_hand_area_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hand_container.add_child(_hand_area_ui)
 	_hand_area_ui.refresh_display()
+	_apply_game_text_color(_center_area)
 
 func _show_today_decks() -> void:
 	_current_view_id = "today_decks"
@@ -336,6 +509,7 @@ func _show_today_decks() -> void:
 	_today_decks_ui = TodayDecksUIScript.new()
 	_today_decks_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_center_area.add_child(_today_decks_ui)
+	_apply_game_text_color(_center_area)
 
 func _sync_before_leaving_card_pool() -> Dictionary:
 	if _card_pool_ui == null and _hand_area_ui == null:
@@ -351,6 +525,7 @@ func _show_vault() -> void:
 	if is_instance_valid(_nav_buttons):
 		_vault_ui.set_synthesis_nav_target_rect(_nav_buttons.get_button_global_rect("deck_panel"))
 	_center_area.add_child(_vault_ui)
+	_apply_game_text_color(_center_area)
 
 func _show_deck_collection() -> void:
 	_current_view_id = "deck_panel"
@@ -359,6 +534,7 @@ func _show_deck_collection() -> void:
 	_deck_collection_ui = DeckCollectionUI.new()
 	_deck_collection_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_center_area.add_child(_deck_collection_ui)
+	_apply_game_text_color(_center_area)
 
 func _refresh_page_data_background(id: String) -> void:
 	match id:
@@ -368,11 +544,13 @@ func _refresh_page_data_background(id: String) -> void:
 				await GameManager.sync_vault_slot_quote_from_server()
 				if is_instance_valid(_vault_ui):
 					_vault_ui.refresh_display()
+					_apply_game_text_color(_vault_ui)
 		"deck_panel":
 			if ApiClient.is_logged_in():
 				await GameManager.sync_decks_from_server()
 				if is_instance_valid(_deck_collection_ui):
 					_deck_collection_ui.render_decks()
+					_apply_game_text_color(_deck_collection_ui)
 
 func _show_synthesis_panel() -> void:
 	_current_view_id = "synthesis"
@@ -382,6 +560,7 @@ func _show_synthesis_panel() -> void:
 	_synthesis_panel.synthesis_completed.connect(_on_synthesis_completed)
 	_synthesis_panel.synthesis_cancelled.connect(_on_synthesis_cancelled)
 	_center_area.add_child(_synthesis_panel)
+	_apply_game_text_color(_center_area)
 
 func _on_synthesis_completed(_result: Dictionary) -> void:
 	pass
@@ -398,6 +577,7 @@ func _show_message(msg: String) -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.text = msg
 	_center_area.add_child(label)
+	_apply_game_text_color(_center_area)
 
 func _show_menu() -> void:
 	_show_settings()
@@ -410,6 +590,7 @@ func _show_settings() -> void:
 	_clear_center()
 	var menu_panel = _build_menu_panel()
 	_center_area.add_child(menu_panel)
+	_apply_game_text_color(_center_area)
 
 func _build_menu_panel() -> Control:
 	var panel = Control.new()
@@ -417,9 +598,9 @@ func _build_menu_panel() -> Control:
 
 	var vbox = VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_CENTER)
-	vbox.size = Vector2(400, 360)
+	vbox.size = Vector2(520, 620)
 	vbox.position = -vbox.size / 2.0
-	vbox.add_theme_constant_override("separation", 10)
+	vbox.add_theme_constant_override("separation", 8)
 	panel.add_child(vbox)
 
 	var title = Label.new()
@@ -434,10 +615,35 @@ func _build_menu_panel() -> Control:
 	var sfx_row = _make_slider_row(Localization.t("ui.menu.sfx_volume"), AudioManager.sfx_volume, func(v): AudioManager.set_sfx_volume(v))
 	vbox.add_child(sfx_row)
 
+	var resolution_row := HBoxContainer.new()
+	var resolution_label := Label.new()
+	resolution_label.text = Localization.t("ui.menu.resolution")
+	resolution_label.custom_minimum_size = Vector2(120, 30)
+	resolution_row.add_child(resolution_label)
+	var resolution_select := OptionButton.new()
+	resolution_select.name = "ResolutionSelect"
+	resolution_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var current_resolution := DisplaySettings.get_current_resolution()
+	var selected_resolution_index := 0
+	var resolution_index := 0
+	for resolution in DisplaySettings.get_supported_resolutions():
+		resolution_select.add_item(DisplaySettings.resolution_label(resolution))
+		resolution_select.set_item_metadata(resolution_index, resolution)
+		if resolution == current_resolution:
+			selected_resolution_index = resolution_index
+		resolution_index += 1
+	resolution_select.select(selected_resolution_index)
+	resolution_select.item_selected.connect(func(index: int):
+		var selected_resolution: Vector2i = resolution_select.get_item_metadata(index)
+		DisplaySettings.apply_resolution(selected_resolution, true)
+	)
+	resolution_row.add_child(resolution_select)
+	vbox.add_child(resolution_row)
+
 	var language_row := HBoxContainer.new()
 	var language_label := Label.new()
 	language_label.text = Localization.t("ui.menu.language")
-	language_label.custom_minimum_size = Vector2(100, 30)
+	language_label.custom_minimum_size = Vector2(120, 30)
 	language_row.add_child(language_label)
 	var language_select := OptionButton.new()
 	language_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -452,6 +658,26 @@ func _build_menu_panel() -> Control:
 	)
 	language_row.add_child(language_select)
 	vbox.add_child(language_row)
+
+	var controller_sep = HSeparator.new()
+	vbox.add_child(controller_sep)
+
+	var controller_title := Label.new()
+	controller_title.text = Localization.t("ui.controller.title")
+	controller_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	controller_title.add_theme_font_size_override("font_size", 18)
+	vbox.add_child(controller_title)
+
+	for action_id in ControllerInput.get_action_ids():
+		vbox.add_child(_make_controller_binding_row(action_id))
+
+	var reset_controller_btn := Button.new()
+	reset_controller_btn.text = Localization.t("ui.controller.reset")
+	reset_controller_btn.pressed.connect(func():
+		ControllerInput.reset_bindings()
+		_show_settings()
+	)
+	vbox.add_child(reset_controller_btn)
 
 	var mute_btn = Button.new()
 	mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
@@ -535,6 +761,87 @@ func _make_slider_row(label_text: String, default_val: float, callback: Callable
 
 	return row
 
+func _make_controller_binding_row(action_id: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	var label := Label.new()
+	label.text = Localization.t(ControllerInput.get_action_label_key(action_id))
+	label.custom_minimum_size = Vector2(210, 28)
+	row.add_child(label)
+
+	var select := OptionButton.new()
+	select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var current_binding := ControllerInput.get_binding(action_id)
+	var selected_index := 0
+	var index := 0
+	for option in ControllerInput.get_binding_options():
+		var binding_id := str(option.get("id", ""))
+		select.add_item(Localization.t(str(option.get("label_key", ""))))
+		select.set_item_metadata(index, binding_id)
+		if binding_id == current_binding:
+			selected_index = index
+		index += 1
+	select.select(selected_index)
+	select.item_selected.connect(func(item_index: int):
+		ControllerInput.set_binding(action_id, str(select.get_item_metadata(item_index)))
+	)
+	row.add_child(select)
+	return row
+
+func _apply_game_text_color(root: Node = null) -> void:
+	var target := root if root != null else self
+	for child in target.get_children():
+		if child is Label:
+			if child.name != "ExpValueLabel":
+				CCRVisualStyle.apply_dark_label(child as Label)
+		_apply_game_text_color(child)
+
+func _on_controller_action_pressed(action_id: String) -> void:
+	if not _game_ui_active:
+		return
+	match action_id:
+		ControllerInput.ACTION_NAV_PREV:
+			if is_instance_valid(_nav_buttons):
+				_nav_buttons.select_next_enabled(-1)
+		ControllerInput.ACTION_NAV_NEXT:
+			if is_instance_valid(_nav_buttons):
+				_nav_buttons.select_next_enabled(1)
+		ControllerInput.ACTION_DRAW_FREE:
+			if is_instance_valid(_card_pool_ui):
+				_card_pool_ui.controller_refresh("free")
+		ControllerInput.ACTION_DRAW_GEM:
+			if is_instance_valid(_card_pool_ui):
+				_card_pool_ui.controller_refresh("gem")
+		ControllerInput.ACTION_DRAW_GOLD:
+			if is_instance_valid(_card_pool_ui):
+				_card_pool_ui.controller_refresh("gold")
+		ControllerInput.ACTION_SYNTHESIZE:
+			_handle_controller_synthesize()
+		ControllerInput.ACTION_STORE_VAULT:
+			if _activate_focused_slot_for_area("hand"):
+				_on_hand_save_to_vault()
+		ControllerInput.ACTION_DISCARD:
+			if _activate_focused_slot_for_area("hand"):
+				_on_hand_discard()
+
+func _handle_controller_synthesize() -> void:
+	if _current_view_id == "vault":
+		_activate_focused_slot_for_area("vault")
+		if is_instance_valid(_vault_ui):
+			_vault_ui.controller_synthesize()
+		return
+	if _activate_focused_slot_for_area("hand"):
+		_on_hand_synthesize()
+
+func _activate_focused_slot_for_area(area_type: String) -> bool:
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	if not focus_owner is CardSlotUI:
+		return false
+	var slot := focus_owner as CardSlotUI
+	if slot.area_type != area_type:
+		return false
+	slot.controller_activate()
+	return true
+
 # ══════════════════════════════════════════════════
 #  手牌区操作（来自 HandAreaUI 信号）
 # ══════════════════════════════════════════════════
@@ -553,6 +860,7 @@ func _on_hand_synthesize() -> void:
 	var old_hand_cards: Array = GameManager.player_data.hand_cards.duplicate()
 
 	_synthesis_animation_running = true
+	_hand_area_ui.hide_synthesis_slots_for_animation(selected_indices)
 	await _play_hand_synthesis_animation(animation_sources)
 	_synthesis_animation_running = false
 
@@ -628,6 +936,10 @@ func _apply_synthesis_confirmed_result(result: Dictionary) -> void:
 	var gems := int(rewards.get("gems", 0))
 	if gems > 0:
 		GameManager.player_data.add_gems(gems)
+
+	var exp_result: Dictionary = result.get("exp_result", {})
+	if not exp_result.is_empty():
+		GameManager.apply_exp_result(exp_result)
 
 	var deck_data: Dictionary = result.get("deck", {})
 	if not deck_data.is_empty():
