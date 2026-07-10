@@ -19,7 +19,7 @@ func _ready() -> void:
 
 	var nav_buttons: NavButtons = main.get("_nav_buttons")
 	var buttons: Array = nav_buttons.get("buttons")
-	if buttons.is_empty() or buttons[0].text != "今日卡组" or buttons[buttons.size() - 1].text != "设置":
+	if buttons.size() < 2 or buttons[0].text != "今日卡组" or buttons[buttons.size() - 2].text != "设置" or buttons[buttons.size() - 1].text != "退出游戏":
 		_fail("navigation order is wrong")
 		return
 

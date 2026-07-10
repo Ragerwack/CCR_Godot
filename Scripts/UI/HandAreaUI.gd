@@ -26,6 +26,7 @@ var _btn_vault: Button = null
 var _synth_cooldown: Control = null
 var _discard_cooldown: Control = null
 var _vault_cooldown: Control = null
+var _synthesis_hidden_indices: Dictionary = {}
 
 const AssetActionCooldownScript = preload("res://Scripts/UI/AssetActionCooldown.gd")
 
@@ -41,6 +42,25 @@ func _ready() -> void:
 	if DragSystem != null:
 		DragSystem.drag_ended.connect(_on_drag_ended)
 		DragSystem.drag_cancelled.connect(_on_drag_cancelled)
+
+func _input(event: InputEvent) -> void:
+	if _selected_hand_index < 0:
+		return
+	if not (event is InputEventMouseButton):
+		return
+	var mb := event as InputEventMouseButton
+	if not mb.pressed:
+		return
+	if mb.button_index != MOUSE_BUTTON_LEFT and mb.button_index != MOUSE_BUTTON_RIGHT:
+		return
+	if _is_point_over_action_button(mb.position):
+		return
+	var selected_slot := _visible_slot_for_global_index(_selected_hand_index)
+	if selected_slot != null and selected_slot.get_global_rect().has_point(mb.position):
+		if mb.button_index == MOUSE_BUTTON_RIGHT:
+			clear_selection()
+		return
+	clear_selection()
 
 func setup_ui() -> void:
 	_create_slot_grid()
@@ -212,7 +232,7 @@ func _populate_page_layer(layer: Control, page: int, register_slots: bool = true
 		slot.set_slot_data_index(global_idx)
 		layer.add_child(slot)
 		slot.set_unlocked(global_idx < hand_slots_unlocked)
-		if global_idx < hand_slots_unlocked and global_idx < cards.size() and cards[global_idx] != null:
+		if not _is_synthesis_hidden(global_idx) and global_idx < hand_slots_unlocked and global_idx < cards.size() and cards[global_idx] != null:
 			slot.set_card(cards[global_idx], global_idx)
 		else:
 			slot.clear_slot()
@@ -220,14 +240,23 @@ func _populate_page_layer(layer: Control, page: int, register_slots: bool = true
 # ── 卡槽点击 ──
 func _on_slot_clicked(index: int) -> void:
 	var global_idx = current_page * slot_count + index
+	var click_button := _slot_click_button(index)
 	if index < slots.size() and slots[index].is_occupied:
 		var card = slots[index].get_card()
 		if card != null:
 			if _selected_hand_index == global_idx:
-				clear_selection()
+				if click_button == MOUSE_BUTTON_RIGHT:
+					clear_selection()
 			else:
-				_select_hand_slot(global_idx)
-			card_clicked.emit(card)
+				if click_button == MOUSE_BUTTON_LEFT:
+					_select_hand_slot(global_idx)
+				else:
+					clear_selection()
+					return
+			if click_button == MOUSE_BUTTON_LEFT:
+				card_clicked.emit(card)
+	elif click_button == MOUSE_BUTTON_LEFT or click_button == MOUSE_BUTTON_RIGHT:
+		clear_selection()
 
 # ── 卡槽双击 → 转派为 card_double_clicked（含全局索引） ──
 func _on_slot_double_clicked(index: int) -> void:
@@ -358,7 +387,7 @@ func refresh_display() -> void:
 			slots[i].set_slot_data_index(global_idx)
 			# 应用槽位锁定状态（前 N 个解锁，其余锁定）
 			slots[i].set_unlocked(global_idx < hand_slots_unlocked)
-			if global_idx < hand_slots_unlocked and global_idx < cards.size() and cards[global_idx] != null:
+			if not _is_synthesis_hidden(global_idx) and global_idx < hand_slots_unlocked and global_idx < cards.size() and cards[global_idx] != null:
 				slots[i].set_card(cards[global_idx], global_idx)
 			else:
 				slots[i].clear_slot()
@@ -373,6 +402,27 @@ func clear_selection() -> void:
 	for slot in slots:
 		slot.set_selected(false)
 	_update_action_buttons()
+
+
+func _slot_click_button(index: int) -> int:
+	if index >= 0 and index < slots.size():
+		return slots[index].last_click_button_index
+	return MOUSE_BUTTON_LEFT
+
+
+func _visible_slot_for_global_index(global_idx: int) -> CardSlotUI:
+	var local_idx := global_idx - current_page * slot_count
+	if local_idx < 0 or local_idx >= slots.size():
+		return null
+	return slots[local_idx]
+
+
+func _is_point_over_action_button(global_point: Vector2) -> bool:
+	for button in [_btn_synth, _btn_discard, _btn_vault]:
+		var btn := button as Button
+		if btn != null and btn.is_inside_tree() and btn.get_global_rect().has_point(global_point):
+			return true
+	return false
 
 
 func get_selected_hand_index() -> int:
@@ -411,8 +461,10 @@ func get_synthesis_animation_sources(indices: Array) -> Array[Dictionary]:
 
 
 func hide_synthesis_slots_for_animation(indices: Array) -> void:
+	_synthesis_hidden_indices.clear()
 	for global_idx in indices:
 		var idx := int(global_idx)
+		_synthesis_hidden_indices[idx] = true
 		var local_idx := idx - current_page * slot_count
 		if local_idx < 0 or local_idx >= slots.size():
 			continue
@@ -428,6 +480,12 @@ func hide_synthesis_slots_for_animation(indices: Array) -> void:
 	if _btn_vault != null:
 		_btn_vault.disabled = true
 
+func clear_synthesis_animation_hidden_slots() -> void:
+	_synthesis_hidden_indices.clear()
+
+func _is_synthesis_hidden(global_idx: int) -> bool:
+	return _synthesis_hidden_indices.has(global_idx)
+
 
 func _select_hand_slot(global_idx: int) -> void:
 	_selected_hand_index = global_idx
@@ -436,6 +494,9 @@ func _select_hand_slot(global_idx: int) -> void:
 
 func _ensure_selection_valid() -> void:
 	if _selected_hand_index < 0:
+		return
+	if _is_synthesis_hidden(_selected_hand_index):
+		_selected_hand_index = -1
 		return
 	var cards = GameManager.player_data.hand_cards
 	if _selected_hand_index >= cards.size() or cards[_selected_hand_index] == null:

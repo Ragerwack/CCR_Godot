@@ -1,9 +1,13 @@
 extends Node
 
 signal resolution_changed(size: Vector2i)
+signal window_mode_changed(fullscreen: bool)
 
 const CONFIG_SECTION := "display"
 const CONFIG_RESOLUTION_KEY := "resolution"
+const CONFIG_WINDOW_MODE_KEY := "window_mode"
+const WINDOW_MODE_FULLSCREEN_KEY := "fullscreen"
+const WINDOW_MODE_WINDOWED_KEY := "windowed"
 const DEFAULT_RESOLUTION := Vector2i(1920, 1200)
 const STEAM_DECK_RESOLUTION := Vector2i(1280, 800)
 const SUPPORTED_RESOLUTIONS := [
@@ -15,29 +19,48 @@ const SUPPORTED_RESOLUTIONS := [
 ]
 
 var current_resolution: Vector2i = DEFAULT_RESOLUTION
+var fullscreen_enabled: bool = true
 
 func _ready() -> void:
 	apply_startup_resolution()
 
 func apply_startup_resolution() -> void:
 	var saved_resolution := get_saved_resolution()
+	var target_resolution := DEFAULT_RESOLUTION
 	if is_supported_resolution(saved_resolution):
-		apply_resolution(saved_resolution, false)
-		return
-	if is_steam_deck_device():
-		apply_resolution(STEAM_DECK_RESOLUTION, false)
+		target_resolution = saved_resolution
+	elif is_steam_deck_device():
+		target_resolution = STEAM_DECK_RESOLUTION
+	current_resolution = target_resolution
+	apply_window_mode(get_saved_fullscreen_enabled(), false)
+	if not fullscreen_enabled:
+		apply_resolution(target_resolution, false)
 	else:
-		apply_resolution(DEFAULT_RESOLUTION, false)
+		resolution_changed.emit(target_resolution)
 
 func apply_resolution(size: Vector2i, persist: bool = true) -> bool:
 	if not is_supported_resolution(size):
 		return false
 	current_resolution = size
-	DisplayServer.window_set_size(size)
-	_center_window(size)
+	if not fullscreen_enabled:
+		DisplayServer.window_set_size(size)
+		_center_window(size)
 	if persist:
 		Config.set_value(CONFIG_SECTION, CONFIG_RESOLUTION_KEY, resolution_to_key(size))
 	resolution_changed.emit(size)
+	return true
+
+func apply_window_mode(fullscreen: bool, persist: bool = true) -> bool:
+	fullscreen_enabled = fullscreen
+	if fullscreen:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		DisplayServer.window_set_size(current_resolution)
+		_center_window(current_resolution)
+	if persist:
+		Config.set_value(CONFIG_SECTION, CONFIG_WINDOW_MODE_KEY, window_mode_to_key(fullscreen))
+	window_mode_changed.emit(fullscreen)
 	return true
 
 func get_supported_resolutions() -> Array:
@@ -54,6 +77,20 @@ func get_saved_resolution() -> Vector2i:
 
 func get_current_resolution() -> Vector2i:
 	return current_resolution
+
+func is_fullscreen_enabled() -> bool:
+	return fullscreen_enabled
+
+func get_saved_fullscreen_enabled() -> bool:
+	var key := str(Config.get_value(CONFIG_SECTION, CONFIG_WINDOW_MODE_KEY, ""))
+	if key == WINDOW_MODE_WINDOWED_KEY:
+		return false
+	if key == WINDOW_MODE_FULLSCREEN_KEY:
+		return true
+	return true
+
+func window_mode_to_key(fullscreen: bool) -> String:
+	return WINDOW_MODE_FULLSCREEN_KEY if fullscreen else WINDOW_MODE_WINDOWED_KEY
 
 func resolution_to_key(size: Vector2i) -> String:
 	return "%dx%d" % [size.x, size.y]

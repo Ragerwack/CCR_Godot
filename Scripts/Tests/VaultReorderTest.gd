@@ -53,6 +53,11 @@ func _ready() -> void:
 	vault_ui._on_slot_clicked(0)
 	if vault_ui._selected_slots.size() != 1 or int(vault_ui._selected_slots[0]) != 0:
 		return _fail("single_select_first_wrong")
+	if vault_ui.slots[0].find_child("VaultSelectHighlight", false, false) != null:
+		return _fail("vault_selection_overlay_covers_card")
+	var slot_highlight: Panel = vault_ui.slots[0].get("_selected_highlight")
+	if slot_highlight == null or not slot_highlight.visible:
+		return _fail("vault_selection_glow_missing")
 	vault_ui._on_slot_clicked(1)
 	if vault_ui._selected_slots.size() != 1 or int(vault_ui._selected_slots[0]) != 1:
 		return _fail("single_select_replace_wrong")

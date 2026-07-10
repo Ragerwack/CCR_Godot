@@ -6,6 +6,7 @@ signal bindings_changed()
 const CONFIG_SECTION := "controller_input"
 const CONFIG_BINDINGS_KEY := "bindings"
 const CURSOR_TEXTURE_PATH := "res://Resources/UI/player_cursor.png"
+const CURSOR_IMAGE_PATH := "res://Resources/UI/player_cursor_image.res"
 const AXIS_PRESS_THRESHOLD := 0.55
 const FOCUS_MOVE_THRESHOLD := 0.55
 const FOCUS_MOVE_REPEAT_SECONDS := 0.18
@@ -161,10 +162,17 @@ func focus_first_available() -> void:
 	first.grab_focus()
 
 func _apply_custom_cursor() -> void:
-	var cursor_texture := load(CURSOR_TEXTURE_PATH)
+	var cursor_texture := _load_cursor_texture()
 	if cursor_texture != null:
 		Input.set_custom_mouse_cursor(cursor_texture, Input.CURSOR_ARROW, Vector2.ZERO)
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+func _load_cursor_texture() -> Texture2D:
+	var image := load(CURSOR_IMAGE_PATH) as Image
+	if image != null and not image.is_empty():
+		return ImageTexture.create_from_image(image)
+	var imported_texture := load(CURSOR_TEXTURE_PATH)
+	return imported_texture as Texture2D
 
 func _load_bindings() -> void:
 	_bindings = DEFAULT_BINDINGS.duplicate()

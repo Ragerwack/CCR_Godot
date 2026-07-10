@@ -2,6 +2,11 @@ class_name CountryCatalog
 extends RefCounted
 
 ## 注册国籍选项使用稳定代码，显示名称随客户端语言切换。
+## 设置页按联合国 193 个会员国口径显示，并额外保留中国香港、中国台湾两个地区。
+const UN_MEMBER_CODES: Array[String] = [
+	"AF", "AL", "DZ", "AD", "AO", "AG", "AR", "AM", "AU", "AT", "AZ", "BS", "BH", "BD", "BB", "BY", "BE", "BZ", "BJ", "BT", "BO", "BA", "BW", "BR", "BN", "BG", "BF", "BI", "CV", "KH", "CM", "CA", "CF", "TD", "CL", "CN", "CO", "KM", "CG", "CD", "CR", "CI", "HR", "CU", "CY", "CZ", "DK", "DJ", "DM", "DO", "EC", "EG", "SV", "GQ", "ER", "EE", "SZ", "ET", "FJ", "FI", "FR", "GA", "GM", "GE", "DE", "GH", "GR", "GD", "GT", "GN", "GW", "GY", "HT", "HN", "HU", "IS", "IN", "ID", "IR", "IQ", "IE", "IL", "IT", "JM", "JP", "JO", "KZ", "KE", "KI", "KP", "KR", "KW", "KG", "LA", "LV", "LB", "LS", "LR", "LY", "LI", "LT", "LU", "MG", "MW", "MY", "MV", "ML", "MT", "MH", "MR", "MU", "MX", "FM", "MD", "MC", "MN", "ME", "MA", "MZ", "MM", "NA", "NR", "NP", "NL", "NZ", "NI", "NE", "NG", "MK", "NO", "OM", "PK", "PW", "PA", "PG", "PY", "PE", "PH", "PL", "PT", "QA", "RO", "RU", "RW", "KN", "LC", "VC", "WS", "SM", "ST", "SA", "SN", "RS", "SC", "SL", "SG", "SK", "SI", "SB", "SO", "ZA", "SS", "ES", "LK", "SD", "SR", "SE", "CH", "SY", "TJ", "TH", "TL", "TG", "TO", "TT", "TN", "TR", "TM", "TV", "UG", "UA", "AE", "GB", "TZ", "US", "UY", "UZ", "VU", "VE", "VN", "YE", "ZM", "ZW",
+]
+const EXTRA_REGION_CODES: Array[String] = ["HK", "TW"]
 const COUNTRIES: Array[Dictionary] = [
 	{"code": "EARTH", "zh": "地球", "en": "Earth"},
 	{"code": "AD", "zh": "安道尔", "en": "Andorra"},
@@ -98,7 +103,7 @@ const COUNTRIES: Array[Dictionary] = [
 	{"code": "GU", "zh": "关岛", "en": "Guam"},
 	{"code": "GW", "zh": "几内亚比绍", "en": "Guinea-Bissau"},
 	{"code": "GY", "zh": "圭亚那", "en": "Guyana"},
-	{"code": "HK", "zh": "香港", "en": "Hong Kong"},
+	{"code": "HK", "zh": "中国香港", "en": "China Hong Kong"},
 	{"code": "HM", "zh": "赫德岛和麦克唐纳群岛", "en": "Heard & McDonald Islands"},
 	{"code": "HN", "zh": "洪都拉斯", "en": "Honduras"},
 	{"code": "HR", "zh": "克罗地亚", "en": "Croatia"},
@@ -231,7 +236,7 @@ const COUNTRIES: Array[Dictionary] = [
 	{"code": "TR", "zh": "土耳其", "en": "Türkiye"},
 	{"code": "TT", "zh": "特立尼达和多巴哥", "en": "Trinidad & Tobago"},
 	{"code": "TV", "zh": "图瓦卢", "en": "Tuvalu"},
-	{"code": "TW", "zh": "台湾", "en": "Taiwan"},
+	{"code": "TW", "zh": "中国台湾", "en": "China Taiwan"},
 	{"code": "TZ", "zh": "坦桑尼亚", "en": "Tanzania"},
 	{"code": "UA", "zh": "乌克兰", "en": "Ukraine"},
 	{"code": "UG", "zh": "乌干达", "en": "Uganda"},
@@ -260,9 +265,11 @@ static func localized_entries(locale: String) -> Array[Dictionary]:
 	var name_key := "zh" if locale == "zh-CN" else "en"
 	var result: Array[Dictionary] = []
 	for country in COUNTRIES:
+		var code := str(country["code"])
+		if code != "EARTH" and not (code in UN_MEMBER_CODES) and not (code in EXTRA_REGION_CODES):
+			continue
 		result.append({
-			"code": str(country["code"]),
+			"code": code,
 			"label": str(country[name_key]),
 		})
 	return result
-

@@ -16,6 +16,7 @@ signal card_hover_changed(display: CardDisplay, active: bool)
 var card: CardInfo = null
 var card_index: int = -1
 var is_selected: bool = false
+var last_click_button_index: int = MOUSE_BUTTON_LEFT
 
 # ── 拖拽属性（由父级 CardSlotUI 设置） ──
 var drag_source: String = ""   # "pool" / "hand" / "vault"
@@ -23,7 +24,9 @@ var is_draggable: bool = true   # 锁定时为 false
 
 var _card_bg: ColorRect
 var _card_shadow: Panel
+var _art_shadow: Panel
 var _art_image: TextureRect
+var _deck_name_region: Control
 var _card_name_label: Label
 var _deck_name_label: Label
 var _description_panel: Panel
@@ -34,6 +37,8 @@ var _fallback_color_rect: ColorRect
 var _number_badge: Panel
 var _number_label: Label
 var _color_bar: ColorRect
+var _card_name_region: Control
+var _series_tag_region: Control
 var _series_tag_label: Label
 var _hovered: bool = false
 var _dragging_preview: bool = false
@@ -47,6 +52,7 @@ var hover_scale_enabled: bool = true
 static var CARD_SIZE: Vector2 = Vector2(107, 149)
 static var _shared_color_image_map: Dictionary = {}
 static var _texture_cache: Dictionary = {}
+static var _art_texture_cache: Dictionary = {}
 static var _rounded_mask_shader: Shader = null
 const HOVER_SCALE: float = 2.0
 const DROP_TARGET_SCALE: float = 1.08
@@ -56,10 +62,27 @@ const FRAME_SOURCE_SIZE: Vector2 = Vector2(1060, 1484)
 const CANVAS_SOURCE_OFFSET: Vector2 = Vector2(30, 42)
 const ART_PATH_PREFIX: String = "res://Resources/Cards/"
 const CARD_TEXT_COLOR: Color = Color(0.294118, 0.333333, 0.388235, 1.0)
+const CARD_TEXT_COLOR_GREEN: Color = Color(1.000000, 0.878431, 0.513725, 1.0)
+const CARD_TEXT_COLOR_BLUE: Color = Color(0.023529, 0.113725, 0.258824, 1.0)
+const CARD_TEXT_COLOR_PURPLE: Color = Color(1.000000, 0.886275, 0.552941, 1.0)
+const CARD_TEXT_COLOR_ORANGE: Color = Color(0.258824, 0.070588, 0.125490, 1.0)
+const CARD_TEXT_COLOR_BLACK: Color = Color(0.941176, 0.800000, 0.403922, 1.0)
+const CARD_TEXT_COLOR_RED: Color = Color(1.000000, 0.858824, 0.592157, 1.0)
 const INFO_PANEL_BORDER_COLOR: Color = Color(0.850980, 0.866667, 0.898039, 1.0)
 const INFO_PANEL_BG_COLOR: Color = Color(0.972549, 0.976471, 0.984314, 1.0)
 const CARD_CORNER_RADIUS_RATIO: float = 1.0 / 13.0
-const NUMBER_BADGE_CANVAS_RECT: Rect2 = Rect2(830, -30, 190, 190)
+const ART_CORNER_RADIUS_RATIO: float = 0.1
+const ART_RECT_RATIO: Rect2 = Rect2(0.06, 0.09, 0.88, 0.56)
+const DECK_NAME_RECT_RATIO: Rect2 = Rect2(0.10, 0.01, 0.80, 0.07)
+const CARD_NAME_RECT_RATIO: Rect2 = Rect2(0.10, 0.67, 0.80, 0.06)
+const DESCRIPTION_RECT_RATIO: Rect2 = Rect2(0.08, 0.75, 0.84, 0.17)
+const SERIES_TAG_RECT_RATIO: Rect2 = Rect2(0.10, 0.94, 0.80, 0.05)
+const NUMBER_BADGE_RECT_RATIO: Rect2 = Rect2(0.811, 0.008, 0.179, 0.128)
+const DECK_NAME_FONT_CANVAS: float = 92.0
+const CARD_NAME_FONT_CANVAS: float = 62.0
+const DESCRIPTION_FONT_CANVAS: float = 34.0
+const SERIES_TAG_FONT_CANVAS: float = 32.0
+const NUMBER_BADGE_FONT_CANVAS: float = 70.0
 const CARD_ROUNDED_MASK_SHADER: String = """
 shader_type canvas_item;
 
@@ -101,14 +124,6 @@ func setup_ui() -> void:
 	_card_bg.material = _new_rounded_mask_material(CARD_SIZE)
 	add_child(_card_bg)
 
-	_color_border = TextureRect.new()
-	_color_border.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_color_border.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	_color_border.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	_color_border.material = _new_rounded_mask_material(CARD_SIZE)
-	_color_border.visible = show_color_border
-	add_child(_color_border)
-
 	_fallback_color_rect = ColorRect.new()
 	_fallback_color_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_fallback_color_rect.color = Color(1, 1, 1, 0.1)
@@ -118,20 +133,42 @@ func setup_ui() -> void:
 
 	_load_color_images()
 
+	_color_border = TextureRect.new()
+	_color_border.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_color_border.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	_color_border.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_color_border.material = _new_rounded_mask_material(CARD_SIZE)
+	_color_border.visible = show_color_border
+	add_child(_color_border)
+
+	_art_shadow = CCRVisualStyle.make_shadow_panel("ArtCenteredShadow", int(roundf(CARD_SIZE.x * ART_RECT_RATIO.size.x * ART_CORNER_RADIUS_RATIO)), 8, Vector2.ZERO, Color(0, 0, 0, 0.34))
+	_art_shadow.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	add_child(_art_shadow)
+
 	_art_image = TextureRect.new()
 	_art_image.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	_art_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_art_image.stretch_mode = TextureRect.STRETCH_SCALE
 	_art_image.clip_contents = true
+	_art_image.custom_minimum_size = Vector2.ZERO
 	_art_image.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_art_image)
 
+	_deck_name_region = Control.new()
+	_deck_name_region.name = "DeckNameRegion"
+	_deck_name_region.clip_contents = true
+	_deck_name_region.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_deck_name_region)
+
 	_deck_name_label = Label.new()
+	_deck_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_deck_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_deck_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_deck_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_deck_name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_deck_name_label.clip_text = true
 	_deck_name_label.clip_contents = true
+	_deck_name_label.custom_minimum_size = Vector2.ZERO
 	_deck_name_label.add_theme_color_override("font_color", CARD_TEXT_COLOR)
-	add_child(_deck_name_label)
+	_deck_name_region.add_child(_deck_name_label)
 
 	_number_badge = Panel.new()
 	_number_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -150,17 +187,27 @@ func setup_ui() -> void:
 	_number_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_number_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_number_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_number_label.clip_text = true
 	_number_label.clip_contents = true
 	_number_label.add_theme_color_override("font_color", CARD_TEXT_COLOR)
 	_number_badge.add_child(_number_label)
 
+	_card_name_region = Control.new()
+	_card_name_region.name = "CardNameRegion"
+	_card_name_region.clip_contents = true
+	_card_name_region.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_card_name_region)
+
 	_card_name_label = Label.new()
+	_card_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_card_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_card_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_card_name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_card_name_label.clip_text = true
 	_card_name_label.clip_contents = true
+	_card_name_label.custom_minimum_size = Vector2.ZERO
 	_card_name_label.add_theme_color_override("font_color", CARD_TEXT_COLOR)
-	add_child(_card_name_label)
+	_card_name_region.add_child(_card_name_label)
 
 	_description_panel = Panel.new()
 	_description_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -179,17 +226,28 @@ func setup_ui() -> void:
 	_description_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_description_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_description_label.clip_text = true
 	_description_label.add_theme_color_override("font_color", CARD_TEXT_COLOR)
 	_description_label.clip_contents = true
+	_description_label.custom_minimum_size = Vector2.ZERO
 	add_child(_description_label)
 
+	_series_tag_region = Control.new()
+	_series_tag_region.name = "SeriesTagRegion"
+	_series_tag_region.clip_contents = true
+	_series_tag_region.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_series_tag_region)
+
 	_series_tag_label = Label.new()
+	_series_tag_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_series_tag_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_series_tag_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_series_tag_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_series_tag_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_series_tag_label.clip_text = true
 	_series_tag_label.clip_contents = true
+	_series_tag_label.custom_minimum_size = Vector2.ZERO
 	_series_tag_label.add_theme_color_override("font_color", CARD_TEXT_COLOR)
-	add_child(_series_tag_label)
+	_series_tag_region.add_child(_series_tag_label)
 
 	_color_bar = ColorRect.new()
 	_color_bar.color = Color.WHITE
@@ -207,14 +265,14 @@ func setup_ui() -> void:
 		DragSystem.drag_ended.connect(_on_global_drag_ended)
 		DragSystem.drag_cancelled.connect(_on_global_drag_cancelled)
 
-static func _new_rounded_mask_material(card_size: Vector2) -> ShaderMaterial:
+static func _new_rounded_mask_material(card_size: Vector2, corner_radius_ratio: float = CARD_CORNER_RADIUS_RATIO) -> ShaderMaterial:
 	if _rounded_mask_shader == null:
 		_rounded_mask_shader = Shader.new()
 		_rounded_mask_shader.code = CARD_ROUNDED_MASK_SHADER
 	var material := ShaderMaterial.new()
 	material.shader = _rounded_mask_shader
 	material.set_shader_parameter("aspect_ratio", card_size.x / maxf(card_size.y, 1.0))
-	material.set_shader_parameter("radius_ratio", CARD_CORNER_RADIUS_RATIO)
+	material.set_shader_parameter("radius_ratio", corner_radius_ratio)
 	return material
 
 func _notification(what: int) -> void:
@@ -314,16 +372,89 @@ func _canvas_rect_for(target_size: Vector2, x: float, y: float, w: float, h: flo
 		Vector2(target_size.x * w / FRAME_SOURCE_SIZE.x, target_size.y * h / FRAME_SOURCE_SIZE.y)
 	)
 
+func _ratio_rect(rect_ratio: Rect2) -> Rect2:
+	return _ratio_rect_for(size, rect_ratio)
+
+func _ratio_rect_for(target_size: Vector2, rect_ratio: Rect2) -> Rect2:
+	return Rect2(
+		Vector2(target_size.x * rect_ratio.position.x, target_size.y * rect_ratio.position.y),
+		Vector2(target_size.x * rect_ratio.size.x, target_size.y * rect_ratio.size.y)
+	)
+
 func _font_size(canvas_px: float, minimum: int = 6) -> int:
 	return maxi(minimum, int(round(size.y * canvas_px / CARD_CANVAS_SIZE.y)))
 
+func _font_size_for(target_size: Vector2, canvas_px: float, minimum: int = 6) -> int:
+	return maxi(minimum, int(round(target_size.y * canvas_px / CARD_CANVAS_SIZE.y)))
+
 func _apply_rect(node: Control, rect: Rect2) -> void:
 	node.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	node.custom_minimum_size = Vector2.ZERO
 	node.position = rect.position
 	node.size = rect.size
 
+func _center_label_in_region(label: Label, region: Control) -> void:
+	if label == null or region == null:
+		return
+	var min_size := label.get_combined_minimum_size()
+	var label_height := maxf(region.size.y, min_size.y)
+	label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	label.position = Vector2(0.0, (region.size.y - label_height) * 0.5)
+	label.size = Vector2(region.size.x, label_height)
+
+func _apply_panel_shadow_style(panel: Panel, corner_radius: int, shadow_size: int, shadow_offset: Vector2, color: Color) -> void:
+	if panel == null:
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.01)
+	style.border_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.set_corner_radius_all(corner_radius)
+	style.shadow_color = color
+	style.shadow_size = shadow_size
+	style.shadow_offset = shadow_offset
+	panel.add_theme_stylebox_override("panel", style)
+
+func _fit_label_font_size(label: Label, base_canvas_px: float, minimum: int = 6, target_size: Vector2 = Vector2.ZERO) -> void:
+	if label == null:
+		return
+	var base_size := _font_size(base_canvas_px, minimum)
+	var fitting_size := target_size if target_size.x > 0.0 and target_size.y > 0.0 else label.size
+	var fitted_size := _fit_text_font_size(label, base_size, minimum, fitting_size)
+	label.add_theme_font_size_override("font_size", fitted_size)
+
+func _fit_label_font_size_to_region_max(label: Label, minimum: int = 6, target_size: Vector2 = Vector2.ZERO) -> void:
+	if label == null:
+		return
+	var fitting_size := target_size if target_size.x > 0.0 and target_size.y > 0.0 else label.size
+	var max_candidate := maxi(minimum, int(ceil(fitting_size.y * 2.0)))
+	var fitted_size := _fit_text_font_size(label, max_candidate, minimum, fitting_size)
+	label.add_theme_font_size_override("font_size", fitted_size)
+
+func _fit_text_font_size(label: Label, base_size: int, minimum: int, fitting_size: Vector2) -> int:
+	var text := label.text.strip_edges()
+	if text == "" or fitting_size.x <= 0.0 or fitting_size.y <= 0.0:
+		return base_size
+	var font := label.get_theme_font("font")
+	if font == null:
+		return base_size
+	var max_width := fitting_size.x * 0.98
+	var max_height := fitting_size.y * 0.98
+	for font_size in range(base_size, minimum - 1, -1):
+		var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
+		var line_height := font.get_height(font_size)
+		if text_size.x <= max_width and line_height <= max_height:
+			return font_size
+	return minimum
+
+func _refresh_label_font_sizes(deck_size: Vector2 = Vector2.ZERO, card_name_size: Vector2 = Vector2.ZERO, series_size: Vector2 = Vector2.ZERO) -> void:
+	_fit_label_font_size_to_region_max(_deck_name_label, 6, deck_size)
+	_number_label.add_theme_font_size_override("font_size", _font_size(NUMBER_BADGE_FONT_CANVAS, 8))
+	_fit_label_font_size(_card_name_label, CARD_NAME_FONT_CANVAS, 6, card_name_size)
+	_description_label.add_theme_font_size_override("font_size", _font_size(DESCRIPTION_FONT_CANVAS, 6))
+	_fit_label_font_size(_series_tag_label, SERIES_TAG_FONT_CANVAS, 5, series_size)
+
 func _apply_card_layout() -> void:
-	if _art_image == null or _deck_name_label == null or _number_badge == null or _card_name_label == null or _description_panel == null or _description_label == null or _series_tag_label == null:
+	if _art_image == null or _art_shadow == null or _deck_name_region == null or _deck_name_label == null or _number_badge == null or _card_name_region == null or _card_name_label == null or _description_panel == null or _description_label == null or _series_tag_region == null or _series_tag_label == null:
 		return
 
 	if size.x <= 0 or size.y <= 0:
@@ -331,25 +462,33 @@ func _apply_card_layout() -> void:
 	if _card_shadow != null:
 		_card_shadow.size = size
 
-	_apply_rect(_art_image, _canvas_rect(90, 190, 820, 740))
-	_apply_rect(_deck_name_label, _canvas_rect(90, 40, 720, 120))
-	_apply_rect(_number_badge, _canvas_rect(
-		NUMBER_BADGE_CANVAS_RECT.position.x,
-		NUMBER_BADGE_CANVAS_RECT.position.y,
-		NUMBER_BADGE_CANVAS_RECT.size.x,
-		NUMBER_BADGE_CANVAS_RECT.size.y
-	))
-	_apply_rect(_card_name_label, _canvas_rect(150, 900, 700, 90))
-	var desc_rect := _canvas_rect(140, 1010, 720, 260)
+	var art_rect := _ratio_rect(ART_RECT_RATIO)
+	_apply_rect(_art_shadow, art_rect)
+	_apply_panel_shadow_style(
+		_art_shadow,
+		int(roundf(art_rect.size.x * ART_CORNER_RADIUS_RATIO)),
+		maxi(4, int(roundf(art_rect.size.x * 0.055))),
+		Vector2.ZERO,
+		Color(0, 0, 0, 0.34)
+	)
+	_apply_rect(_art_image, art_rect)
+	_art_image.material = null
+	var deck_rect := _ratio_rect(DECK_NAME_RECT_RATIO)
+	var badge_rect := _ratio_rect(NUMBER_BADGE_RECT_RATIO)
+	var card_name_rect := _ratio_rect(CARD_NAME_RECT_RATIO)
+	var series_rect := _ratio_rect(SERIES_TAG_RECT_RATIO)
+	_apply_rect(_deck_name_region, deck_rect)
+	_apply_rect(_number_badge, badge_rect)
+	_apply_rect(_card_name_region, card_name_rect)
+	var desc_rect := _ratio_rect(DESCRIPTION_RECT_RATIO)
 	_apply_rect(_description_panel, desc_rect)
 	_apply_rect(_description_label, desc_rect.grow(-maxf(2.0, size.x * 16.0 / FRAME_SOURCE_SIZE.x)))
-	_apply_rect(_series_tag_label, _canvas_rect(300, 1320, 400, 60))
+	_apply_rect(_series_tag_region, series_rect)
 
-	_deck_name_label.add_theme_font_size_override("font_size", _font_size(64, 8))
-	_number_label.add_theme_font_size_override("font_size", _font_size(104, 10))
-	_card_name_label.add_theme_font_size_override("font_size", _font_size(54, 8))
-	_description_label.add_theme_font_size_override("font_size", _font_size(34, 6))
-	_series_tag_label.add_theme_font_size_override("font_size", _font_size(28, 6))
+	_refresh_label_font_sizes(deck_rect.size, card_name_rect.size, series_rect.size)
+	_center_label_in_region(_deck_name_label, _deck_name_region)
+	_center_label_in_region(_card_name_label, _card_name_region)
+	_center_label_in_region(_series_tag_label, _series_tag_region)
 
 func _load_color_images() -> void:
 	if not _shared_color_image_map.is_empty():
@@ -402,6 +541,7 @@ func clear() -> void:
 	_series_tag_label.text = ""
 	_art_image.texture = null
 	_color_bar.color = Color(0.2, 0.2, 0.25, 1.0)
+	_apply_title_text_color(CardColor.ColorType.WHITE)
 
 func _update_display() -> void:
 	if card == null:
@@ -426,6 +566,8 @@ func _update_display() -> void:
 	# 子卡编号圆环
 	_number_label.text = "%d" % card.card_number
 	_series_tag_label.text = card.series_name
+	_apply_title_text_color(card.color)
+	_apply_card_layout()
 	_apply_card_art(card)
 
 	# 颜色条 + 边框
@@ -436,7 +578,7 @@ func _update_display() -> void:
 func _apply_card_art(card_info: CardInfo) -> void:
 	_art_image.texture = null
 	var explicit_path := _normalize_art_path(card_info.image_path)
-	var explicit_tex = _load_texture_cached(explicit_path)
+	var explicit_tex = _load_art_texture_cached(explicit_path)
 	if explicit_tex != null:
 		_art_image.texture = explicit_tex
 		return
@@ -446,7 +588,7 @@ func _apply_card_art(card_info: CardInfo) -> void:
 	var base: String = "card_%03d" % card_id
 	for ext: String in [".jpg", ".png", ".webp", ".jpeg"]:
 		var path: String = ART_PATH_PREFIX + base + ext
-		var tex = _load_texture_cached(path)
+		var tex = _load_art_texture_cached(path)
 		if tex != null:
 			_art_image.texture = tex
 			return
@@ -468,6 +610,71 @@ static func _load_texture_cached(path: String):
 	if tex != null:
 		_texture_cache[path] = tex
 	return tex
+
+func _load_art_texture_cached(path: String):
+	if path == "":
+		return null
+	var art_size := _art_image.size if _art_image != null and _art_image.size.x > 0.0 and _art_image.size.y > 0.0 else _ratio_rect_for(CARD_SIZE, ART_RECT_RATIO).size
+	var aspect := art_size.x / maxf(art_size.y, 1.0)
+	var cache_key := "%s|%.4f" % [path, aspect]
+	if _art_texture_cache.has(cache_key):
+		return _art_texture_cache[cache_key]
+	if not ResourceLoader.exists(path, "Texture2D"):
+		return null
+	var source_texture := ResourceLoader.load(path, "Texture2D") as Texture2D
+	if source_texture == null:
+		return null
+	var rounded := _make_cropped_rounded_art_texture(source_texture, aspect)
+	if rounded != null:
+		_art_texture_cache[cache_key] = rounded
+	return rounded
+
+func _make_cropped_rounded_art_texture(source_texture: Texture2D, target_aspect: float) -> Texture2D:
+	var image := source_texture.get_image()
+	if image == null or image.is_empty():
+		return null
+	image.convert(Image.FORMAT_RGBA8)
+	var source_size := image.get_size()
+	if source_size.x <= 0 or source_size.y <= 0 or target_aspect <= 0.0:
+		return null
+
+	var crop_width := source_size.x
+	var crop_height := int(round(float(crop_width) / target_aspect))
+	if crop_height > source_size.y:
+		crop_height = source_size.y
+		crop_width = int(round(float(crop_height) * target_aspect))
+	crop_width = clampi(crop_width, 1, source_size.x)
+	crop_height = clampi(crop_height, 1, source_size.y)
+	var crop_pos := Vector2i(
+		int(floor(float(source_size.x - crop_width) * 0.5)),
+		int(floor(float(source_size.y - crop_height) * 0.5))
+	)
+	var cropped := image.get_region(Rect2i(crop_pos, Vector2i(crop_width, crop_height)))
+	_apply_rounded_alpha_to_image(cropped, int(round(float(crop_width) * ART_CORNER_RADIUS_RATIO)))
+	return ImageTexture.create_from_image(cropped)
+
+func _apply_rounded_alpha_to_image(image: Image, radius: int) -> void:
+	var width := image.get_width()
+	var height := image.get_height()
+	if width <= 0 or height <= 0:
+		return
+	radius = clampi(radius, 1, mini(width, height) / 2)
+	var radius_f := float(radius)
+	for y in range(radius):
+		for x in range(radius):
+			var dx := radius_f - float(x) - 0.5
+			var dy := radius_f - float(y) - 0.5
+			if sqrt(dx * dx + dy * dy) <= radius_f:
+				continue
+			_set_alpha(image, x, y, 0.0)
+			_set_alpha(image, width - 1 - x, y, 0.0)
+			_set_alpha(image, x, height - 1 - y, 0.0)
+			_set_alpha(image, width - 1 - x, height - 1 - y, 0.0)
+
+func _set_alpha(image: Image, x: int, y: int, alpha: float) -> void:
+	var pixel := image.get_pixel(x, y)
+	pixel.a = alpha
+	image.set_pixel(x, y, pixel)
 
 func _normalize_art_path(raw_path: String) -> String:
 	var p := raw_path.strip_edges()
@@ -491,12 +698,32 @@ func _get_color_by_card_color(c: CardColor.ColorType) -> Color:
 		CardColor.ColorType.RED: return Color(0.9, 0.1, 0.1, 0.8)
 	return Color.WHITE
 
+func _get_title_text_color(c: CardColor.ColorType) -> Color:
+	match c:
+		CardColor.ColorType.GREEN: return CARD_TEXT_COLOR_GREEN
+		CardColor.ColorType.BLUE: return CARD_TEXT_COLOR_BLUE
+		CardColor.ColorType.PURPLE: return CARD_TEXT_COLOR_PURPLE
+		CardColor.ColorType.ORANGE: return CARD_TEXT_COLOR_ORANGE
+		CardColor.ColorType.BLACK: return CARD_TEXT_COLOR_BLACK
+		CardColor.ColorType.RED: return CARD_TEXT_COLOR_RED
+		_: return CARD_TEXT_COLOR
+
+func _apply_title_text_color(c: CardColor.ColorType) -> void:
+	if _deck_name_label == null or _card_name_label == null or _series_tag_label == null:
+		return
+	var title_color := _get_title_text_color(c)
+	_deck_name_label.add_theme_color_override("font_color", title_color)
+	_card_name_label.add_theme_color_override("font_color", title_color)
+	_series_tag_label.add_theme_color_override("font_color", title_color)
+
+func refresh_title_text_color() -> void:
+	if card == null:
+		_apply_title_text_color(CardColor.ColorType.WHITE)
+	else:
+		_apply_title_text_color(card.color)
+
 func set_selected(s: bool) -> void:
 	is_selected = s
-	if s:
-		_card_bg.color = Color(0.4, 0.4, 0.3, 1.0)
-	else:
-		_card_bg.color = Color(0.2, 0.2, 0.25, 1.0)
 
 
 func set_drop_targeted(active: bool) -> void:
@@ -517,6 +744,7 @@ func _on_gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb = event as InputEventMouseButton
 		if mb.pressed:
+			last_click_button_index = mb.button_index
 			_drag_anchor_ratio = _position_to_anchor_ratio(mb.position)
 			_has_drag_anchor = true
 			if mb.double_click:
@@ -606,18 +834,8 @@ func _create_drag_preview(card_offset: Vector2) -> Control:
 	bg.material = _new_rounded_mask_material(CARD_SIZE)
 	card_layer.add_child(bg)
 
-	if _art_image.texture != null:
-		var art_rect := _canvas_rect_for(CARD_SIZE, 90, 190, 820, 740)
-		var art = TextureRect.new()
-		art.position = art_rect.position
-		art.size = art_rect.size
-		art.texture = _art_image.texture
-		art.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		art.clip_contents = true
-		card_layer.add_child(art)
-
-	# 复制颜色边框
+	# 复制颜色卡框。当前卡框资源是完整 RGB 背景，不是透明挖空外框，
+	# 因此必须位于插图下方，否则会遮住运行时插图。
 	if _color_border.visible and _color_border.texture != null:
 		var border = TextureRect.new()
 		border.position = Vector2(0, 0)
@@ -629,25 +847,46 @@ func _create_drag_preview(card_offset: Vector2) -> Control:
 		border.modulate = Color(1, 1, 1, 1)
 		card_layer.add_child(border)
 
+	var title_text_color := _get_title_text_color(card.color if card != null else CardColor.ColorType.WHITE)
+
+	if _art_image.texture != null:
+		var art_rect := _ratio_rect_for(CARD_SIZE, ART_RECT_RATIO)
+		var art_shadow := CCRVisualStyle.make_shadow_panel(
+			"DragPreviewArtShadow",
+			int(roundf(art_rect.size.x * ART_CORNER_RADIUS_RATIO)),
+			maxi(4, int(roundf(art_rect.size.x * 0.055))),
+			Vector2.ZERO,
+			Color(0, 0, 0, 0.34)
+		)
+		art_shadow.position = art_rect.position
+		art_shadow.size = art_rect.size
+		card_layer.add_child(art_shadow)
+
+		var art = TextureRect.new()
+		art.position = art_rect.position
+		art.size = art_rect.size
+		art.texture = _art_image.texture
+		art.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		art.stretch_mode = TextureRect.STRETCH_SCALE
+		art.clip_contents = true
+		art.material = null
+		card_layer.add_child(art)
+
 	# 复制卡组名
-	var deck_rect := _canvas_rect_for(CARD_SIZE, 90, 40, 720, 120)
+	var deck_rect := _ratio_rect_for(CARD_SIZE, DECK_NAME_RECT_RATIO)
 	var deck_lbl = Label.new()
 	deck_lbl.position = deck_rect.position
 	deck_lbl.size = deck_rect.size
 	deck_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	deck_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	deck_lbl.text = _deck_name_label.text
-	deck_lbl.add_theme_font_size_override("font_size", _font_size(64, 8))
-	deck_lbl.add_theme_color_override("font_color", CARD_TEXT_COLOR)
+	var deck_font_candidate := maxi(6, int(ceil(deck_rect.size.y * 2.0)))
+	deck_lbl.add_theme_font_size_override("font_size", _fit_text_font_size(deck_lbl, deck_font_candidate, 6, deck_rect.size))
+	deck_lbl.add_theme_color_override("font_color", title_text_color)
+	deck_lbl.clip_contents = true
 	card_layer.add_child(deck_lbl)
 
-	var badge_rect := _canvas_rect_for(
-		CARD_SIZE,
-		NUMBER_BADGE_CANVAS_RECT.position.x,
-		NUMBER_BADGE_CANVAS_RECT.position.y,
-		NUMBER_BADGE_CANVAS_RECT.size.x,
-		NUMBER_BADGE_CANVAS_RECT.size.y
-	)
+	var badge_rect := _ratio_rect_for(CARD_SIZE, NUMBER_BADGE_RECT_RATIO)
 	var badge = Panel.new()
 	badge.position = badge_rect.position
 	badge.size = badge_rect.size
@@ -667,23 +906,24 @@ func _create_drag_preview(card_offset: Vector2) -> Control:
 	number_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	number_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	number_lbl.text = _number_label.text
-	number_lbl.add_theme_font_size_override("font_size", _font_size(104, 10))
+	number_lbl.add_theme_font_size_override("font_size", _font_size_for(CARD_SIZE, NUMBER_BADGE_FONT_CANVAS, 8))
 	number_lbl.add_theme_color_override("font_color", CARD_TEXT_COLOR)
 	badge.add_child(number_lbl)
 
 	# 复制卡名
-	var name_rect := _canvas_rect_for(CARD_SIZE, 150, 900, 700, 90)
+	var name_rect := _ratio_rect_for(CARD_SIZE, CARD_NAME_RECT_RATIO)
 	var name_lbl = Label.new()
 	name_lbl.position = name_rect.position
 	name_lbl.size = name_rect.size
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_lbl.text = _card_name_label.text
-	name_lbl.add_theme_font_size_override("font_size", _font_size(54, 8))
-	name_lbl.add_theme_color_override("font_color", CARD_TEXT_COLOR)
+	name_lbl.add_theme_font_size_override("font_size", _font_size_for(CARD_SIZE, CARD_NAME_FONT_CANVAS, 6))
+	name_lbl.add_theme_color_override("font_color", title_text_color)
+	name_lbl.clip_contents = true
 	card_layer.add_child(name_lbl)
 
-	var desc_rect := _canvas_rect_for(CARD_SIZE, 140, 1010, 720, 260)
+	var desc_rect := _ratio_rect_for(CARD_SIZE, DESCRIPTION_RECT_RATIO)
 	var desc_panel = Panel.new()
 	desc_panel.position = desc_rect.position
 	desc_panel.size = desc_rect.size
@@ -707,20 +947,21 @@ func _create_drag_preview(card_offset: Vector2) -> Control:
 	desc_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc_lbl.text = _description_label.text
-	desc_lbl.add_theme_font_size_override("font_size", _font_size(34, 6))
+	desc_lbl.add_theme_font_size_override("font_size", _font_size_for(CARD_SIZE, DESCRIPTION_FONT_CANVAS, 6))
 	desc_lbl.add_theme_color_override("font_color", CARD_TEXT_COLOR)
 	desc_lbl.clip_contents = true
 	card_layer.add_child(desc_lbl)
 
-	var series_rect := _canvas_rect_for(CARD_SIZE, 300, 1320, 400, 60)
+	var series_rect := _ratio_rect_for(CARD_SIZE, SERIES_TAG_RECT_RATIO)
 	var series_lbl = Label.new()
 	series_lbl.position = series_rect.position
 	series_lbl.size = series_rect.size
 	series_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	series_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	series_lbl.text = _series_tag_label.text
-	series_lbl.add_theme_font_size_override("font_size", _font_size(28, 6))
-	series_lbl.add_theme_color_override("font_color", CARD_TEXT_COLOR)
+	series_lbl.add_theme_font_size_override("font_size", _font_size_for(CARD_SIZE, SERIES_TAG_FONT_CANVAS, 5))
+	series_lbl.add_theme_color_override("font_color", title_text_color)
+	series_lbl.clip_contents = true
 	card_layer.add_child(series_lbl)
 
 	return preview

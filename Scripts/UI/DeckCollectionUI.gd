@@ -17,6 +17,8 @@ const FILTER_BAR_HEIGHT: float = 38.0
 const VISUAL_RELIC_LABEL_HEIGHT: float = 72.0
 const RELIC_SCALE_MULTIPLIER: float = 1.30
 const RELIC_SCREEN_HEIGHT_RATIO: float = (3.0 / 5.0) * RELIC_SCALE_MULTIPLIER
+const MUSEUM_TEXT_DARK: Color = Color(0.10, 0.085, 0.065, 0.96)
+const MUSEUM_TEXT_MUTED: Color = Color(0.19, 0.16, 0.12, 0.88)
 const RELIC_VIEW_SCENE = preload("res://Scenes/UI/RelicView.tscn")
 const THUMBNAIL_CACHE = preload("res://Scripts/UI/MuseumRelicThumbnailCache.gd")
 const CardDisplayScript = preload("res://Scripts/UI/CardDisplay.gd")
@@ -63,6 +65,7 @@ var _filter_bar: HBoxContainer = null
 var _color_filter_button: MenuButton = null
 var _sort_option: OptionButton = null
 var _series_option: OptionButton = null
+var _collection_progress_label: Label = null
 var _last_render_viewport_height: float = 0.0
 var _resize_render_queued: bool = false
 var _view_overlay: Control = null
@@ -153,6 +156,8 @@ func _create_filter_bar() -> void:
 	_color_filter_button.name = "MuseumColorFilter"
 	_color_filter_button.custom_minimum_size = Vector2(170, 32)
 	_color_filter_button.get_popup().id_pressed.connect(_on_color_filter_pressed)
+	_apply_filter_control_text_style(_color_filter_button)
+	_apply_filter_control_text_style(_color_filter_button.get_popup())
 	_filter_bar.add_child(_color_filter_button)
 
 	_sort_option = OptionButton.new()
@@ -166,13 +171,23 @@ func _create_filter_bar() -> void:
 	_sort_option.set_item_metadata(2, "standard")
 	_sort_option.select(2)
 	_sort_option.item_selected.connect(_on_sort_selected)
+	_apply_filter_control_text_style(_sort_option)
 	_filter_bar.add_child(_sort_option)
 
 	_series_option = OptionButton.new()
 	_series_option.name = "MuseumSeriesOption"
 	_series_option.custom_minimum_size = Vector2(210, 32)
 	_series_option.item_selected.connect(_on_series_selected)
+	_apply_filter_control_text_style(_series_option)
 	_filter_bar.add_child(_series_option)
+
+	_collection_progress_label = Label.new()
+	_collection_progress_label.name = "MuseumCollectionProgress"
+	_collection_progress_label.custom_minimum_size = Vector2(180, 32)
+	_collection_progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_collection_progress_label.add_theme_font_size_override("font_size", 15)
+	_collection_progress_label.add_theme_color_override("font_color", MUSEUM_TEXT_DARK)
+	_filter_bar.add_child(_collection_progress_label)
 
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -202,6 +217,7 @@ func render_decks() -> void:
 	var relics := _aggregate_relics(all_decks)
 	_update_filter_options(relics)
 	relics = _apply_relic_filters(relics)
+	_update_collection_progress(relics)
 	_sort_relic_list(relics)
 	if relics.is_empty():
 		_empty_label.visible = true
@@ -295,7 +311,7 @@ func _update_color_filter_options(relics: Array[Dictionary]) -> void:
 	var popup := _color_filter_button.get_popup()
 	popup.clear()
 	for color_type in colors:
-		popup.add_check_item(CardColor.display_name(color_type), color_type)
+		popup.add_check_item(_museum_relic_tier_name(color_type), color_type)
 		var item_index := popup.get_item_index(color_type)
 		if item_index >= 0:
 			popup.set_item_checked(item_index, bool(_selected_colors.get(color_type, true)))
@@ -305,7 +321,7 @@ func _update_color_filter_button_text() -> void:
 	var selected_names: Array[String] = []
 	for color_type in _available_colors:
 		if bool(_selected_colors.get(color_type, true)):
-			selected_names.append(CardColor.display_name(color_type))
+			selected_names.append(_museum_relic_tier_name(color_type))
 	if selected_names.size() == _available_colors.size() or selected_names.is_empty():
 		_color_filter_button.text = Localization.t("ui.deck_collection.filter.colors_all")
 	else:
@@ -357,15 +373,15 @@ func _sort_relic_list(relics: Array[Dictionary]) -> void:
 func _sort_relics(a: Dictionary, b: Dictionary) -> bool:
 	match _sort_mode:
 		"recent":
-			var a_recent := int(a.get("last_index", 0))
-			var b_recent := int(b.get("last_index", 0))
+			var a_recent := int(a.get("first_index", 0))
+			var b_recent := int(b.get("first_index", 0))
 			if a_recent != b_recent:
-				return a_recent > b_recent
+				return a_recent < b_recent
 		"oldest":
-			var a_oldest := int(a.get("first_index", 0))
-			var b_oldest := int(b.get("first_index", 0))
+			var a_oldest := int(a.get("last_index", 0))
+			var b_oldest := int(b.get("last_index", 0))
 			if a_oldest != b_oldest:
-				return a_oldest < b_oldest
+				return a_oldest > b_oldest
 		_:
 			var a_id := int(a.get("deck_def_id", 0))
 			var b_id := int(b.get("deck_def_id", 0))
@@ -395,9 +411,8 @@ func _create_color_header(color_type: int, count: int) -> Control:
 	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hdr.custom_minimum_size = Vector2(0, HEADER_HEIGHT)
 
-	var color_name = CardColor.display_name(color_type)
 	var color_label = Label.new()
-	color_label.text = "■ " + Localization.t("ui.deck_collection.color_header", [color_name])
+	color_label.text = "■ " + Localization.t("ui.deck_collection.color_header", [_museum_relic_tier_name(color_type)])
 	color_label.add_theme_font_size_override("font_size", 16)
 	# 粗体设置 — Godot 中无法直接用 bool 设置 bold，改用 add_theme_font_size_override 即可
 	color_label.add_theme_color_override("font_color", _get_color_text(color_type))
@@ -408,7 +423,7 @@ func _create_color_header(color_type: int, count: int) -> Control:
 	var count_label = Label.new()
 	count_label.text = Localization.t("ui.deck_collection.kind_count", [count])
 	count_label.add_theme_font_size_override("font_size", 13)
-	count_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1.0))
+	count_label.add_theme_color_override("font_color", MUSEUM_TEXT_MUTED)
 	hdr.add_child(count_label)
 
 	# 占满剩余空间
@@ -548,7 +563,7 @@ func _create_visual_relic_card(relic: Dictionary) -> Control:
 	series_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	series_label.text = str(relic.get("series_name", ""))
 	series_label.add_theme_font_size_override("font_size", 14)
-	series_label.add_theme_color_override("font_color", Color(0.76, 0.80, 0.88, 0.9))
+	series_label.add_theme_color_override("font_color", MUSEUM_TEXT_MUTED)
 	series_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	series_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label_box.add_child(series_label)
@@ -560,7 +575,7 @@ func _create_visual_relic_card(relic: Dictionary) -> Control:
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.text = str(relic.get("deck_name", ""))
 	name_label.add_theme_font_size_override("font_size", 18)
-	name_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.62, 1.0))
+	name_label.add_theme_color_override("font_color", MUSEUM_TEXT_DARK)
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label_box.add_child(name_label)
@@ -572,7 +587,7 @@ func _create_visual_relic_card(relic: Dictionary) -> Control:
 	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	count_label.text = Localization.t("ui.deck_collection.relic_count", [int(relic.get("count", 1))])
 	count_label.add_theme_font_size_override("font_size", 14)
-	count_label.add_theme_color_override("font_color", Color(0.82, 0.70, 0.44, 0.95))
+	count_label.add_theme_color_override("font_color", MUSEUM_TEXT_MUTED)
 	count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label_box.add_child(count_label)
 
@@ -901,3 +916,53 @@ func _get_color_text(color_type: int) -> Color:
 
 func refresh() -> void:
 	render_decks()
+
+func _museum_relic_tier_name(color_type: int) -> String:
+	match color_type:
+		CardColor.ColorType.WHITE:
+			return Localization.t("ui.deck_collection.rarity.normal")
+		CardColor.ColorType.GREEN:
+			return Localization.t("ui.deck_collection.rarity.excellent")
+		CardColor.ColorType.BLUE:
+			return Localization.t("ui.deck_collection.rarity.rare")
+		CardColor.ColorType.PURPLE:
+			return Localization.t("ui.deck_collection.rarity.epic")
+		CardColor.ColorType.ORANGE:
+			return Localization.t("ui.deck_collection.rarity.legendary")
+		CardColor.ColorType.BLACK:
+			return Localization.t("ui.deck_collection.rarity.ultimate")
+		CardColor.ColorType.RED:
+			return Localization.t("ui.deck_collection.rarity.cosmic")
+	return CardColor.display_name(color_type)
+
+func _apply_filter_control_text_style(control) -> void:
+	if control == null:
+		return
+	for color_name in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		control.add_theme_color_override(color_name, MUSEUM_TEXT_DARK)
+	control.add_theme_color_override("font_disabled_color", Color(MUSEUM_TEXT_DARK, 0.42))
+
+func _update_collection_progress(filtered_relics: Array[Dictionary]) -> void:
+	if _collection_progress_label == null:
+		return
+	var numerator := filtered_relics.size()
+	var denominator := _selected_color_count_for_progress() * _available_deck_def_count_for_progress()
+	_collection_progress_label.text = Localization.t("ui.deck_collection.progress", [numerator, denominator])
+
+func _selected_color_count_for_progress() -> int:
+	var selected_count := 0
+	for color_type in _available_colors:
+		if bool(_selected_colors.get(color_type, true)):
+			selected_count += 1
+	return selected_count if selected_count > 0 else _available_colors.size()
+
+func _available_deck_def_count_for_progress() -> int:
+	var total := 0
+	for series in CardDataManager.get_all_series():
+		if not (series is CardSeries):
+			continue
+		var card_series := series as CardSeries
+		if _selected_series != "" and card_series.series_name != _selected_series:
+			continue
+		total += card_series.get_deck_names().size()
+	return total

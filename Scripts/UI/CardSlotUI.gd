@@ -10,8 +10,8 @@ signal slot_unlock_requested(index: int)
 
 @export var slot_index: int = 0
 @export var show_empty: bool = true
-@export var empty_color: Color = Color(0.15, 0.15, 0.2, 1.0)
-@export var border_color: Color = Color(0.3, 0.3, 0.4, 1.0)
+@export var empty_color: Color = Color(0.15, 0.15, 0.2, 0.28)
+@export var border_color: Color = Color(0.3, 0.3, 0.4, 0.22)
 @export var _unlocked: bool = true
 
 ## 该槽位所属区域: "pool" / "hand" / "vault"
@@ -29,6 +29,7 @@ var _glow_effect: ColorRect = null
 var _selected_highlight: Panel = null
 var _focus_highlight: Panel = null
 var _slot_shadow: Panel = null
+var _slot_inner_shadow: Control = null
 
 # ── 拖拽视觉状态 ──
 var _drag_out_overlay: ColorRect = null   # 卡牌被拖出时的灰色遮罩
@@ -40,8 +41,11 @@ var _return_animation_running: bool = false
 var _transfer_animation_running: bool = false
 var slot_data_index: int = -1
 var _hover_preview: CardDisplay = null
+var last_click_button_index: int = MOUSE_BUTTON_LEFT
 
-const DRAG_OUT_COLOR: Color = Color(0.1, 0.1, 0.12, 0.5)
+const DRAG_OUT_COLOR: Color = Color(0.1, 0.1, 0.12, 0.32)
+const SLOT_SHADOW_COLOR: Color = Color(0, 0, 0, 0.16)
+const LOCK_OVERLAY_COLOR: Color = Color(0, 0, 0, 0.38)
 static var SLOT_SIZE: Vector2 = Vector2(107, 149)
 const RETURN_ANIMATION_DURATION: float = 0.25
 const DROP_IN_HEIGHT: float = 72.0
@@ -83,7 +87,7 @@ func _ready() -> void:
 		DragSystem.return_to_source_requested.connect(_on_return_to_source_requested)
 
 func setup_ui() -> void:
-	_slot_shadow = CCRVisualStyle.make_shadow_panel("SlotShadow", int(roundf(SLOT_SIZE.x * 0.08)), 12, Vector2(4, 7), Color(0, 0, 0, 0.24))
+	_slot_shadow = CCRVisualStyle.make_shadow_panel("SlotShadow", int(roundf(SLOT_SIZE.x * 0.08)), 12, Vector2(4, 7), SLOT_SHADOW_COLOR)
 	_slot_shadow.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_slot_shadow.position = Vector2.ZERO
 	_slot_shadow.size = SLOT_SIZE
@@ -107,6 +111,9 @@ func setup_ui() -> void:
 	border.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(border)
 
+	_slot_inner_shadow = _make_slot_inner_shadow()
+	add_child(_slot_inner_shadow)
+
 	card_display = CardDisplay.new()
 	card_display.set_anchors_preset(Control.PRESET_FULL_RECT)
 	card_display.visible = false
@@ -118,8 +125,9 @@ func setup_ui() -> void:
 
 	# --- 锁定标识 ---
 	_lock_overlay = ColorRect.new()
+	_lock_overlay.name = "LockOverlay"
 	_lock_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_lock_overlay.color = Color(0, 0, 0, 0.55)
+	_lock_overlay.color = LOCK_OVERLAY_COLOR
 	_lock_overlay.material = CardDisplay._new_rounded_mask_material(SLOT_SIZE)
 	_lock_overlay.visible = false
 	_lock_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -138,6 +146,7 @@ func setup_ui() -> void:
 
 	# --- 拖出遮罩（初始隐藏） ---
 	_drag_out_overlay = ColorRect.new()
+	_drag_out_overlay.name = "DragOutOverlay"
 	_drag_out_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_drag_out_overlay.color = DRAG_OUT_COLOR
 	_drag_out_overlay.material = CardDisplay._new_rounded_mask_material(SLOT_SIZE)
@@ -178,6 +187,7 @@ func setup_ui() -> void:
 
 	# --- 选中光圈（初始隐藏） ---
 	_selected_highlight = Panel.new()
+	_selected_highlight.name = "SelectedHighlight"
 	_selected_highlight.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_selected_highlight.position = Vector2(-7, -7)
 	_selected_highlight.size = SLOT_SIZE + Vector2(14, 14)
@@ -195,6 +205,7 @@ func setup_ui() -> void:
 	selected_style.shadow_size = 14
 	_selected_highlight.add_theme_stylebox_override("panel", selected_style)
 	add_child(_selected_highlight)
+	move_child(_selected_highlight, card_display.get_index())
 
 	_focus_highlight = Panel.new()
 	_focus_highlight.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -225,6 +236,58 @@ func setup_ui() -> void:
 func _exit_tree() -> void:
 	_hide_hover_preview()
 
+func _make_slot_inner_shadow() -> Control:
+	var root := Control.new()
+	root.name = "SlotInsetShadow"
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var top_shadow := ColorRect.new()
+	top_shadow.name = "TopInsetShadow"
+	top_shadow.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	top_shadow.offset_left = 3
+	top_shadow.offset_top = 3
+	top_shadow.offset_right = -3
+	top_shadow.offset_bottom = 8
+	top_shadow.color = Color(0, 0, 0, 0.20)
+	top_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(top_shadow)
+
+	var left_shadow := ColorRect.new()
+	left_shadow.name = "LeftInsetShadow"
+	left_shadow.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	left_shadow.offset_left = 3
+	left_shadow.offset_top = 3
+	left_shadow.offset_right = 8
+	left_shadow.offset_bottom = -3
+	left_shadow.color = Color(0, 0, 0, 0.14)
+	left_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(left_shadow)
+
+	var bottom_highlight := ColorRect.new()
+	bottom_highlight.name = "BottomInsetHighlight"
+	bottom_highlight.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bottom_highlight.offset_left = 4
+	bottom_highlight.offset_top = -6
+	bottom_highlight.offset_right = -4
+	bottom_highlight.offset_bottom = -3
+	bottom_highlight.color = Color(1, 1, 1, 0.08)
+	bottom_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(bottom_highlight)
+
+	var right_highlight := ColorRect.new()
+	right_highlight.name = "RightInsetHighlight"
+	right_highlight.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	right_highlight.offset_left = -6
+	right_highlight.offset_top = 4
+	right_highlight.offset_right = -3
+	right_highlight.offset_bottom = -4
+	right_highlight.color = Color(1, 1, 1, 0.06)
+	right_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(right_highlight)
+
+	return root
+
 func is_controller_focusable() -> bool:
 	return _unlocked and (is_occupied or show_empty)
 
@@ -243,6 +306,7 @@ func set_card(card: CardInfo, idx: int = -1) -> void:
 		_glow_effect.visible = false
 	if card != null:
 		card_display.set_card(card, idx if idx >= 0 else slot_index)
+		card_display.refresh_title_text_color()
 		card_display.visible = not _transfer_animation_running
 		card_display.is_draggable = _unlocked and can_drag_from
 		card_display.drag_source = area_type
@@ -328,6 +392,7 @@ func _stop_drop_in_animation() -> void:
 		card_display.modulate = Color(1, 1, 1, 1)
 		card_display.z_index = 0
 		card_display.mouse_filter = Control.MOUSE_FILTER_STOP
+		card_display.refresh_title_text_color()
 
 
 func _finish_drop_in_animation() -> void:
@@ -339,6 +404,7 @@ func _finish_drop_in_animation() -> void:
 	card_display.modulate = Color(1, 1, 1, 1)
 	card_display.z_index = 0
 	card_display.mouse_filter = Control.MOUSE_FILTER_STOP
+	card_display.refresh_title_text_color()
 
 
 func _play_draw_confirm_flash() -> void:
@@ -522,13 +588,19 @@ func _set_lock_visible() -> void:
 func _on_gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb = event as InputEventMouseButton
-		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+		if mb.pressed and (mb.button_index == MOUSE_BUTTON_LEFT or mb.button_index == MOUSE_BUTTON_RIGHT):
+			last_click_button_index = mb.button_index
+			release_focus.call_deferred()
 			if not _unlocked:
-				slot_unlock_requested.emit(slot_index)
+				if mb.button_index == MOUSE_BUTTON_LEFT:
+					slot_unlock_requested.emit(slot_index)
 			else:
 				slot_clicked.emit(slot_index)
 
 func _on_card_clicked(card: CardInfo, index: int) -> void:
+	if card_display != null:
+		last_click_button_index = card_display.last_click_button_index
+	release_focus.call_deferred()
 	slot_clicked.emit(slot_index)
 
 func _on_card_double_clicked(card: CardInfo, index: int) -> void:

@@ -31,13 +31,38 @@ func _ready() -> void:
 	main.call("_set_game_ui_visible", true)
 	nav_buttons.nav_button_clicked.emit("settings")
 	await get_tree().process_frame
-	if not _has_text(center_area, "Settings") or not _has_text(center_area, "Resolution") or not _has_resolution_option(center_area):
-		_fail("English settings page, language selector, or resolution selector is missing")
+	if not _has_text(center_area, "Settings") or not _has_text(center_area, "Resolution") or not _has_resolution_option(center_area) or not _has_window_mode_option(center_area):
+		_fail("English basic settings page, language selector, resolution selector, or window mode selector is missing")
 		return
-
+	var profile_tab := center_area.find_child("ProfileSettingsTab", true, false) as Button
+	if profile_tab == null:
+		_fail("player information settings tab is missing")
+		return
+	profile_tab.pressed.emit()
+	await get_tree().process_frame
+	if not _has_text(center_area, "Player Information") or not _has_text(center_area, "Region"):
+		_fail("English player information settings page is missing")
+		return
+	var region_select := center_area.find_child("RegionSelect", true, false) as OptionButton
+	var avatar_change := center_area.find_child("AvatarChangeButton", true, false) as Button
+	if region_select == null or region_select.item_count != 196 or not _has_region_option(region_select, "HK", "China Hong Kong") or not _has_region_option(region_select, "TW", "China Taiwan"):
+		_fail("UN region options or China Hong Kong/China Taiwan labels are missing")
+		return
+	if avatar_change == null:
+		_fail("avatar change button is missing")
+		return
+	avatar_change.pressed.emit()
+	await get_tree().process_frame
+	var avatar_picker := main.find_child("AvatarPickerPopup", false, false) as PopupPanel
+	if avatar_picker == null or avatar_picker.find_children("AvatarOption_*", "Button", true, false).size() != 12:
+		_fail("avatar picker does not expose all 12 unlocked basic avatars")
+		return
+	avatar_picker.hide()
+	avatar_picker.queue_free()
+	await get_tree().process_frame
 	Localization.set_locale("zh-CN", true, 1)
 	await get_tree().process_frame
-	if not _has_text(center_area, "设置") or not _has_text(center_area, "分辨率"):
+	if not _has_text(center_area, "设置") or not _has_text(center_area, "玩家信息设置") or not _has_text(center_area, "区域"):
 		_fail("settings page did not refresh after language change")
 		return
 
@@ -46,13 +71,28 @@ func _ready() -> void:
 		_fail("country catalog does not default to EARTH")
 		return
 	var found_china := false
+	var found_china_hong_kong := false
+	var found_china_taiwan := false
 	for entry in entries:
 		if entry.get("code", "") == "CN" and entry.get("label", "") == "China":
 			found_china = true
-			break
-	if not found_china:
+		if entry.get("code", "") == "HK" and entry.get("label", "") == "China Hong Kong":
+			found_china_hong_kong = true
+		if entry.get("code", "") == "TW" and entry.get("label", "") == "China Taiwan":
+			found_china_taiwan = true
+	if not found_china or not found_china_hong_kong or not found_china_taiwan:
 		_fail("country catalog is missing China/CN")
 		return
+
+	Localization.set_locale("en", true, 1)
+	await get_tree().process_frame
+	nav_buttons.nav_button_clicked.emit("exit_game")
+	await get_tree().process_frame
+	var exit_dialog: ConfirmationDialog = main.get("_exit_confirm_dialog")
+	if exit_dialog == null or exit_dialog.title != "Exit Game" or exit_dialog.dialog_text.find("server connection") < 0:
+		_fail("exit game confirmation dialog is missing")
+		return
+	exit_dialog.hide()
 
 	# 测试结束恢复首次启动默认语言，避免污染本机后续图形验证。
 	Localization.set_locale("en")
@@ -74,6 +114,18 @@ func _has_resolution_option(root: Node) -> bool:
 		if not DisplaySettings.is_supported_resolution(resolution):
 			return false
 	return true
+
+func _has_window_mode_option(root: Node) -> bool:
+	var window_mode_select: OptionButton = root.find_child("WindowModeSelect", true, false)
+	if window_mode_select == null or window_mode_select.item_count != 2:
+		return false
+	return bool(window_mode_select.get_item_metadata(0)) == true and bool(window_mode_select.get_item_metadata(1)) == false
+
+func _has_region_option(select: OptionButton, code: String, label: String) -> bool:
+	for index in range(select.item_count):
+		if str(select.get_item_metadata(index)) == code and select.get_item_text(index) == label:
+			return true
+	return false
 
 func _fail(message: String) -> void:
 	push_error("MENU_LOCALIZATION " + message)

@@ -12,6 +12,7 @@ const NAV_ITEMS: Array[Dictionary] = [
 	{"id": "ladder", "label_key": "ui.nav.ladder", "enabled": false},
 	{"id": "mail", "label_key": "ui.nav.mail", "enabled": false},
 	{"id": "settings", "label_key": "ui.nav.settings", "enabled": true},
+	{"id": "exit_game", "label_key": "ui.nav.exit_game", "enabled": true},
 ]
 
 var buttons: Array[Button] = []

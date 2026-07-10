@@ -37,6 +37,7 @@ const UNLOCK_PANEL_WIDTH: float = 130.0
 const UNLOCK_PANEL_RIGHT_MARGIN: float = 10.0
 var _nav_target_rect: Rect2 = Rect2()
 var _vault_synthesis_animation_running: bool = false
+var _synthesis_hidden_indices: Dictionary = {}
 
 func _ready() -> void:
 	columns = VAULT_COLUMNS
@@ -347,7 +348,7 @@ func refresh_display() -> void:
 		var unlocked := _is_vault_slot_unlocked(i)
 		slots[i].set_unlocked(unlocked)
 		
-		if i < cards.size() and cards[i] != null:
+		if not _is_synthesis_hidden(i) and i < cards.size() and cards[i] != null:
 			slots[i].set_card(cards[i], i)
 		else:
 			slots[i].clear_slot()
@@ -433,9 +434,9 @@ func _update_slot_selection_visual(slot_idx: int) -> void:
 	if slot_idx >= slots.size():
 		return
 	var slot = slots[slot_idx]
-	var is_selected = _selected_slots.has(slot_idx)
+	var is_selected = _selected_slots.has(slot_idx) and not _is_synthesis_hidden(slot_idx)
 
-	# 清理旧选中框、序号背景和序号标签
+	# 清理旧版覆盖式选中框；选中视觉统一使用 CardSlotUI 的底层光圈，避免遮住卡面文字颜色。
 	var to_remove: Array[Node] = []
 	for child in slot.get_children():
 		if child is ColorRect and child.name in ["VaultSelectHighlight", "VaultSelectNumBg"]:
@@ -446,14 +447,7 @@ func _update_slot_selection_visual(slot_idx: int) -> void:
 		slot.remove_child(node)
 		node.queue_free()
 
-	if is_selected:
-		var highlight = ColorRect.new()
-		highlight.name = "VaultSelectHighlight"
-		highlight.position = Vector2(-2, -2)
-		highlight.size = slot.size + Vector2(4, 4)
-		highlight.color = SELECT_BORDER_COLOR
-		highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		slot.add_child(highlight)
+	slot.set_selected(is_selected)
 
 func _clear_selection() -> void:
 	_selected_slots.clear()
@@ -477,7 +471,7 @@ func _update_synthesize_button() -> void:
 
 	var vault = GameManager.player_data.vault_cards
 	var selected_idx := int(_selected_slots[0])
-	if selected_idx < 0 or selected_idx >= vault.size() or vault[selected_idx] == null:
+	if _vault_synthesis_animation_running or _is_synthesis_hidden(selected_idx) or selected_idx < 0 or selected_idx >= vault.size() or vault[selected_idx] == null:
 		_synthesize_btn.visible = true
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
 		_synthesize_btn.disabled = true
@@ -585,8 +579,10 @@ func get_synthesis_animation_sources(indices: Array) -> Array[Dictionary]:
 	return result
 
 func hide_synthesis_slots_for_animation(indices: Array) -> void:
+	_synthesis_hidden_indices.clear()
 	for global_idx in indices:
 		var idx := int(global_idx)
+		_synthesis_hidden_indices[idx] = true
 		if idx < 0 or idx >= slots.size():
 			continue
 		var slot := slots[idx] as CardSlotUI
@@ -594,6 +590,12 @@ func hide_synthesis_slots_for_animation(indices: Array) -> void:
 			continue
 		slot.clear_slot()
 		_update_slot_selection_visual(idx)
+
+func clear_synthesis_animation_hidden_slots() -> void:
+	_synthesis_hidden_indices.clear()
+
+func _is_synthesis_hidden(global_idx: int) -> bool:
+	return _synthesis_hidden_indices.has(global_idx)
 
 func _play_vault_synthesis_animation(animation_sources: Array[Dictionary]) -> void:
 	if animation_sources.is_empty() or get_tree() == null:
@@ -663,6 +665,7 @@ func _apply_vault_synthesis_pending_removal(selected_slots: Array) -> void:
 		if idx < vault.size():
 			vault[idx] = null
 
+	clear_synthesis_animation_hidden_slots()
 	_clear_selection()
 	GameManager.player_data.changed.emit()
 	refresh_display()
@@ -705,6 +708,7 @@ func _recover_after_vault_synthesis_failure() -> void:
 	await GameManager.sync_vault_from_server()
 	await GameManager.sync_decks_from_server()
 	if is_inside_tree():
+		clear_synthesis_animation_hidden_slots()
 		refresh_display()
 		_update_synthesize_button()
 

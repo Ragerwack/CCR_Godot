@@ -580,6 +580,20 @@ func get_profile() -> Dictionary:
 		profile_failed.emit(resp["error"])
 	return resp
 
+## 更新玩家资料；头像、国籍等资料以服务端确认结果为准。
+func update_profile(changes: Dictionary) -> Dictionary:
+	var resp := await _request(
+		_api_url("/user/profile"),
+		HTTPClient.METHOD_PUT,
+		JSON.stringify(changes),
+		HTTP_TIMEOUT_SECONDS,
+	)
+	if resp.get("success", false):
+		profile_loaded.emit(resp["data"])
+	else:
+		profile_failed.emit(str(resp.get("error", "更新用户资料失败")))
+	return resp
+
 # ══════════════════════════════════════════════════
 #  游戏
 # ══════════════════════════════════════════════════

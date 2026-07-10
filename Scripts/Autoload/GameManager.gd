@@ -98,6 +98,7 @@ const NAV_BUTTONS: Array[Dictionary] = [
 ]
 
 # ══════════════════════════════════════════════════
+const AvatarCatalog = preload("res://Scripts/Data/AvatarCatalog.gd")
 #  初始化
 # ══════════════════════════════════════════════════
 
@@ -139,6 +140,9 @@ func apply_login_user(user_data: Dictionary) -> void:
 	player_data.gold = user_data.get("gold", 100)
 	player_data.gems = user_data.get("gems", 50)
 	player_data.country = str(user_data.get("country", "EARTH"))
+	player_data.avatar_id = str(user_data.get("avatar", AvatarCatalog.DEFAULT_AVATAR_ID))
+	if not AvatarCatalog.is_known_avatar(player_data.avatar_id):
+		player_data.avatar_id = AvatarCatalog.DEFAULT_AVATAR_ID
 	Localization.apply_account_default(player_data.country, player_data.user_id)
 	free_refresh_count = int(user_data.get("freeRefreshCount", free_refresh_count))
 	newbie_free_refresh_count = int(user_data.get("newbieFreeRefreshCount", newbie_free_refresh_count))
@@ -165,6 +169,9 @@ func apply_profile(profile: Dictionary) -> void:
 	player_data.gems = profile.get("gems", player_data.gems)
 	player_data.combat_power = profile.get("combatPower", player_data.combat_power)
 	player_data.country = str(profile.get("country", player_data.country))
+	player_data.avatar_id = str(profile.get("avatar", player_data.avatar_id))
+	if not AvatarCatalog.is_known_avatar(player_data.avatar_id):
+		player_data.avatar_id = AvatarCatalog.DEFAULT_AVATAR_ID
 
 	# 免费刷新
 	var fc = profile.get("freeRefreshCount", null)

@@ -19,6 +19,7 @@ var vault_slots: int = 2
 var nickname: String = ""
 var combat_power: int = 0
 var country: String = "EARTH"
+var avatar_id: String = "basic.north_star"
 
 # 卡池（当前展示的卡）
 var pool_cards: Array = []

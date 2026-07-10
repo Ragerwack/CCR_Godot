@@ -14,6 +14,7 @@ const THUMBNAIL_CACHE = preload("res://Scripts/UI/MuseumRelicThumbnailCache.gd")
 
 
 func _ready() -> void:
+	Localization.set_locale("zh-CN")
 	var cards_by_id: Array[CardInfo] = CardDataManager.get_cards_by_deck_id(1)
 	if cards_by_id.size() != 5 or int(cards_by_id[0].id) != 1:
 		return _fail("deck_id_lookup_wrong")
@@ -60,12 +61,20 @@ func _ready() -> void:
 		return _fail("filter_color_missing")
 	if color_filter.get_popup().get_item_count() != ALL_RELIC_COLORS.size():
 		return _fail("filter_color_count_wrong")
+	if color_filter.get_popup().get_item_text(color_filter.get_popup().get_item_index(CardColor.ColorType.WHITE)) != "普通":
+		return _fail("filter_white_name_not_tier")
+	if color_filter.get_popup().get_item_text(color_filter.get_popup().get_item_index(CardColor.ColorType.RED)) != "宇宙":
+		return _fail("filter_red_name_not_cosmic")
 	var sort_option := museum.find_child("MuseumSortOption", true, false) as OptionButton
 	if sort_option == null or sort_option.get_item_count() != 3:
 		return _fail("filter_sort_missing")
 	var series_option := museum.find_child("MuseumSeriesOption", true, false) as OptionButton
 	if series_option == null or series_option.get_item_count() < 2:
 		return _fail("filter_series_missing")
+	var progress_label := museum.find_child("MuseumCollectionProgress", true, false) as Label
+	var total_decks := _total_deck_defs()
+	if progress_label == null or progress_label.text != "已收藏 7/%d" % (ALL_RELIC_COLORS.size() * total_decks):
+		return _fail("collection_progress_wrong")
 
 	var expected_height := get_viewport().get_visible_rect().size.y * (3.0 / 5.0) * 1.30
 	for color_type in ALL_RELIC_COLORS:
@@ -157,12 +166,27 @@ func _ready() -> void:
 	var filtered_white := museum.find_child("RelicCard0", true, false) as Control
 	if filtered_white != null:
 		return _fail("filter_color_white_visible")
+	progress_label = museum.find_child("MuseumCollectionProgress", true, false) as Label
+	if progress_label == null or progress_label.text != "已收藏 6/%d" % ((ALL_RELIC_COLORS.size() - 1) * total_decks):
+		return _fail("filtered_collection_progress_wrong")
 	museum._selected_colors[CardColor.ColorType.WHITE] = true
 	museum._sort_mode = "standard"
 	var sorted_relics := museum._aggregate_relics(DeckSystem.get_player_decks())
 	museum._sort_relic_list(sorted_relics)
 	if sorted_relics.is_empty() or int(sorted_relics[0].get("deck_def_id", 0)) != 21:
 		return _fail("filter_standard_sort_wrong")
+	var synthetic_relics: Array[Dictionary] = [
+		{"deck_def_id": 1, "series_name": "S", "deck_name": "new", "first_index": 0, "last_index": 0},
+		{"deck_def_id": 2, "series_name": "S", "deck_name": "old", "first_index": 3, "last_index": 5},
+	]
+	museum._sort_mode = "recent"
+	museum._sort_relic_list(synthetic_relics)
+	if int(synthetic_relics[0].get("deck_def_id", 0)) != 1:
+		return _fail("recent_sort_reversed")
+	museum._sort_mode = "oldest"
+	museum._sort_relic_list(synthetic_relics)
+	if int(synthetic_relics[0].get("deck_def_id", 0)) != 2:
+		return _fail("oldest_sort_reversed")
 
 	print("MUSEUM_RELIC ok colors=7 height=", roundi(expected_height), " thumbnails=true view=true")
 	get_tree().quit(0)
@@ -171,3 +195,10 @@ func _ready() -> void:
 func _fail(reason: String) -> void:
 	push_error("MUSEUM_RELIC " + reason)
 	get_tree().quit(1)
+
+func _total_deck_defs() -> int:
+	var total := 0
+	for series in CardDataManager.get_all_series():
+		if series is CardSeries:
+			total += (series as CardSeries).get_deck_names().size()
+	return total

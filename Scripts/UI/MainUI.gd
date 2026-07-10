@@ -7,6 +7,7 @@ const TodayDecksUIScript = preload("res://Scripts/UI/TodayDecksUI.gd")
 const LevelUpPopupUIScript = preload("res://Scripts/UI/LevelUpPopupUI.gd")
 const SynthesisAnimationOverlayScript = preload("res://Scripts/UI/SynthesisAnimationOverlay.gd")
 const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+const AvatarCatalog = preload("res://Scripts/Data/AvatarCatalog.gd")
 const MAIN_BACKGROUND_PATH := "res://Resources/Backgrounds/main_background.png"
 
 const LEFT_PANEL_WIDTH: int = 120
@@ -25,6 +26,7 @@ var _menu_button: Button = null
 var _level_up_popup: Control = null
 var _main_background: TextureRect = null
 var _reconnect_overlay: Control = null
+var _exit_confirm_dialog: ConfirmationDialog = null
 
 # 子面板
 var _today_decks_ui: Control = null
@@ -42,6 +44,7 @@ var _game_ui_active: bool = false
 var _synthesis_animation_running: bool = false
 var _hand_action_animation_running: bool = false
 var _layout_refresh_queued: bool = false
+var _settings_tab: String = "basic"
 
 func _ready() -> void:
 	setup_ui()
@@ -318,6 +321,53 @@ func _on_logout_pressed() -> void:
 	CardPoolSystem.current_pool.clear()
 	_show_splash_screen()
 
+func _restore_current_nav_selection() -> void:
+	if not is_instance_valid(_nav_buttons):
+		return
+	match _current_view_id:
+		"today_decks", "card_pool", "vault", "deck_panel", "settings":
+			_nav_buttons.select_by_id(_current_view_id)
+		_: _nav_buttons.select_by_id("card_pool")
+
+func _show_exit_game_dialog() -> void:
+	_restore_current_nav_selection()
+	if not is_instance_valid(_exit_confirm_dialog):
+		_exit_confirm_dialog = ConfirmationDialog.new()
+		_exit_confirm_dialog.name = "ExitGameConfirmDialog"
+		_exit_confirm_dialog.exclusive = true
+		_exit_confirm_dialog.confirmed.connect(_on_exit_game_confirmed)
+		_exit_confirm_dialog.canceled.connect(_restore_current_nav_selection)
+		add_child(_exit_confirm_dialog)
+	_exit_confirm_dialog.title = Localization.t("ui.exit_game.title")
+	_exit_confirm_dialog.dialog_text = Localization.t("ui.exit_game.message")
+	_exit_confirm_dialog.ok_button_text = Localization.t("ui.exit_game.confirm")
+	var cancel_button := _exit_confirm_dialog.get_cancel_button()
+	if cancel_button != null:
+		cancel_button.text = Localization.t("ui.exit_game.cancel")
+		cancel_button.disabled = false
+	var ok_button := _exit_confirm_dialog.get_ok_button()
+	if ok_button != null:
+		ok_button.disabled = false
+		ok_button.text = Localization.t("ui.exit_game.confirm")
+	_exit_confirm_dialog.popup_centered(Vector2i(460, 180))
+
+func _on_exit_game_confirmed() -> void:
+	var ok_button := _exit_confirm_dialog.get_ok_button() if is_instance_valid(_exit_confirm_dialog) else null
+	var cancel_button := _exit_confirm_dialog.get_cancel_button() if is_instance_valid(_exit_confirm_dialog) else null
+	if ok_button != null:
+		ok_button.disabled = true
+		ok_button.text = Localization.t("ui.exit_game.syncing")
+	if cancel_button != null:
+		cancel_button.disabled = true
+	await _shutdown_session_before_quit()
+	get_tree().quit()
+
+func _shutdown_session_before_quit() -> void:
+	if ApiClient.is_logged_in() and (_card_pool_ui != null or _hand_area_ui != null):
+		await GameManager.sync_pool_hand_layout()
+	SessionManager.stop_session()
+	ApiClient.logout()
+
 # ══════════════════════════════════════════════════
 #  UI 搭建
 # ══════════════════════════════════════════════════
@@ -341,6 +391,7 @@ func setup_ui() -> void:
 	_player_info.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_player_info.position = Vector2(10, 10)
 	_player_info.size = Vector2(LEFT_PANEL_WIDTH, 130)
+	_player_info.configure_avatar_size(_target_player_avatar_height())
 	add_child(_player_info)
 
 	_currency = CurrencyUI.new()
@@ -412,6 +463,8 @@ func _apply_shell_layout() -> void:
 		_center_area.size = Vector2(vp_size.x - LEFT_PANEL_WIDTH, vp_size.y - exp_bar_h)
 	if is_instance_valid(_exp_bar_ui):
 		_exp_bar_ui.offset_top = -exp_bar_h
+	if is_instance_valid(_player_info):
+		_player_info.configure_avatar_size(_target_player_avatar_height())
 
 func _rebuild_current_view() -> void:
 	match _current_view_id:
@@ -432,11 +485,17 @@ func _configure_card_slot_size(vp_size: Vector2) -> void:
 	var slot_size := Vector2(roundf(slot_h * aspect), roundf(slot_h))
 	CardSlotUI.configure_slot_size(slot_size)
 
+func _target_player_avatar_height() -> float:
+	return roundf(CardSlotUI.SLOT_SIZE.y * CardDisplay.ART_RECT_RATIO.size.y * 0.90)
+
 # ══════════════════════════════════════════════════
 #  导航
 # ══════════════════════════════════════════════════
 
 func _on_nav_button(id: String) -> void:
+	if id == "exit_game":
+		_show_exit_game_dialog()
+		return
 	var switch_started := Time.get_ticks_msec()
 	FileLogger.perf("scene_switch_start", {"target": id})
 	if id != "card_pool" and (_card_pool_ui != null or _hand_area_ui != null):
@@ -596,9 +655,9 @@ func _build_menu_panel() -> Control:
 	var panel = Control.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 
-	var vbox = VBoxContainer.new()
+	var vbox := VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_CENTER)
-	vbox.size = Vector2(520, 620)
+	vbox.size = Vector2(680, 620)
 	vbox.position = -vbox.size / 2.0
 	vbox.add_theme_constant_override("separation", 8)
 	panel.add_child(vbox)
@@ -608,6 +667,42 @@ func _build_menu_panel() -> Control:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 24)
 	vbox.add_child(title)
+
+	var tab_row := HBoxContainer.new()
+	tab_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	tab_row.add_theme_constant_override("separation", 8)
+	for tab_data in [
+		{"id": "basic", "name": "BasicSettingsTab", "text": Localization.t("ui.settings.tab.basic")},
+		{"id": "controller", "name": "ControllerSettingsTab", "text": Localization.t("ui.settings.tab.controller")},
+		{"id": "profile", "name": "ProfileSettingsTab", "text": Localization.t("ui.settings.tab.profile")},
+	]:
+		var tab_button := Button.new()
+		tab_button.name = str(tab_data["name"])
+		tab_button.text = str(tab_data["text"])
+		tab_button.toggle_mode = true
+		tab_button.button_pressed = _settings_tab == str(tab_data["id"])
+		tab_button.custom_minimum_size = Vector2(150, 36)
+		tab_button.pressed.connect(_select_settings_tab.bind(str(tab_data["id"])))
+		tab_row.add_child(tab_button)
+	vbox.add_child(tab_row)
+
+	var separator := HSeparator.new()
+	vbox.add_child(separator)
+
+	match _settings_tab:
+		"controller": _build_controller_settings_page(vbox)
+		"profile": _build_profile_settings_page(vbox)
+		_: _build_basic_settings_page(vbox)
+
+	return panel
+
+func _select_settings_tab(tab_id: String) -> void:
+	if _settings_tab == tab_id:
+		return
+	_settings_tab = tab_id
+	_show_settings()
+
+func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 
 	var music_row = _make_slider_row(Localization.t("ui.menu.music_volume"), AudioManager.bgm_volume, func(v): AudioManager.set_bgm_volume(v))
 	vbox.add_child(music_row)
@@ -640,6 +735,26 @@ func _build_menu_panel() -> Control:
 	resolution_row.add_child(resolution_select)
 	vbox.add_child(resolution_row)
 
+	var window_mode_row := HBoxContainer.new()
+	var window_mode_label := Label.new()
+	window_mode_label.text = Localization.t("ui.menu.window_mode")
+	window_mode_label.custom_minimum_size = Vector2(120, 30)
+	window_mode_row.add_child(window_mode_label)
+	var window_mode_select := OptionButton.new()
+	window_mode_select.name = "WindowModeSelect"
+	window_mode_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	window_mode_select.add_item(Localization.t("ui.menu.window_mode.fullscreen"))
+	window_mode_select.set_item_metadata(0, true)
+	window_mode_select.add_item(Localization.t("ui.menu.window_mode.windowed"))
+	window_mode_select.set_item_metadata(1, false)
+	window_mode_select.select(0 if DisplaySettings.is_fullscreen_enabled() else 1)
+	window_mode_select.item_selected.connect(func(index: int):
+		var fullscreen := bool(window_mode_select.get_item_metadata(index))
+		DisplaySettings.apply_window_mode(fullscreen, true)
+	)
+	window_mode_row.add_child(window_mode_select)
+	vbox.add_child(window_mode_row)
+
 	var language_row := HBoxContainer.new()
 	var language_label := Label.new()
 	language_label.text = Localization.t("ui.menu.language")
@@ -659,9 +774,23 @@ func _build_menu_panel() -> Control:
 	language_row.add_child(language_select)
 	vbox.add_child(language_row)
 
-	var controller_sep = HSeparator.new()
-	vbox.add_child(controller_sep)
+	var mute_btn = Button.new()
+	mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
+	mute_btn.pressed.connect(func():
+		AudioManager.toggle_mute()
+		mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
+	)
+	vbox.add_child(mute_btn)
 
+	var sep = HSeparator.new()
+	vbox.add_child(sep)
+
+	var logout_btn = Button.new()
+	logout_btn.text = Localization.t("ui.menu.logout")
+	logout_btn.pressed.connect(_on_logout_pressed)
+	vbox.add_child(logout_btn)
+
+func _build_controller_settings_page(vbox: VBoxContainer) -> void:
 	var controller_title := Label.new()
 	controller_title.text = Localization.t("ui.controller.title")
 	controller_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -679,23 +808,136 @@ func _build_menu_panel() -> Control:
 	)
 	vbox.add_child(reset_controller_btn)
 
-	var mute_btn = Button.new()
-	mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
-	mute_btn.pressed.connect(func():
-		AudioManager.toggle_mute()
-		mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
+func _build_profile_settings_page(vbox: VBoxContainer) -> void:
+	var profile_title := Label.new()
+	profile_title.text = Localization.t("ui.profile.title")
+	profile_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	profile_title.add_theme_font_size_override("font_size", 18)
+	vbox.add_child(profile_title)
+
+	var avatar_row := HBoxContainer.new()
+	avatar_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	avatar_row.add_theme_constant_override("separation", 14)
+	var avatar_preview := TextureRect.new()
+	avatar_preview.name = "ProfileAvatarPreview"
+	avatar_preview.texture = AvatarCatalog.get_texture(GameManager.player_data.avatar_id)
+	avatar_preview.custom_minimum_size = Vector2(96, 96)
+	avatar_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	avatar_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	avatar_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	avatar_row.add_child(avatar_preview)
+	var avatar_column := VBoxContainer.new()
+	var avatar_label := Label.new()
+	avatar_label.text = Localization.t("ui.profile.avatar")
+	avatar_column.add_child(avatar_label)
+	var change_avatar_btn := Button.new()
+	change_avatar_btn.name = "AvatarChangeButton"
+	change_avatar_btn.text = Localization.t("ui.profile.avatar.change")
+	change_avatar_btn.pressed.connect(_show_avatar_picker)
+	avatar_column.add_child(change_avatar_btn)
+	avatar_row.add_child(avatar_column)
+	vbox.add_child(avatar_row)
+
+	var region_row := HBoxContainer.new()
+	var region_label := Label.new()
+	region_label.text = Localization.t("ui.profile.region")
+	region_label.custom_minimum_size = Vector2(150, 32)
+	region_row.add_child(region_label)
+	var region_select := OptionButton.new()
+	region_select.name = "RegionSelect"
+	region_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var selected_region_index := 0
+	var region_index := 0
+	for entry in CountryCatalog.localized_entries(Localization.locale):
+		var code := str(entry["code"])
+		region_select.add_item(str(entry["label"]))
+		region_select.set_item_metadata(region_index, code)
+		if code == GameManager.player_data.country:
+			selected_region_index = region_index
+		region_index += 1
+	region_select.select(selected_region_index)
+	region_row.add_child(region_select)
+	vbox.add_child(region_row)
+
+	var status_label := Label.new()
+	status_label.name = "ProfileSaveStatus"
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_label.add_theme_font_size_override("font_size", 14)
+	vbox.add_child(status_label)
+	region_select.item_selected.connect(func(index: int):
+		var region_code := str(region_select.get_item_metadata(index))
+		if region_code != GameManager.player_data.country:
+			_save_region(region_code, region_select, status_label)
 	)
-	vbox.add_child(mute_btn)
 
-	var sep = HSeparator.new()
-	vbox.add_child(sep)
+func _show_avatar_picker() -> void:
+	var popup := PopupPanel.new()
+	popup.name = "AvatarPickerPopup"
+	popup.exclusive = true
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.offset_left = 20
+	root.offset_top = 18
+	root.offset_right = -20
+	root.offset_bottom = -18
+	root.add_theme_constant_override("separation", 10)
+	popup.add_child(root)
+	var title := Label.new()
+	title.text = Localization.t("ui.profile.avatar.select")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 20)
+	root.add_child(title)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(scroll)
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	scroll.add_child(grid)
+	for avatar_id in AvatarCatalog.get_unlocked_avatar_ids():
+		var avatar_data := AvatarCatalog.get_avatar(avatar_id)
+		var avatar_button := Button.new()
+		avatar_button.name = "AvatarOption_" + avatar_id.replace(".", "_")
+		avatar_button.custom_minimum_size = Vector2(138, 138)
+		avatar_button.tooltip_text = Localization.t(str(avatar_data["name_key"]))
+		avatar_button.pressed.connect(_select_avatar.bind(avatar_id, popup))
+		var texture := TextureRect.new()
+		texture.texture = AvatarCatalog.get_texture(avatar_id)
+		texture.set_anchors_preset(Control.PRESET_FULL_RECT)
+		texture.offset_left = 6
+		texture.offset_top = 6
+		texture.offset_right = -6
+		texture.offset_bottom = -6
+		texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		avatar_button.add_child(texture)
+		grid.add_child(avatar_button)
+	add_child(popup)
+	popup.popup_centered(Vector2i(720, 560))
 
-	var logout_btn = Button.new()
-	logout_btn.text = Localization.t("ui.menu.logout")
-	logout_btn.pressed.connect(_on_logout_pressed)
-	vbox.add_child(logout_btn)
+func _select_avatar(avatar_id: String, popup: PopupPanel) -> void:
+	if not AvatarCatalog.is_known_avatar(avatar_id) or avatar_id == GameManager.player_data.avatar_id:
+		popup.queue_free()
+		return
+	var resp := await ApiClient.update_profile({"avatar": avatar_id})
+	popup.queue_free()
+	if resp.get("success", false):
+		GameManager.apply_profile(resp["data"])
+	_show_settings()
 
-	return panel
+func _save_region(region_code: String, select: OptionButton, status_label: Label) -> void:
+	select.disabled = true
+	status_label.text = Localization.t("ui.profile.saving")
+	var resp := await ApiClient.update_profile({"country": region_code})
+	if resp.get("success", false):
+		GameManager.apply_profile(resp["data"])
+		status_label.text = Localization.t("ui.profile.saved")
+	else:
+		status_label.text = Localization.t("ui.profile.save_failed")
+		select.disabled = false
 
 func _apply_language_selection(selected_locale: String) -> void:
 	Localization.set_locale(selected_locale, true, GameManager.player_data.user_id)
@@ -866,6 +1108,7 @@ func _on_hand_synthesize() -> void:
 
 	_apply_hand_synthesis_pending_removal(selected_indices)
 	if is_instance_valid(_hand_area_ui):
+		_hand_area_ui.clear_synthesis_animation_hidden_slots()
 		_hand_area_ui.clear_selection()
 		_hand_area_ui.refresh_display()
 
@@ -957,6 +1200,7 @@ func _recover_after_synthesis_failure() -> void:
 	await GameManager.sync_initial_card_pool_from_server()
 	await GameManager.sync_decks_from_server()
 	if is_instance_valid(_hand_area_ui):
+		_hand_area_ui.clear_synthesis_animation_hidden_slots()
 		_hand_area_ui.clear_selection()
 		_hand_area_ui.refresh_display()
 

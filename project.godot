@@ -13,7 +13,7 @@ config_version=5
 config/name="万象卡域 CCR"
 run/main_scene="res://Scenes/Main.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
-config/icon="res://icon.svg"
+config/icon="res://Resources/UI/app_icon.png"
 
 [autoload]
 
