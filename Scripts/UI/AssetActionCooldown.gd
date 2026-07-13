@@ -2,17 +2,87 @@ extends Control
 class_name AssetActionCooldown
 
 const DEFAULT_DURATION_SECONDS: float = 0.5
-const SHADOW_COLOR: Color = Color(0.0, 0.0, 0.0, 0.46)
-const RIM_COLOR: Color = Color(1.0, 1.0, 1.0, 0.18)
+const BASE_TINT: Color = Color(0.015, 0.055, 0.15, 0.50)
+const SHADOW_COLOR: Color = Color(0.015, 0.095, 0.26, 0.78)
+const SWEEP_EDGE_COLOR: Color = Color(0.48, 0.86, 1.0, 0.92)
+const MASK_SHADER_CODE: String = """
+shader_type canvas_item;
+
+uniform sampler2D button_mask : source_color;
+uniform bool use_texture_mask = false;
+uniform float corner_radius_ratio = 0.22;
+uniform vec2 cooldown_size = vec2(1.0);
+
+float rounded_rect_mask(vec2 uv, vec2 target_size, float radius_ratio) {
+	float shortest_side = max(min(target_size.x, target_size.y), 1.0);
+	vec2 half_extent = target_size / shortest_side * 0.5;
+	vec2 point = (uv - vec2(0.5)) * target_size / shortest_side;
+	float radius = min(min(half_extent.x, half_extent.y) * radius_ratio, min(half_extent.x, half_extent.y));
+	vec2 corner_distance = abs(point) - (half_extent - vec2(radius));
+	float signed_distance = length(max(corner_distance, vec2(0.0))) + min(max(corner_distance.x, corner_distance.y), 0.0) - radius;
+	return 1.0 - smoothstep(-0.75 / shortest_side, 0.75 / shortest_side, signed_distance);
+}
+
+void fragment() {
+	float shape_alpha = rounded_rect_mask(UV, cooldown_size, corner_radius_ratio);
+	if (use_texture_mask) {
+		shape_alpha *= texture(button_mask, UV).a;
+	}
+	COLOR.a *= shape_alpha;
+	if (COLOR.a <= 0.001) {
+		discard;
+	}
+}
+"""
 
 var duration_seconds: float = DEFAULT_DURATION_SECONDS
 var _started_msec: int = -1
+var _mask_material: ShaderMaterial = null
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ensure_mask_material()
+	_configure_parent_button_mask()
+	_update_mask_geometry()
+	visible = false
 	set_process(false)
-	resized.connect(queue_redraw)
+	resized.connect(_on_resized)
+
+
+func _on_resized() -> void:
+	_update_mask_geometry()
+	queue_redraw()
+
+
+func _ensure_mask_material() -> void:
+	if _mask_material != null:
+		return
+	var shader := Shader.new()
+	shader.code = MASK_SHADER_CODE
+	_mask_material = ShaderMaterial.new()
+	_mask_material.shader = shader
+	material = _mask_material
+
+
+func _configure_parent_button_mask() -> void:
+	var button := get_parent() as Button
+	if button == null:
+		return
+	var style := button.get_theme_stylebox("normal") as StyleBoxTexture
+	if style != null and style.texture != null:
+		set_button_mask(style.texture)
+
+
+func set_button_mask(mask_texture: Texture2D) -> void:
+	_ensure_mask_material()
+	_mask_material.set_shader_parameter("button_mask", mask_texture)
+	_mask_material.set_shader_parameter("use_texture_mask", mask_texture != null)
+
+
+func _update_mask_geometry() -> void:
+	_ensure_mask_material()
+	_mask_material.set_shader_parameter("cooldown_size", size.max(Vector2.ONE))
 
 
 func try_start() -> bool:
@@ -23,6 +93,8 @@ func try_start() -> bool:
 
 
 func start() -> void:
+	_configure_parent_button_mask()
+	_update_mask_geometry()
 	_started_msec = Time.get_ticks_msec()
 	visible = true
 	set_process(true)
@@ -56,9 +128,9 @@ func _draw() -> void:
 	if ratio <= 0.0 or size.x <= 1.0 or size.y <= 1.0:
 		return
 	var rect := Rect2(Vector2.ZERO, size)
-	draw_rect(rect, Color(0.0, 0.0, 0.0, 0.12), true)
+	draw_rect(rect, BASE_TINT, true)
 	_draw_remaining_sector(ratio)
-	draw_arc(rect.get_center(), minf(size.x, size.y) * 0.42, -PI * 0.5, -PI * 0.5 + TAU, 64, RIM_COLOR, 1.4, true)
+	_draw_sweep_edge(ratio)
 
 
 func _draw_remaining_sector(ratio: float) -> void:
@@ -78,3 +150,10 @@ func _draw_remaining_sector(ratio: float) -> void:
 		var angle := lerpf(start_angle, end_angle, t)
 		points.append(center + Vector2(cos(angle), sin(angle)) * radius)
 	draw_colored_polygon(points, SHADOW_COLOR)
+
+
+func _draw_sweep_edge(ratio: float) -> void:
+	var center := size * 0.5
+	var angle := -PI * 0.5 + TAU * (1.0 - ratio)
+	var endpoint := center + Vector2(cos(angle), sin(angle)) * size.length()
+	draw_line(center, endpoint, SWEEP_EDGE_COLOR, 2.0, true)

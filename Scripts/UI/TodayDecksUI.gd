@@ -4,10 +4,10 @@ class_name TodayDecksUI
 const ROW_COUNT: int = 8
 const CARDS_PER_DECK: int = 5
 const ROW_GAP: int = 14
-const LEFT_PAD: int = 28
 const TOP_PAD: int = 18
 const CARD_SPACING: int = 8
-const INFO_WIDTH: int = 190
+const INFO_ROW_HEIGHT: int = 26
+const KEY_ROW_HEIGHT: int = 26
 const BASE_COLORS: Array[CardColor.ColorType] = [
 	CardColor.ColorType.GREEN,
 	CardColor.ColorType.BLUE,
@@ -19,43 +19,81 @@ const COLOR_API_NAMES: Array[String] = ["green", "blue", "purple", "orange", "bl
 
 var _content: VBoxContainer = null
 var _status_label: Label = null
+var _reset_countdown_label: Label = null
 var _hover_preview: CardDisplay = null
 var _hover_preview_source: CardDisplay = null
+var _top_pad: float = TOP_PAD
+var _left_pad: float = 0.0
+
+func configure_layout(top_padding: float) -> void:
+	_top_pad = maxf(0.0, top_padding)
+	# 使用经验条高度作为水平安全边距，避免最左侧卡牌被页面边缘遮挡。
+	_left_pad = _top_pad
+	if is_node_ready():
+		_build_shell()
+		_render()
+
+func _process(_delta: float) -> void:
+	_update_reset_countdown()
 
 func _ready() -> void:
 	_build_shell()
 	_render()
+	set_process(true)
 	_ensure_draw_key.call_deferred()
 
 func _build_shell() -> void:
-	var root := VBoxContainer.new()
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+	_content = null
+	_status_label = null
+	_reset_countdown_label = null
+
+	var root := Control.new()
+	root.name = "TodayDecksRoot"
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.offset_left = LEFT_PAD
-	root.offset_top = TOP_PAD
-	root.offset_right = -24
-	root.offset_bottom = -18
-	root.add_theme_constant_override("separation", 12)
 	add_child(root)
 
-	var title := Label.new()
-	title.text = Localization.t("ui.today_decks.title")
-	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", Color(0.92, 0.96, 1.0, 1.0))
-	root.add_child(title)
+	var cards_width := _cards_width()
+	var key_row := Control.new()
+	key_row.name = "TodayDeckKeyRow"
+	key_row.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	key_row.position = Vector2(_left_pad, _top_pad)
+	key_row.size = Vector2(cards_width, KEY_ROW_HEIGHT)
+	root.add_child(key_row)
+
+	_reset_countdown_label = Label.new()
+	_reset_countdown_label.name = "TodayDeckResetCountdown"
+	# 仅保留倒计时，并放到原“今日密匙日期”的左侧位置。
+	_reset_countdown_label.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	_reset_countdown_label.offset_left = 0
+	_reset_countdown_label.offset_right = 0
+	_reset_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_reset_countdown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_reset_countdown_label.add_theme_font_size_override("font_size", 16)
+	_reset_countdown_label.add_theme_color_override("font_color", Color(0.72, 0.80, 0.92, 1.0))
+	key_row.add_child(_reset_countdown_label)
 
 	_status_label = Label.new()
+	_status_label.name = "TodayDeckStatusLabel"
 	_status_label.text = ""
 	_status_label.add_theme_font_size_override("font_size", 13)
 	_status_label.add_theme_color_override("font_color", Color(0.72, 0.80, 0.92, 1.0))
+	_status_label.visible = false
 	root.add_child(_status_label)
 
 	var scroll := ScrollContainer.new()
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.name = "TodayDeckScroll"
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scroll.offset_left = _left_pad
+	scroll.offset_top = _top_pad + KEY_ROW_HEIGHT + 10.0
+	scroll.offset_right = 0
+	scroll.offset_bottom = -18
 	root.add_child(scroll)
 
 	_content = VBoxContainer.new()
-	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_content.custom_minimum_size = Vector2(cards_width, 0)
 	_content.add_theme_constant_override("separation", ROW_GAP)
 	scroll.add_child(_content)
 
@@ -85,7 +123,8 @@ func _render() -> void:
 	if decks.is_empty():
 		_set_status(Localization.t("ui.today_decks.no_key"))
 	else:
-		_set_status(Localization.t("ui.today_decks.date", [str(GameManager.draw_key.get("date_key", ""))]))
+		_set_status("")
+	_update_reset_countdown()
 
 	for row_index in range(ROW_COUNT):
 		var deck_data: Dictionary = {}
@@ -94,10 +133,10 @@ func _render() -> void:
 		_content.add_child(_build_deck_row(row_index, deck_data))
 
 func _build_deck_row(row_index: int, deck_data: Dictionary) -> Control:
-	var row := HBoxContainer.new()
+	var row := VBoxContainer.new()
 	row.name = "TodayDeckRow%d" % (row_index + 1)
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 14)
+	row.custom_minimum_size = Vector2(_cards_width(), INFO_ROW_HEIGHT + CardSlotUI.SLOT_SIZE.y + 4.0)
+	row.add_theme_constant_override("separation", 4)
 
 	var info := _build_deck_info(row_index, deck_data)
 	row.add_child(info)
@@ -200,36 +239,59 @@ func _hide_hover_preview() -> void:
 	_hover_preview = null
 	_hover_preview_source = null
 
-func _build_deck_info(row_index: int, deck_data: Dictionary) -> VBoxContainer:
-	var info := VBoxContainer.new()
+func _build_deck_info(row_index: int, deck_data: Dictionary) -> HBoxContainer:
+	var info := HBoxContainer.new()
 	info.name = "TodayDeckInfo"
-	info.custom_minimum_size = Vector2(INFO_WIDTH, CardSlotUI.SLOT_SIZE.y)
-	info.add_theme_constant_override("separation", 3)
+	info.custom_minimum_size = Vector2(_cards_width(), INFO_ROW_HEIGHT)
+	info.add_theme_constant_override("separation", 0)
 
 	var type_label := _info_label(_deck_type_text(row_index))
 	type_label.name = "DeckTypeLabel"
 	type_label.add_theme_color_override("font_color", Color(0.90, 0.78, 0.46, 1.0))
+	type_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	info.add_child(type_label)
 
 	var name_label := _info_label(_series_deck_title(row_index, deck_data))
 	name_label.name = "DeckNameLabel"
 	name_label.add_theme_color_override("font_color", Color(0.88, 0.92, 1.0, 1.0))
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	info.add_child(name_label)
 
 	var level_label := _info_label(Localization.t("ui.today_decks.visible_level", [_visible_level_for_row(row_index)]))
 	level_label.name = "DeckVisibleLevelLabel"
 	level_label.add_theme_color_override("font_color", Color(0.68, 0.78, 0.92, 1.0))
+	level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	info.add_child(level_label)
 	return info
 
 func _info_label(text: String) -> Label:
 	var label := Label.new()
-	label.custom_minimum_size = Vector2(INFO_WIDTH, 21)
+	label.custom_minimum_size = Vector2(_cards_width() / 3.0, INFO_ROW_HEIGHT)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.clip_contents = true
-	label.add_theme_font_size_override("font_size", 13)
+	label.add_theme_font_size_override("font_size", 15)
 	label.text = text
 	return label
+
+func _cards_width() -> float:
+	return CardSlotUI.SLOT_SIZE.x * CARDS_PER_DECK + CARD_SPACING * (CARDS_PER_DECK - 1)
+
+func _update_reset_countdown() -> void:
+	if _reset_countdown_label == null:
+		return
+	_reset_countdown_label.text = Localization.t("ui.today_decks.reset_countdown", [_format_reset_countdown()])
+
+func _format_reset_countdown() -> String:
+	var now_unix := Time.get_unix_time_from_system()
+	var beijing_unix := now_unix + 8.0 * 3600.0
+	var seconds_in_day := int(beijing_unix) % 86400
+	var remaining := 86400 - seconds_in_day
+	if remaining >= 86400:
+		remaining = 0
+	var hours := int(remaining / 3600)
+	var minutes := int((remaining % 3600) / 60)
+	var seconds := remaining % 60
+	return "%02d:%02d:%02d" % [hours, minutes, seconds]
 
 func _deck_type_text(row_index: int) -> String:
 	match row_index:

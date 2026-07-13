@@ -71,6 +71,7 @@ const ASSET_WRITE_RETRY_ATTEMPTS: int = 3
 const NETWORK_RETRY_BASE_SECONDS: float = 0.8
 const NETWORK_RETRY_MAX_SECONDS: float = 4.0
 const NETWORK_SLOW_MS: int = 8000
+const PersistentHttpTransportScript = preload("res://Scripts/Network/PersistentHttpTransport.gd")
 
 ## HTTP method → human-readable name (Godot 4 移除了 HTTPClient.METHOD_NAMES)
 const _METHOD_NAMES: Dictionary = {
@@ -91,11 +92,16 @@ var _network_status: String = "good"
 var _consecutive_network_failures: int = 0
 var _asset_request_busy: bool = false
 var _asset_request_queue_counter: int = 0
+var _asset_request_pending_count: int = 0
+var _persistent_transport: Node = null
 
 # ══════════════════════════════════════════════════
 #  初始化
 # ══════════════════════════════════════════════════
 func _ready() -> void:
+	_persistent_transport = PersistentHttpTransportScript.new()
+	_persistent_transport.name = "PersistentHttpTransport"
+	add_child(_persistent_transport)
 	_api_base_url = _resolve_api_base_url()
 	FileLogger.log("ApiClient API Base URL=" + _api_base_url)
 
@@ -124,6 +130,8 @@ func get_api_base_url() -> String:
 	return _api_base_url
 
 func set_api_base_url(base_url: String, persist: bool = true) -> void:
+	if _persistent_transport != null:
+		_persistent_transport.close_all()
 	_api_base_url = _normalize_api_base_url(base_url)
 	if persist:
 		Config.set_value("api", "base_url", _api_base_url)
@@ -299,30 +307,43 @@ func _request_once(
 	max_attempts: int = 1
 ) -> Dictionary:
 	var started := Time.get_ticks_msec()
-	var http := HTTPRequest.new()
-	http.timeout = timeout_seconds
-	add_child(http)
 	var headers = _make_headers()
 	FileLogger.http(_METHOD_NAMES.get(method, "?"), url)
 	FileLogger.perf("new_data_request_start", {"method": _METHOD_NAMES.get(method, "?"), "url": url, "attempt": attempt_no, "max_attempts": max_attempts})
-	var req_err = http.request(url, headers, method, body)
-	if req_err != OK:
-		http.queue_free()
-		FileLogger.error("请求启动失败: " + url + " err=" + str(req_err), "[HTTP]")
-		var failed_total_ms := Time.get_ticks_msec() - started
-		FileLogger.perf("new_data_request_done", {"method": _METHOD_NAMES.get(method, "?"), "url": url, "success": false, "total_ms": failed_total_ms, "attempt": attempt_no, "max_attempts": max_attempts})
-		return {"success": false, "error": "请求启动失败", "error_type": "network", "status_code": 0, "network_ms": 0, "total_ms": failed_total_ms}
-
 	var network_started := Time.get_ticks_msec()
-	var result_arr: Array = await http.request_completed
+	var raw: Dictionary = await _persistent_transport.request(url, method, headers, body, timeout_seconds)
 	var network_ms := Time.get_ticks_msec() - network_started
-	http.queue_free()
+	var result_arr: Array = [
+		int(raw.get("result", HTTPRequest.RESULT_CONNECTION_ERROR)),
+		int(raw.get("response_code", 0)),
+		raw.get("headers", PackedStringArray()),
+		raw.get("body", PackedByteArray()),
+	]
 	var resp = _parse_response(result_arr, url)
 	var total_ms := Time.get_ticks_msec() - started
 	resp["network_ms"] = network_ms
 	resp["total_ms"] = total_ms
+	resp["connection_reused"] = bool(raw.get("connection_reused", false))
+	resp["connection_slot"] = int(raw.get("connection_slot", -1))
+	resp["pool_wait_ms"] = int(raw.get("pool_wait_ms", 0))
+	resp["connect_ms"] = int(raw.get("connect_ms", 0))
+	resp["ttfb_ms"] = int(raw.get("ttfb_ms", 0))
 	FileLogger.http(_METHOD_NAMES.get(method, "?"), url, resp.get("status_code", 0), ("成功" if resp.get("success", false) else "失败: " + resp.get("error", "")) + " | network_ms=" + str(network_ms) + " | total_ms=" + str(total_ms))
-	FileLogger.perf("new_data_request_done", {"method": _METHOD_NAMES.get(method, "?"), "url": url, "status": resp.get("status_code", 0), "success": resp.get("success", false), "network_ms": network_ms, "total_ms": total_ms, "attempt": attempt_no, "max_attempts": max_attempts})
+	FileLogger.perf("new_data_request_done", {
+		"method": _METHOD_NAMES.get(method, "?"),
+		"url": url,
+		"status": resp.get("status_code", 0),
+		"success": resp.get("success", false),
+		"network_ms": network_ms,
+		"total_ms": total_ms,
+		"attempt": attempt_no,
+		"max_attempts": max_attempts,
+		"connection_reused": resp["connection_reused"],
+		"connection_slot": resp["connection_slot"],
+		"pool_wait_ms": resp["pool_wait_ms"],
+		"connect_ms": resp["connect_ms"],
+		"ttfb_ms": resp["ttfb_ms"],
+	})
 	return resp
 
 func _should_retry_response(resp: Dictionary, retry_processing_conflict: bool) -> bool:
@@ -384,6 +405,7 @@ func _record_network_result(resp: Dictionary) -> void:
 
 func _asset_request(url: String, method: int, body: String, operation_kind: String) -> Dictionary:
 	_asset_request_queue_counter += 1
+	_asset_request_pending_count += 1
 	var queue_id := _asset_request_queue_counter
 	var queued_at := Time.get_ticks_msec()
 	if _asset_request_busy:
@@ -399,6 +421,7 @@ func _asset_request(url: String, method: int, body: String, operation_kind: Stri
 	})
 	var resp := await _request(url, method, body, HTTP_TIMEOUT_SECONDS, ASSET_WRITE_RETRY_ATTEMPTS, true)
 	_asset_request_busy = false
+	_asset_request_pending_count = maxi(0, _asset_request_pending_count - 1)
 	FileLogger.perf("asset_request_done", {
 		"kind": operation_kind,
 		"queue_id": queue_id,
@@ -406,6 +429,9 @@ func _asset_request(url: String, method: int, body: String, operation_kind: Stri
 		"status": resp.get("status_code", 0),
 	})
 	return resp
+
+func has_pending_asset_requests() -> bool:
+	return _asset_request_pending_count > 0
 
 ## 解析 HTTP 响应为统一格式
 func _parse_response(result_arr: Array, _url: String = "") -> Dictionary:

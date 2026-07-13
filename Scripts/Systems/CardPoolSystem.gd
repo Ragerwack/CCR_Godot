@@ -10,13 +10,19 @@ var current_pool: Array = []
 var visible_series: Array[String] = []
 const WARM_ROLL_CLICK_WAIT_MS: int = 450
 const WARM_ROLL_CACHE_KEY: String = "next"
+const RAPID_DRAW_SEQUENCE_WINDOW_MS: int = 8000
 
 var _warm_rolls: Dictionary = {}
 var _warming_types: Dictionary = {}
 var _confirm_in_flight: bool = false
+var _queued_refresh_type: String = ""
+var _queued_refresh_wait_active: bool = false
+var _next_refresh_is_buffered: bool = false
+var _last_preview_msec: int = -1
 var skip_confirm_after_preview_for_test: bool = false
 var gold_draw_debug_click_started_msec: int = 0
 var animate_next_pool_update: bool = false
+var rapid_next_pool_update: bool = false
 
 func _ready() -> void:
 	GameManager.pool_refreshed.connect(_on_pool_refresh)
@@ -52,6 +58,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 	var old_pool_cards: Array = current_pool.duplicate(true)
 	var old_hand_cards: Array = GameManager.player_data.hand_cards.duplicate(true)
 	var should_sync_layout := GameManager.is_pool_hand_layout_dirty()
+	var layout_revision := GameManager.get_pool_hand_layout_revision()
 
 	var step_started := Time.get_ticks_msec()
 	var roll_data := _take_warm_roll(refresh_type)
@@ -166,6 +173,12 @@ func refresh_pool(refresh_type: String = "free") -> void:
 	var render_started := Time.get_ticks_msec()
 	current_pool = ApiClient.card_slots_to_array_sorted(preview_slots)
 	GameManager.player_data.pool_cards = current_pool.duplicate()
+	var preview_now := Time.get_ticks_msec()
+	rapid_next_pool_update = _next_refresh_is_buffered or (
+		_last_preview_msec >= 0 and preview_now - _last_preview_msec <= RAPID_DRAW_SEQUENCE_WINDOW_MS
+	)
+	_next_refresh_is_buffered = false
+	_last_preview_msec = preview_now
 	animate_next_pool_update = true
 	pool_updated.emit(current_pool)
 	pool_filled.emit(current_pool)
@@ -234,21 +247,17 @@ func refresh_pool(refresh_type: String = "free") -> void:
 		)
 		step_started = Time.get_ticks_msec()
 		var data: Dictionary = confirm_resp["data"]
-		var cards_data: Array = data.get("cards", [])
-		current_pool = ApiClient.card_slots_to_array_sorted(cards_data)
-		GameManager.player_data.pool_cards = current_pool.duplicate()
-		var hand_data = data.get("hand", null)
-		if hand_data is Array:
-			GameManager.player_data.hand_cards = ApiClient.card_slots_to_array_sorted(hand_data)
+		var next_roll = data.get("next_roll", {})
+		if next_roll is Dictionary and not next_roll.is_empty():
+			_store_warm_roll(refresh_type, next_roll)
 
 		if data.get("profile", {}) is Dictionary:
 			GameManager.apply_profile(data["profile"])
 		else:
 			await _sync_profile()
-		GameManager.mark_pool_hand_layout_clean("draw_confirm")
-
-		pool_updated.emit(current_pool)
-		pool_filled.emit(current_pool)
+		# 服务端已校验最终卡池与刚才的预览完全一致，不再重复构建 16 张卡。
+		# 如果等待 confirm 时玩家又移动了卡牌，则保留新的 dirty 布局，不用旧快照覆盖。
+		GameManager.mark_pool_hand_layout_clean_if_revision(layout_revision, "draw_confirm")
 		loading_completed.emit()
 		_print_gold_draw_step(
 			refresh_type,
@@ -294,6 +303,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			return
 
 		step_started = Time.get_ticks_msec()
+		_clear_queued_refresh("confirm_failed")
 		_rollback_refresh_attempt(refresh_type)
 		current_pool = old_pool_cards
 		GameManager.player_data.pool_cards = old_pool_cards.duplicate()
@@ -322,6 +332,49 @@ func refresh_pool(refresh_type: String = "free") -> void:
 		})
 	_confirm_in_flight = false
 	loading_completed.emit()
+
+## 抽卡按钮统一入口。上一轮 confirm 或其他资产指令尚未完成时，只缓冲一次最新点击，
+## 不提前扣费、不提前展示可能失效的卡池，也不并发提交服务端资产事务。
+func request_refresh(refresh_type: String = "free") -> bool:
+	if _confirm_in_flight or ApiClient.has_pending_asset_requests():
+		_queued_refresh_type = refresh_type
+		FileLogger.perf("draw_refresh_buffered", {
+			"type": refresh_type,
+			"confirm_in_flight": _confirm_in_flight,
+			"asset_requests_pending": ApiClient.has_pending_asset_requests(),
+		})
+		_wait_and_run_buffered_refresh()
+		return true
+	if not do_refresh(refresh_type):
+		return false
+	refresh_pool(refresh_type)
+	return true
+
+func _wait_and_run_buffered_refresh() -> void:
+	if _queued_refresh_wait_active:
+		return
+	_queued_refresh_wait_active = true
+	while _queued_refresh_type != "" and (_confirm_in_flight or ApiClient.has_pending_asset_requests()):
+		await get_tree().process_frame
+
+	var refresh_type := _queued_refresh_type
+	_queued_refresh_type = ""
+	_queued_refresh_wait_active = false
+	if refresh_type == "":
+		return
+	if not do_refresh(refresh_type):
+		return
+	_next_refresh_is_buffered = true
+	refresh_pool(refresh_type)
+
+func _clear_queued_refresh(reason: String) -> void:
+	if _queued_refresh_type == "":
+		return
+	FileLogger.perf("draw_refresh_buffer_cleared", {
+		"type": _queued_refresh_type,
+		"reason": reason,
+	})
+	_queued_refresh_type = ""
 
 func _handle_unknown_confirm_result(
 	refresh_type: String,
@@ -364,6 +417,7 @@ func _handle_unknown_confirm_result(
 		return
 
 	GameManager.mark_pool_hand_layout_dirty("draw_confirm_unknown")
+	_clear_queued_refresh("confirm_result_unknown")
 	_print_gold_draw_step(
 		refresh_type,
 		7,

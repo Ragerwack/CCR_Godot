@@ -41,6 +41,7 @@ var vault_slot_quote: Dictionary = {}
 var _layout_sync_in_flight: bool = false
 var _optional_login_sync_in_flight: bool = false
 var _pool_hand_layout_dirty: bool = false
+var _pool_hand_layout_revision: int = 0
 var _last_announced_level: int = 1
 
 const _LEVEL_REWARD_TOTALS: Dictionary = {
@@ -326,10 +327,12 @@ func is_cache_loaded(key: String) -> bool:
 	return bool(_cache_loaded.get(key, false))
 
 func mark_pool_hand_layout_dirty(reason: String = "") -> void:
-	if _pool_hand_layout_dirty:
-		return
+	_pool_hand_layout_revision += 1
 	_pool_hand_layout_dirty = true
-	FileLogger.perf("pool_hand_layout_dirty", {"reason": reason})
+	FileLogger.perf("pool_hand_layout_dirty", {
+		"reason": reason,
+		"revision": _pool_hand_layout_revision,
+	})
 
 func mark_pool_hand_layout_clean(reason: String = "") -> void:
 	if not _pool_hand_layout_dirty:
@@ -339,6 +342,21 @@ func mark_pool_hand_layout_clean(reason: String = "") -> void:
 
 func is_pool_hand_layout_dirty() -> bool:
 	return _pool_hand_layout_dirty
+
+func get_pool_hand_layout_revision() -> int:
+	return _pool_hand_layout_revision
+
+## 只清理由指定快照提交出去的布局；确认等待期间产生的新移动必须继续保持 dirty。
+func mark_pool_hand_layout_clean_if_revision(expected_revision: int, reason: String = "") -> bool:
+	if _pool_hand_layout_revision != expected_revision:
+		FileLogger.perf("pool_hand_layout_clean_skipped", {
+			"reason": reason,
+			"expected_revision": expected_revision,
+			"current_revision": _pool_hand_layout_revision,
+		})
+		return false
+	mark_pool_hand_layout_clean(reason)
+	return true
 
 func _apply_card_slots(slot_type: String, slots: Array) -> void:
 	match slot_type:
@@ -777,9 +795,11 @@ func handle_unlock_slot(type: String, index: int, currency: String = "gem") -> v
 	var resp := await ApiClient.unlock_slot(type, index, currency)
 	if not resp.get("success", false):
 		print("[GameManager] 保险箱槽位购买失败: " + str(resp.get("error", "未知错误")))
+		AudioManager.play_sfx("error_soft")
 		await sync_vault_from_server()
 		await sync_vault_slot_quote_from_server()
 		return
+	AudioManager.play_sfx("slot_unlock", 1.0, 0.0)
 
 	var profile_resp := await ApiClient.get_profile()
 	if profile_resp.get("success", false):

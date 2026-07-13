@@ -3,6 +3,8 @@ extends Node
 func _ready() -> void:
 	Localization.set_locale("zh-CN")
 	_setup_zero_stamina_login_state()
+	# 登录资料会按账号区域重新应用默认语言；测试需要在资料同步后固定中文断言。
+	Localization.set_locale("zh-CN")
 
 	var ui := CardPoolUI.new()
 	ui.name = "StaminaCountdownCardPoolUI"

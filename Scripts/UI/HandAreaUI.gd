@@ -20,19 +20,31 @@ var _slots_clip: Control = null
 var _slots_layer: Control = null
 var _page_animating: bool = false
 var _selected_hand_index: int = -1
+var _btn_page: Button = null
 var _btn_synth: Button = null
 var _btn_discard: Button = null
 var _btn_vault: Button = null
+var _page_cooldown: Control = null
 var _synth_cooldown: Control = null
 var _discard_cooldown: Control = null
 var _vault_cooldown: Control = null
 var _synthesis_hidden_indices: Dictionary = {}
+var _action_column: Control = null
+var _side_button_width: float = 100.0
+var _side_button_height: float = 36.0
 
 const AssetActionCooldownScript = preload("res://Scripts/UI/AssetActionCooldown.gd")
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
 
 const PAGE_ROLL_DURATION: float = 0.32
 const SLOT_SPACING: float = 8.0
 const SLOT_CLIP_PADDING: Vector2 = Vector2(24.0, 24.0)
+
+func configure_side_button_metrics(button_width: float, button_height: float) -> void:
+	_side_button_width = maxf(70.0, button_width)
+	_side_button_height = maxf(28.0, button_height)
+	if is_node_ready():
+		_apply_action_column_layout()
 
 func _ready() -> void:
 	setup_ui()
@@ -44,12 +56,16 @@ func _ready() -> void:
 		DragSystem.drag_cancelled.connect(_on_drag_cancelled)
 
 func _input(event: InputEvent) -> void:
-	if _selected_hand_index < 0:
-		return
 	if not (event is InputEventMouseButton):
 		return
 	var mb := event as InputEventMouseButton
 	if not mb.pressed:
+		return
+	if (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN) and get_global_rect().has_point(mb.position):
+		flip_page()
+		get_viewport().set_input_as_handled()
+		return
+	if _selected_hand_index < 0:
 		return
 	if mb.button_index != MOUSE_BUTTON_LEFT and mb.button_index != MOUSE_BUTTON_RIGHT:
 		return
@@ -100,29 +116,27 @@ func _create_slot_grid() -> void:
 		_slots_layer.add_child(slot)
 
 func _create_action_column() -> void:
-	var vbox = VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
-	# 锚点 right=1.0 时 offset 是从右边缘算起的边距，必须为 0 或负数才能可见
-	vbox.offset_left = -120    # -(110 宽 + 10 右边距)
-	vbox.offset_right = -10
-	vbox.offset_top = -100     # 垂直居中: 高 200 → ±100
-	vbox.offset_bottom = 100
-	vbox.add_theme_constant_override("separation", 6)
-	add_child(vbox)
+	_action_column = Control.new()
+	_action_column.name = "HandActionColumn"
+	_action_column.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	add_child(_action_column)
 
 	# 翻页按钮
-	var btn_page = Button.new()
-	btn_page.text = Localization.t("ui.hand.page")
-	btn_page.custom_minimum_size = Vector2(100, 36)
-	btn_page.pressed.connect(_on_page_flip)
-	vbox.add_child(btn_page)
+	_btn_page = Button.new()
+	_btn_page.name = "HandPageButton"
+	_btn_page.text = Localization.t("ui.hand.page")
+	CCRVisualStyle.apply_relic_button(_btn_page, "action_page")
+	_action_column.add_child(_btn_page)
+	_page_cooldown = _attach_action_cooldown(_btn_page)
+	_btn_page.pressed.connect(request_page_flip)
 
 	# 合成
 	_btn_synth = Button.new()
+	_btn_synth.name = "HandSynthesizeButton"
 	_btn_synth.text = Localization.t("ui.hand.synthesize")
-	_btn_synth.custom_minimum_size = Vector2(100, 36)
 	_btn_synth.disabled = true
-	vbox.add_child(_btn_synth)
+	CCRVisualStyle.apply_relic_button(_btn_synth, "action_synthesize")
+	_action_column.add_child(_btn_synth)
 	_synth_cooldown = _attach_action_cooldown(_btn_synth)
 	_btn_synth.pressed.connect(func():
 		if _try_start_button_cooldown(_synth_cooldown):
@@ -131,10 +145,11 @@ func _create_action_column() -> void:
 
 	# 丢弃
 	_btn_discard = Button.new()
+	_btn_discard.name = "HandDiscardButton"
 	_btn_discard.text = Localization.t("ui.hand.discard")
-	_btn_discard.custom_minimum_size = Vector2(100, 36)
 	_btn_discard.disabled = true
-	vbox.add_child(_btn_discard)
+	CCRVisualStyle.apply_relic_button(_btn_discard, "action_discard")
+	_action_column.add_child(_btn_discard)
 	_discard_cooldown = _attach_action_cooldown(_btn_discard)
 	_btn_discard.pressed.connect(func():
 		if _try_start_button_cooldown(_discard_cooldown):
@@ -143,18 +158,68 @@ func _create_action_column() -> void:
 
 	# 存入保险箱
 	_btn_vault = Button.new()
+	_btn_vault.name = "HandStoreVaultButton"
 	_btn_vault.text = Localization.t("ui.hand.store_vault")
-	_btn_vault.custom_minimum_size = Vector2(100, 36)
 	_btn_vault.disabled = true
-	vbox.add_child(_btn_vault)
+	CCRVisualStyle.apply_relic_button(_btn_vault, "action_store_vault")
+	_action_column.add_child(_btn_vault)
 	_vault_cooldown = _attach_action_cooldown(_btn_vault)
 	_btn_vault.pressed.connect(func():
 		if _try_start_button_cooldown(_vault_cooldown):
 			vault_save_requested.emit()
 	)
+	_apply_action_column_layout()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and is_node_ready():
+		if _slots_clip != null:
+			_slots_clip.position = Vector2(_centered_grid_start_x(), 0.0) - SLOT_CLIP_PADDING
+		_apply_action_column_layout()
+
+func _apply_action_column_layout() -> void:
+	if _action_column == null:
+		return
+	var button_size := Vector2(_side_button_width, _side_button_height)
+	for child in _action_column.get_children():
+		var button := child as Button
+		if button != null:
+			button.custom_minimum_size = button_size
+			button.size = button_size
+			CCRVisualStyle.configure_relic_button_metrics(button, _side_button_height)
+			button.add_theme_font_size_override("font_size", _action_font_size())
+	# 翻页置于第一行的 1/4，存入保险箱置于第二行的 3/4；
+	# 合成和丢弃均分两者之间的距离，四个按钮等间距。
+	var first_center_y := CardSlotUI.SLOT_SIZE.y * 0.25
+	var last_center_y := CardSlotUI.SLOT_SIZE.y + SLOT_SPACING + CardSlotUI.SLOT_SIZE.y * 0.75
+	var center_step := (last_center_y - first_center_y) / 3.0
+	var buttons := [_btn_page, _btn_synth, _btn_discard, _btn_vault]
+	for index in range(buttons.size()):
+		var button := buttons[index] as Button
+		if button != null:
+			button.position = Vector2(0.0, first_center_y + center_step * float(index) - _side_button_height * 0.5)
+	var content_height := maxf(size.y, last_center_y + _side_button_height * 0.5)
+	_action_column.size = Vector2(_side_button_width, content_height)
+	_action_column.position = Vector2(_right_region_center_x() - _side_button_width * 0.5, 0.0)
+
+func _action_font_size() -> int:
+	if _side_button_width < 120.0:
+		return 12 if Localization.locale == "en" else 13
+	return 15 if Localization.locale == "en" else 16
+
+func _right_region_center_x() -> float:
+	var viewport_width := get_viewport_rect().size.x
+	var grid_right := _centered_grid_start_x() + _grid_size().x
+	var global_center := (grid_right + viewport_width) * 0.5
+	var parent_global_x := global_position.x if is_inside_tree() else 0.0
+	return global_center - parent_global_x
 
 # ── 翻页 ──
-func _on_page_flip() -> void:
+func request_page_flip() -> void:
+	if _try_start_button_cooldown(_page_cooldown):
+		flip_page()
+
+
+func flip_page() -> void:
 	if _page_animating:
 		return
 	clear_selection()
@@ -183,6 +248,7 @@ func _roll_to_page(next_page: int) -> void:
 		return
 
 	_page_animating = true
+	AudioManager.play_sfx("hand_page")
 	var old_page := current_page
 	var forward := next_page > old_page
 	if old_page == 0 and next_page > old_page:
@@ -418,7 +484,7 @@ func _visible_slot_for_global_index(global_idx: int) -> CardSlotUI:
 
 
 func _is_point_over_action_button(global_point: Vector2) -> bool:
-	for button in [_btn_synth, _btn_discard, _btn_vault]:
+	for button in [_btn_page, _btn_synth, _btn_discard, _btn_vault]:
 		var btn := button as Button
 		if btn != null and btn.is_inside_tree() and btn.get_global_rect().has_point(global_point):
 			return true
@@ -506,6 +572,8 @@ func _ensure_selection_valid() -> void:
 func _update_action_buttons() -> void:
 	_ensure_selection_valid()
 	var has_selection := _selected_hand_index >= 0
+	if _btn_page != null:
+		_btn_page.disabled = _page_animating or _is_button_cooling_down(_page_cooldown)
 	if _btn_discard != null:
 		_btn_discard.disabled = (not has_selection) or _is_button_cooling_down(_discard_cooldown)
 	if _btn_vault != null:

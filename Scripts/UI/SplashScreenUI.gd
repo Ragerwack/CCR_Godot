@@ -38,6 +38,7 @@ var _country_label: Label
 var _country_select: OptionButton
 var _submit_button: Button
 var _switch_button: Button
+var _exit_button: Button
 var _loading_label: Label
 var _progress_ui = null
 var _loading_tutorial_ui = null
@@ -200,6 +201,13 @@ func _setup_ui() -> void:
 	_switch_button.add_theme_color_override("font_color", Color(0.3, 0.6, 1.0))
 	vbox.add_child(_switch_button)
 
+	# 登录前没有需要同步的游戏资产，退出应当立即可用。
+	_exit_button = Button.new()
+	_exit_button.name = "LoginExitButton"
+	_exit_button.text = Localization.t("ui.login.exit_game")
+	_exit_button.pressed.connect(_on_exit_game)
+	vbox.add_child(_exit_button)
+
 	# 首次聚焦用户名输入框
 	_username_input.grab_focus()
 	_apply_fullscreen_layout()
@@ -235,6 +243,9 @@ func _update_mode() -> void:
 func _on_switch_mode() -> void:
 	_mode = "register" if _mode == "login" else "login"
 	_update_mode()
+
+func _on_exit_game() -> void:
+	get_tree().quit()
 
 # ══════════════════════════════════════════════════
 #  提交
@@ -642,7 +653,7 @@ func _show_loading_screen_ui(title: String, body: String, progress: float) -> vo
 		_loading_screen_ui.set_background(_loading_screen_background)
 	var tip := LoadingTutorialUIScript.pick_tip_for_locale(maxi(1, GameManager.player_data.level), Localization.locale)
 	var category := str(tip.get("category", "tip" if Localization.locale == "en" else "收藏提示"))
-	_loading_screen_ui.set_tip(category, str(tip.get("title", title)), str(tip.get("body", "")))
+	_loading_screen_ui.set_tip(category, str(tip.get("title", title)), str(tip.get("body", "")), str(tip.get("short_tip", "")))
 	_loading_screen_ui.set_progress(progress, body)
 	_loading_screen_ui.set_server_status(Localization.t("ui.login.loading.online"))
 	_loading_screen_ui.set_version("CCR")
@@ -660,6 +671,7 @@ func _step_progress_value(step_id: String) -> float:
 func _set_loading(loading: bool) -> void:
 	_submit_button.disabled = loading
 	_switch_button.disabled = loading
+	_exit_button.disabled = loading
 	_username_input.editable = not loading
 	_password_input.editable = not loading
 	_email_input.editable = not loading

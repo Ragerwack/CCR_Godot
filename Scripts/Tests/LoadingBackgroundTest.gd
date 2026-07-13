@@ -35,7 +35,7 @@ func _test_loading_screen_scene() -> void:
 	if background.stretch_mode != TextureRect.STRETCH_SCALE:
 		_fail("loading background is not stretch scale")
 		return
-	loading.set_tip("basic", "测试标题", "测试正文")
+	loading.set_tip("basic", "测试标题", "测试正文", "测试短提示")
 	loading.set_progress(42.0, "同步中")
 	loading.set_server_status("服务器在线")
 	loading.set_version("CCR test")
@@ -57,6 +57,10 @@ func _test_loading_screen_scene() -> void:
 		return
 	if body.text != "测试正文":
 		_fail("loading tip changed during one loading session")
+		return
+	var short_tip := loading.find_child("TipShortLabel", true, false) as Label
+	if short_tip == null or short_tip.text != "测试短提示" or short_tip.autowrap_mode == TextServer.AUTOWRAP_OFF:
+		_fail("loading short tip did not render")
 		return
 	var loading_content := loading.find_child("LoadingContent", true, false) as VBoxContainer
 	if loading_content == null:
@@ -81,6 +85,7 @@ func _test_loading_screen_scene() -> void:
 		"TipCategoryLabel",
 		"TipTitleLabel",
 		"TipBodyLabel",
+		"TipShortLabel",
 		"ProgressTextLabel",
 		"ServerStatusLabel",
 		"VersionLabel",
@@ -105,6 +110,25 @@ func _test_loading_tutorial_background() -> void:
 	await get_tree().process_frame
 	tutorial.setup_for_level(1)
 	await get_tree().process_frame
+	var title := tutorial.find_child("TipTitleLabel", true, false) as Label
+	var body := tutorial.find_child("TipBodyLabel", true, false) as Label
+	var short_tip := tutorial.find_child("TipShortLabel", true, false) as Label
+	if title == null or title.text.is_empty() or body == null or body.text.is_empty() or short_tip == null or short_tip.text.is_empty():
+		_fail("tutorial title, body, or short tip is missing")
+		return
+	for tip in LoadingTutorialUIScript.LOADING_TUTORIAL_TIPS:
+		var visible_tip := "%s\n%s\n%s\n%s" % [str(tip.get("category", "")), str(tip.get("title", "")), str(tip.get("body", "")), str(tip.get("short_tip", ""))]
+		if visible_tip.contains("relic") or visible_tip.contains("Relic") or visible_tip.contains("红"):
+			_fail("Chinese tutorial tip exposes relic or red-card wording: " + str(tip.get("id", "unknown")))
+			return
+		for hidden_feature in ["鉴定", "橱窗", "拍卖行"]:
+			if visible_tip.contains(hidden_feature):
+				_fail("Chinese tutorial tip exposes an unreleased feature: " + str(tip.get("id", "unknown")))
+				return
+	for tip in LoadingTutorialUIScript.LOADING_TUTORIAL_TIPS_EN:
+		if JSON.stringify(tip).to_lower().contains("red"):
+			_fail("English tutorial tip exposes red-card wording: " + str(tip.get("id", "unknown")))
+			return
 	var background := tutorial.find_child("BackgroundImage", true, false) as TextureRect
 	if background == null or background.texture == null:
 		_fail("tutorial loading background missing")

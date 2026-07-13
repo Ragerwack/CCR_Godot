@@ -2,6 +2,9 @@ extends Control
 class_name CardSlotUI
 
 const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+const BlackCardDrawOverlayScript = preload("res://Scripts/UI/BlackCardDrawOverlay.gd")
+const OrangeCardDrawOverlayScript = preload("res://Scripts/UI/OrangeCardDrawOverlay.gd")
+const PurpleCardDrawOverlayScript = preload("res://Scripts/UI/PurpleCardDrawOverlay.gd")
 
 signal slot_clicked(index: int)
 signal slot_double_clicked(index: int)
@@ -23,7 +26,7 @@ var register_drag_slot: bool = true
 
 var card_display: CardDisplay = null
 var is_occupied: bool = false
-var _lock_label: Label = null
+var _lock_icon: TextureRect = null
 var _lock_overlay: ColorRect = null
 var _glow_effect: ColorRect = null
 var _selected_highlight: Panel = null
@@ -46,6 +49,7 @@ var last_click_button_index: int = MOUSE_BUTTON_LEFT
 const DRAG_OUT_COLOR: Color = Color(0.1, 0.1, 0.12, 0.32)
 const SLOT_SHADOW_COLOR: Color = Color(0, 0, 0, 0.16)
 const LOCK_OVERLAY_COLOR: Color = Color(0, 0, 0, 0.38)
+const LOCK_ICON_ID := "status_lock"
 static var SLOT_SIZE: Vector2 = Vector2(107, 149)
 const RETURN_ANIMATION_DURATION: float = 0.25
 const DROP_IN_HEIGHT: float = 72.0
@@ -58,9 +62,21 @@ const DROP_IN_BOUNCE_SCALE: Vector2 = Vector2(0.985, 1.025)
 const DROP_IN_START_ROTATION: float = -2.0
 const DROP_IN_IMPACT_ROTATION: float = 0.8
 const DROP_IN_BOUNCE_Y: float = -4.0
+const DRAW_DROP_TOTAL_DURATION: float = DROP_IN_DURATION + DROP_IN_BOUNCE_DURATION
+## 基础落卡完成还包括落地后确认闪光，下一张卡必须等它消失。
+const DRAW_DROP_COMPLETE_DURATION: float = DRAW_DROP_TOTAL_DURATION + DROP_IN_FLASH_DURATION
+const GREEN_RARITY_SHINE_DURATION: float = CardDisplay.GREEN_DRAW_SHINE_DURATION
+const BLUE_DRAW_FLIP_DURATION: float = CardDisplay.BLUE_DRAW_FLIP_DURATION
+const BLUE_RARITY_SHINE_DURATION: float = CardDisplay.BLUE_DRAW_SHINE_DURATION
+const PURPLE_DRAW_PRESENTATION_DURATION: float = PurpleCardDrawOverlayScript.TOTAL_DURATION
+const ORANGE_DRAW_PRESENTATION_DURATION: float = OrangeCardDrawOverlayScript.TOTAL_DURATION
+const BLACK_DRAW_PRESENTATION_DURATION: float = BlackCardDrawOverlayScript.TOTAL_DURATION
 
 var _drop_in_tween: Tween = null
 var _drop_in_glow_tween: Tween = null
+var _purple_draw_overlay: Control = null
+var _orange_draw_overlay: Control = null
+var _black_draw_overlay: BlackCardDrawOverlay = null
 
 static func configure_slot_size(slot_size: Vector2) -> void:
 	SLOT_SIZE = slot_size
@@ -133,16 +149,12 @@ func setup_ui() -> void:
 	_lock_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_lock_overlay)
 
-	_lock_label = Label.new()
-	_lock_label.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_lock_label.position = Vector2.ZERO
-	_lock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_lock_label.text = "🔒"
-	_lock_label.add_theme_font_size_override("font_size", 24)
-	_lock_label.visible = false
-	_lock_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_lock_label)
+	var lock_icon_size := clampf(SLOT_SIZE.x * 0.45, 39.0, 63.0)
+	_lock_icon = CCRVisualStyle.make_status_icon(LOCK_ICON_ID, "LockedSlotIcon", lock_icon_size)
+	_lock_icon.position = (SLOT_SIZE - Vector2(lock_icon_size, lock_icon_size)) * 0.5
+	_lock_icon.size = Vector2(lock_icon_size, lock_icon_size)
+	_lock_icon.visible = false
+	add_child(_lock_icon)
 
 	# --- 拖出遮罩（初始隐藏） ---
 	_drag_out_overlay = ColorRect.new()
@@ -234,6 +246,9 @@ func setup_ui() -> void:
 	_set_lock_visible()
 
 func _exit_tree() -> void:
+	_cancel_purple_draw_overlay()
+	_cancel_orange_draw_overlay()
+	_cancel_black_draw_overlay()
 	_hide_hover_preview()
 
 func _make_slot_inner_shadow() -> Control:
@@ -295,6 +310,8 @@ func controller_activate() -> void:
 	if not _unlocked:
 		slot_unlock_requested.emit(slot_index)
 	else:
+		if is_occupied:
+			AudioManager.play_sfx("card_select")
 		slot_clicked.emit(slot_index)
 
 func set_card(card: CardInfo, idx: int = -1) -> void:
@@ -337,6 +354,12 @@ func set_slot_data_index(idx: int) -> void:
 func set_selected(selected: bool) -> void:
 	if _selected_highlight:
 		_selected_highlight.visible = selected and is_occupied and _unlocked
+	if card_display != null:
+		card_display.refresh_title_text_color()
+
+func refresh_card_title_text_color() -> void:
+	if card_display != null:
+		card_display.refresh_title_text_color()
 
 ## 显示解锁光晕（新解锁槽位的视觉提示）
 func show_unlock_glow() -> void:
@@ -351,21 +374,42 @@ func play_draw_drop_in(delay: float = 0.0) -> void:
 		return
 	_stop_drop_in_animation()
 	set_slot_hovered(false)
+	_play_draw_sfx(card_display.card.color)
+	if card_display.card.color == CardColor.ColorType.PURPLE:
+		_play_purple_draw_presentation(delay)
+		return
+	if card_display.card.color == CardColor.ColorType.ORANGE:
+		_play_orange_draw_presentation(delay)
+		return
+	if card_display.card.color == CardColor.ColorType.BLACK:
+		_play_black_draw_presentation(delay)
+		return
 	card_display.visible = true
 	card_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card_display.pivot_offset = card_display.size * 0.5
 	card_display.position = Vector2(0.0, -DROP_IN_HEIGHT)
-	card_display.scale = DROP_IN_START_SCALE
-	card_display.rotation_degrees = DROP_IN_START_ROTATION
+	var is_blue_draw := card_display.card.color == CardColor.ColorType.BLUE
+	card_display.scale = Vector2.ONE if is_blue_draw else DROP_IN_START_SCALE
+	card_display.rotation_degrees = 0.0 if is_blue_draw else DROP_IN_START_ROTATION
 	card_display.modulate = Color(1, 1, 1, 0)
 	card_display.z_index = 80
 
 	_drop_in_tween = create_tween()
+	if delay > 0.0:
+		_drop_in_tween.tween_interval(delay)
+	if is_blue_draw:
+		_drop_in_tween.set_parallel(true)
+		_drop_in_tween.tween_property(card_display, "modulate:a", 1.0, 0.08).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		_drop_in_tween.tween_callback(card_display.begin_blue_draw_flip)
+		_drop_in_tween.tween_method(card_display.set_blue_draw_flip_progress, 0.0, 1.0, BLUE_DRAW_FLIP_DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		_drop_in_tween.set_parallel(false)
+		_drop_in_tween.tween_callback(card_display.finish_blue_draw_flip)
 	_drop_in_tween.set_parallel(true)
-	_drop_in_tween.tween_property(card_display, "modulate:a", 1.0, 0.08).set_delay(delay)
-	_drop_in_tween.tween_property(card_display, "position", Vector2.ZERO, DROP_IN_DURATION).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	_drop_in_tween.tween_property(card_display, "scale", DROP_IN_IMPACT_SCALE, DROP_IN_DURATION).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	_drop_in_tween.tween_property(card_display, "rotation_degrees", DROP_IN_IMPACT_ROTATION, DROP_IN_DURATION).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	if not is_blue_draw:
+		_drop_in_tween.tween_property(card_display, "modulate:a", 1.0, 0.08).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_drop_in_tween.tween_property(card_display, "position", Vector2.ZERO, DROP_IN_DURATION).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	_drop_in_tween.tween_property(card_display, "scale", DROP_IN_IMPACT_SCALE, DROP_IN_DURATION).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	_drop_in_tween.tween_property(card_display, "rotation_degrees", DROP_IN_IMPACT_ROTATION, DROP_IN_DURATION).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	_drop_in_tween.set_parallel(false)
 	_drop_in_tween.tween_property(card_display, "position", Vector2(0.0, DROP_IN_BOUNCE_Y), DROP_IN_BOUNCE_DURATION * 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_drop_in_tween.parallel().tween_property(card_display, "scale", DROP_IN_BOUNCE_SCALE, DROP_IN_BOUNCE_DURATION * 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -375,10 +419,30 @@ func play_draw_drop_in(delay: float = 0.0) -> void:
 	_drop_in_tween.finished.connect(func():
 		_finish_drop_in_animation()
 		_play_draw_confirm_flash()
+		_play_draw_rarity_effect()
 	)
 
 
+func _play_draw_sfx(color_type: int) -> void:
+	var event_name := "draw_white"
+	match color_type:
+		CardColor.ColorType.GREEN:
+			event_name = "draw_green"
+		CardColor.ColorType.BLUE:
+			event_name = "draw_blue"
+		CardColor.ColorType.PURPLE:
+			event_name = "draw_purple"
+		CardColor.ColorType.ORANGE:
+			event_name = "draw_orange"
+		CardColor.ColorType.BLACK:
+			event_name = "draw_black"
+	AudioManager.play_sfx(event_name)
+
+
 func _stop_drop_in_animation() -> void:
+	_cancel_purple_draw_overlay()
+	_cancel_orange_draw_overlay()
+	_cancel_black_draw_overlay()
 	if _drop_in_tween != null and _drop_in_tween.is_valid():
 		_drop_in_tween.kill()
 	_drop_in_tween = null
@@ -386,6 +450,8 @@ func _stop_drop_in_animation() -> void:
 		_drop_in_glow_tween.kill()
 	_drop_in_glow_tween = null
 	if card_display != null:
+		card_display.stop_draw_rarity_effect()
+		card_display.stop_blue_draw_flip()
 		card_display.position = Vector2.ZERO
 		card_display.scale = Vector2.ONE
 		card_display.rotation_degrees = 0.0
@@ -395,9 +461,79 @@ func _stop_drop_in_animation() -> void:
 		card_display.refresh_title_text_color()
 
 
+func _play_purple_draw_presentation(delay: float) -> void:
+	card_display.visible = false
+	card_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_purple_draw_overlay = PurpleCardDrawOverlayScript.new()
+	_purple_draw_overlay.name = "PurpleCardDrawOverlay"
+	_purple_draw_overlay.setup(card_display.card, Rect2(global_position, size))
+	_purple_draw_overlay.presentation_finished.connect(_on_purple_draw_presentation_finished)
+	get_tree().root.add_child(_purple_draw_overlay)
+	_purple_draw_overlay.play(delay)
+
+
+func _on_purple_draw_presentation_finished() -> void:
+	_purple_draw_overlay = null
+	_finish_drop_in_animation()
+
+
+func _cancel_purple_draw_overlay() -> void:
+	if is_instance_valid(_purple_draw_overlay):
+		var overlay := _purple_draw_overlay
+		_purple_draw_overlay = null
+		overlay.cancel()
+
+
+func _play_black_draw_presentation(delay: float) -> void:
+	card_display.visible = false
+	card_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_black_draw_overlay = BlackCardDrawOverlayScript.new()
+	_black_draw_overlay.name = "BlackCardDrawOverlay"
+	_black_draw_overlay.setup(card_display.card, Rect2(global_position, size))
+	_black_draw_overlay.presentation_finished.connect(_on_black_draw_presentation_finished)
+	get_tree().root.add_child(_black_draw_overlay)
+	_black_draw_overlay.play(delay)
+
+
+func _play_orange_draw_presentation(delay: float) -> void:
+	card_display.visible = false
+	card_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_orange_draw_overlay = OrangeCardDrawOverlayScript.new()
+	_orange_draw_overlay.name = "OrangeCardDrawOverlay"
+	_orange_draw_overlay.setup(card_display.card, Rect2(global_position, size))
+	_orange_draw_overlay.presentation_finished.connect(_on_orange_draw_presentation_finished)
+	get_tree().root.add_child(_orange_draw_overlay)
+	_orange_draw_overlay.play(delay)
+
+
+func _on_orange_draw_presentation_finished() -> void:
+	_orange_draw_overlay = null
+	_finish_drop_in_animation()
+
+
+func _cancel_orange_draw_overlay() -> void:
+	if is_instance_valid(_orange_draw_overlay):
+		var overlay: Control = _orange_draw_overlay
+		_orange_draw_overlay = null
+		overlay.call("cancel")
+
+
+func _on_black_draw_presentation_finished() -> void:
+	_black_draw_overlay = null
+	_finish_drop_in_animation()
+
+
+func _cancel_black_draw_overlay() -> void:
+	if is_instance_valid(_black_draw_overlay):
+		var overlay := _black_draw_overlay
+		_black_draw_overlay = null
+		overlay.cancel()
+
+
 func _finish_drop_in_animation() -> void:
 	if card_display == null:
 		return
+	card_display.visible = true
 	card_display.position = Vector2.ZERO
 	card_display.scale = Vector2.ONE
 	card_display.rotation_degrees = 0.0
@@ -419,6 +555,15 @@ func _play_draw_confirm_flash() -> void:
 		if _glow_effect != null:
 			_glow_effect.visible = false
 	)
+
+
+func _play_draw_rarity_effect() -> void:
+	if card_display == null or card_display.card == null:
+		return
+	if card_display.card.color == CardColor.ColorType.GREEN:
+		card_display.play_green_draw_shine(GREEN_RARITY_SHINE_DURATION)
+	elif card_display.card.color == CardColor.ColorType.BLUE:
+		card_display.play_blue_draw_shine(BLUE_RARITY_SHINE_DURATION)
 
 ## 鼠标进入时隐藏光晕
 func _on_mouse_entered() -> void:
@@ -560,7 +705,7 @@ func _update_process_state() -> void:
 func get_card() -> CardInfo:
 	return card_display.card
 
-## 设置槽位是否解锁。锁定时显示半透明遮罩 + 🔒 标识
+## 设置槽位是否解锁。锁定时显示半透明遮罩和闭合挂锁图标。
 func set_unlocked(val: bool, show_new_unlock_glow: bool = false) -> void:
 	var was_locked = not _unlocked
 	_unlocked = val
@@ -579,8 +724,8 @@ func _set_lock_visible() -> void:
 	var locked = not _unlocked
 	if _lock_overlay:
 		_lock_overlay.visible = locked
-	if _lock_label:
-		_lock_label.visible = locked
+	if _lock_icon:
+		_lock_icon.visible = locked
 	# 锁定时卡牌不可见
 	if locked and card_display:
 		card_display.visible = false
@@ -600,6 +745,7 @@ func _on_gui_input(event: InputEvent) -> void:
 func _on_card_clicked(card: CardInfo, index: int) -> void:
 	if card_display != null:
 		last_click_button_index = card_display.last_click_button_index
+	AudioManager.play_sfx("card_select")
 	release_focus.call_deferred()
 	slot_clicked.emit(slot_index)
 
@@ -646,6 +792,7 @@ func _hide_drag_out() -> void:
 		return
 	if card_display != null and is_occupied and _unlocked and card_display.card != null:
 		card_display.visible = true
+		card_display.refresh_title_text_color()
 
 
 # ══════════════════════════════════════════════════
@@ -789,6 +936,7 @@ func _play_return_animation(card: CardInfo, source_index: int, start_global_posi
 		_return_animation_running = false
 		if card_display != null and is_occupied and _unlocked and card_display.card != null:
 			card_display.visible = true
+			card_display.refresh_title_text_color()
 	)
 
 
@@ -801,4 +949,5 @@ func hide_for_transfer(duration: float) -> void:
 		_transfer_animation_running = false
 		if not _return_animation_running and card_display != null and is_occupied and _unlocked and card_display.card != null:
 			card_display.visible = true
+			card_display.refresh_title_text_color()
 	)

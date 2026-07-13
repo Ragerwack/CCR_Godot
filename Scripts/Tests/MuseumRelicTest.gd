@@ -15,6 +15,16 @@ const THUMBNAIL_CACHE = preload("res://Scripts/UI/MuseumRelicThumbnailCache.gd")
 
 func _ready() -> void:
 	Localization.set_locale("zh-CN")
+	GameManager.apply_draw_key({
+		"date_key": "2026-07-13",
+		"version": 1,
+		"decks": [{
+			"deck_def_id": 21,
+			"deck_def_key": "solar_system__sun",
+			"series_name": "Solar System",
+			"deck_name": "Sun",
+		}],
+	})
 	var cards_by_id: Array[CardInfo] = CardDataManager.get_cards_by_deck_id(1)
 	if cards_by_id.size() != 5 or int(cards_by_id[0].id) != 1:
 		return _fail("deck_id_lookup_wrong")
@@ -53,6 +63,8 @@ func _ready() -> void:
 			return _fail("server_deck_key_missing_%d" % color_type)
 
 	var museum := DeckCollectionUI.new()
+	# 最大正式分辨率下，中间区域 + 右侧区域的最小可用宽度。
+	museum.size = Vector2(2168, 1416)
 	add_child(museum)
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -69,14 +81,20 @@ func _ready() -> void:
 	if sort_option == null or sort_option.get_item_count() != 3:
 		return _fail("filter_sort_missing")
 	var series_option := museum.find_child("MuseumSeriesOption", true, false) as OptionButton
-	if series_option == null or series_option.get_item_count() < 2:
+	if series_option == null or series_option.get_item_count() < 3:
 		return _fail("filter_series_missing")
+	if series_option.get_item_text(1) != "今日可见系列" or str(series_option.get_item_metadata(1)) != DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER:
+		return _fail("today_visible_series_filter_missing")
 	var progress_label := museum.find_child("MuseumCollectionProgress", true, false) as Label
 	var total_decks := _total_deck_defs()
 	if progress_label == null or progress_label.text != "已收藏 7/%d" % (ALL_RELIC_COLORS.size() * total_decks):
 		return _fail("collection_progress_wrong")
+	var relic_grid := museum.find_child("MuseumRelicGrid", true, false) as GridContainer
+	if relic_grid == null or relic_grid.columns != DeckCollectionUI.RELICS_PER_ROW:
+		return _fail("relic_fixed_five_column_grid_missing")
+	if relic_grid.get_child_count() != ALL_RELIC_COLORS.size():
+		return _fail("relic_grid_count_wrong")
 
-	var expected_height := get_viewport().get_visible_rect().size.y * (3.0 / 5.0) * 1.30
 	for color_type in ALL_RELIC_COLORS:
 		var relic_card := museum.find_child("RelicCard%d" % color_type, true, false) as Control
 		if relic_card == null:
@@ -105,8 +123,13 @@ func _ready() -> void:
 		var relic_shadow := relic_card.find_child("RelicThumbnailShadow", true, false) as TextureRect
 		if relic_shadow == null:
 			return _fail("relic_shadow_missing_%d" % color_type)
-		if absf(relic_host.custom_minimum_size.y - expected_height) > 1.0:
+		var expected_relic_size := museum._get_visual_relic_size(color_type)
+		if absf(relic_host.custom_minimum_size.y - expected_relic_size.y) > 1.0:
 			return _fail("relic_height_wrong_%d" % color_type)
+		if absf(relic_host.custom_minimum_size.x - expected_relic_size.x) > 1.0:
+			return _fail("relic_width_wrong_%d" % color_type)
+		if expected_relic_size.x * float(DeckCollectionUI.RELICS_PER_ROW) + DeckCollectionUI.CARD_HORIZONTAL_SPACING * float(DeckCollectionUI.RELICS_PER_ROW - 1) > museum.size.x + 0.1:
+			return _fail("relic_five_columns_overflow_%d" % color_type)
 		var thumbnail := relic_card.find_child("RelicThumbnail", true, false) as TextureRect
 		if thumbnail == null or thumbnail.texture == null:
 			return _fail("relic_thumbnail_missing_%d" % color_type)
@@ -118,6 +141,13 @@ func _ready() -> void:
 		var fallback_relic_view := relic_card.find_child("RelicView", true, false) as RelicView
 		if fallback_relic_view != null:
 			return _fail("relic_thumbnail_fallback_used_%d" % color_type)
+
+	for index in range(DeckCollectionUI.RELICS_PER_ROW):
+		var relic := relic_grid.get_child(index) as Control
+		if relic == null:
+			return _fail("relic_grid_first_row_missing_%d" % index)
+		if absf(relic.global_position.y - relic_grid.get_child(0).global_position.y) > 1.0:
+			return _fail("relic_grid_not_five_items_on_first_row")
 
 	var first_relic := museum.find_child("RelicCard0", true, false) as Control
 	var first_thumb := first_relic.find_child("RelicThumbnail", true, false) as TextureRect
@@ -149,6 +179,17 @@ func _ready() -> void:
 		var display := museum._view_card_displays[i] as CardDisplay
 		if display == null or display.card == null or int(display.card.card_number) != i + 1:
 			return _fail("view_card_order_wrong")
+		if not display.hover_scale_enabled:
+			return _fail("view_card_hover_scale_disabled")
+	var hovered_display := museum._view_card_displays[2] as CardDisplay
+	hovered_display._on_mouse_entered()
+	await get_tree().create_timer(CardDisplay.HOVER_TRANSITION_DURATION + 0.05).timeout
+	if hovered_display.scale.distance_to(Vector2(2.0, 2.0)) > 0.02:
+		return _fail("view_card_hover_not_doubled")
+	hovered_display._on_mouse_exited()
+	await get_tree().create_timer(CardDisplay.HOVER_TRANSITION_DURATION + 0.05).timeout
+	if hovered_display.scale.distance_to(Vector2.ONE) > 0.02:
+		return _fail("view_card_hover_not_restored")
 	museum._advance_relic_view()
 	await get_tree().create_timer(1.35).timeout
 	if museum._view_state != museum.ViewState.CARDS_HIDDEN or not museum._view_card_displays.is_empty():
@@ -188,7 +229,17 @@ func _ready() -> void:
 	if int(synthetic_relics[0].get("deck_def_id", 0)) != 2:
 		return _fail("oldest_sort_reversed")
 
-	print("MUSEUM_RELIC ok colors=7 height=", roundi(expected_height), " thumbnails=true view=true")
+	museum._selected_series = DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER
+	museum.render_decks()
+	await get_tree().process_frame
+	var today_grid := museum.find_child("MuseumRelicGrid", true, false) as GridContainer
+	progress_label = museum.find_child("MuseumCollectionProgress", true, false) as Label
+	if today_grid == null or today_grid.get_child_count() != ALL_RELIC_COLORS.size():
+		return _fail("today_visible_filter_did_not_keep_draw_key_relics")
+	if progress_label == null or progress_label.text != "已收藏 7/7":
+		return _fail("today_visible_filter_progress_wrong")
+
+	print("MUSEUM_RELIC ok colors=7 five_columns=true thumbnails=true view=true today_filter=true hover_2x=true")
 	get_tree().quit(0)
 
 

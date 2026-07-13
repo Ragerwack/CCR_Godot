@@ -28,12 +28,32 @@ func _ready() -> void:
 	await get_tree().process_frame
 
 	var center_area: Control = main.get("_center_area")
-	var rows := center_area.find_children("TodayDeckRow*", "HBoxContainer", true, false)
+	if _has_label_text(center_area, "今日卡组"):
+		_fail("today decks title is still visible")
+		return
+	var date_label := center_area.find_child("TodayDeckDateLabel", true, false) as Label
+	var countdown_label := center_area.find_child("TodayDeckResetCountdown", true, false) as Label
+	if date_label != null:
+		_fail("today decks date label should be removed")
+		return
+	if countdown_label == null or countdown_label.text.find("密匙重置倒计时：") != 0:
+		_fail("today decks reset countdown is missing")
+		return
+	var key_row := center_area.find_child("TodayDeckKeyRow", true, false) as Control
+	if key_row == null or absf(countdown_label.global_position.x - key_row.global_position.x) > 0.1:
+		_fail("today decks countdown is not in former date position")
+		return
+	if countdown_label.get_theme_font_size("font_size") != 16:
+		_fail("today decks countdown font not increased")
+		return
+	var rows := center_area.find_children("TodayDeckRow*", "VBoxContainer", true, false)
 	if rows.size() != 8:
 		_fail("today decks row count is not 8")
 		return
 
 	var expected_size: Vector2 = CardSlotUI.SLOT_SIZE
+	var content_host := center_area.find_child("TodayDecksContentRegion", true, false) as Control
+	var expected_left_shift := float(main.call("_exp_bar_height", get_viewport().get_visible_rect().size))
 	for row_index in range(rows.size()):
 		var row = rows[row_index]
 		var type_label := row.find_child("DeckTypeLabel", true, false) as Label
@@ -41,6 +61,9 @@ func _ready() -> void:
 		var level_label := row.find_child("DeckVisibleLevelLabel", true, false) as Label
 		if type_label == null or name_label == null or level_label == null:
 			_fail("today deck info labels are missing")
+			return
+		if type_label.get_theme_font_size("font_size") != 15 or name_label.get_theme_font_size("font_size") != 15 or level_label.get_theme_font_size("font_size") != 15:
+			_fail("today deck info font not increased")
 			return
 		if row_index == 0 and type_label.text != "今日新卡组":
 			_fail("today deck type label is wrong")
@@ -63,6 +86,9 @@ func _ready() -> void:
 			_fail("today deck row does not contain 5 cards")
 			return
 		var first_card: CardDisplay = cards[0]
+		if content_host == null or absf(first_card.global_position.x - content_host.global_position.x - expected_left_shift) > 0.1:
+			_fail("today deck cards are not shifted right by experience bar height")
+			return
 		if absf(first_card.custom_minimum_size.x - expected_size.x) > 0.1 or absf(first_card.custom_minimum_size.y - expected_size.y) > 0.1:
 			_fail("today deck card size is not same as draw card size")
 			return
@@ -181,7 +207,17 @@ func _find_today_decks_ui(root: Node) -> Node:
 	for child in root.get_children():
 		if child.get_script() == load("res://Scripts/UI/TodayDecksUI.gd"):
 			return child
+		var found := _find_today_decks_ui(child)
+		if found != null:
+			return found
 	return null
+
+func _has_label_text(root: Node, text: String) -> bool:
+	for child in root.find_children("*", "Label", true, false):
+		var label := child as Label
+		if label != null and label.text == text:
+			return true
+	return false
 
 func _fail(message: String) -> void:
 	push_error("TODAY_DECKS_UI " + message)

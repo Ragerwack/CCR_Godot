@@ -12,6 +12,7 @@ var _margin: MarginContainer = null
 var _tip_category_label: Label = null
 var _tip_title_label: Label = null
 var _tip_body_label: Label = null
+var _tip_short_label: Label = null
 var _progress_text_label: Label = null
 var _progress_bar: ProgressBar = null
 var _version_label: Label = null
@@ -33,7 +34,7 @@ func set_background(texture: Texture2D) -> void:
 		_setup_ui()
 	_background_image.texture = texture
 
-func set_tip(category: String, title: String, body: String) -> void:
+func set_tip(category: String, title: String, body: String, short_tip: String = "") -> void:
 	if _tip_title_label == null:
 		_setup_ui()
 	if _tip_initialized:
@@ -44,6 +45,7 @@ func set_tip(category: String, title: String, body: String) -> void:
 	_tip_category_label.text = category.to_upper()
 	_tip_title_label.text = title
 	_tip_body_label.text = body
+	_tip_short_label.text = short_tip
 	_tip_tween = create_tween()
 	_tip_tween.tween_property(_loading_panel, "modulate:a", 0.72, 0.12)
 	_tip_tween.tween_property(_loading_panel, "modulate:a", 1.0, 0.18)
@@ -115,6 +117,10 @@ func _setup_ui() -> void:
 	_tip_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_tip_body_label.custom_minimum_size = Vector2(0, 64)
 	vbox.add_child(_tip_body_label)
+
+	_tip_short_label = _make_label("TipShortLabel", LOADING_TEXT_COLOR, 18)
+	_tip_short_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(_tip_short_label)
 
 	var bottom_right := VBoxContainer.new()
 	bottom_right.name = "BottomRightInfo"
@@ -195,6 +201,7 @@ func _apply_responsive_layout() -> void:
 	_tip_category_label.add_theme_font_size_override("font_size", maxi(13, int(roundf(20.0 * scale))))
 	_tip_title_label.add_theme_font_size_override("font_size", maxi(22, int(roundf(34.0 * scale))))
 	_tip_body_label.add_theme_font_size_override("font_size", maxi(16, int(roundf(24.0 * scale))))
+	_tip_short_label.add_theme_font_size_override("font_size", maxi(14, int(roundf(18.0 * scale))))
 	_progress_text_label.add_theme_font_size_override("font_size", maxi(13, int(roundf(20.0 * scale))))
 	_server_status_label.add_theme_font_size_override("font_size", maxi(12, int(roundf(17.0 * scale))))
 	_version_label.add_theme_font_size_override("font_size", maxi(12, int(roundf(17.0 * scale))))

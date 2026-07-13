@@ -19,6 +19,7 @@ var dragging_card_offset: Vector2 = Vector2.ZERO
 var _highlighted_target: Node = null
 
 const TRANSFER_ANIMATION_DURATION: float = 0.24
+const QUICK_MOVE_TRANSFER_DURATION: float = 0.2
 
 
 func start_drag(card: CardInfo, from: String, index: int = -1, card_offset: Vector2 = Vector2.ZERO) -> void:
@@ -202,6 +203,21 @@ func play_swap_animation(source_area: String, source_index: int, target_area: St
 	_play_transfer_card(target_card, target_index, target_start, target_end)
 
 
+func play_quick_move_animation(card: CardInfo, source_area: String, source_index: int, target_area: String, target_index: int) -> bool:
+	if card == null:
+		return false
+	var source_slot := _find_slot(source_area, source_index)
+	var target_slot := _find_slot(target_area, target_index)
+	if source_slot == null or target_slot == null:
+		return false
+
+	# 先隐藏两端真实卡面，再创建唯一的飞行副本，避免同一张卡同时出现在多个位置。
+	source_slot.hide_for_transfer(QUICK_MOVE_TRANSFER_DURATION)
+	target_slot.hide_for_transfer(QUICK_MOVE_TRANSFER_DURATION)
+	_play_transfer_card(card, source_index, source_slot.global_position, target_slot.global_position, QUICK_MOVE_TRANSFER_DURATION)
+	return true
+
+
 func _find_slot(area: String, data_index: int) -> CardSlotUI:
 	for node in get_tree().get_nodes_in_group("card_slots"):
 		if node is CardSlotUI and node.area_type == area and node.slot_data_index == data_index:
@@ -209,7 +225,7 @@ func _find_slot(area: String, data_index: int) -> CardSlotUI:
 	return null
 
 
-func _play_transfer_card(card: CardInfo, card_index: int, start_global_position: Vector2, end_global_position: Vector2) -> void:
+func _play_transfer_card(card: CardInfo, card_index: int, start_global_position: Vector2, end_global_position: Vector2, duration: float = TRANSFER_ANIMATION_DURATION) -> void:
 	var anim_card := CardDisplay.new()
 	anim_card.custom_minimum_size = CardSlotUI.SLOT_SIZE
 	anim_card.size = CardSlotUI.SLOT_SIZE
@@ -221,5 +237,5 @@ func _play_transfer_card(card: CardInfo, card_index: int, start_global_position:
 	anim_card.set_card(card, card_index)
 
 	var tween := anim_card.create_tween()
-	tween.tween_property(anim_card, "global_position", end_global_position, TRANSFER_ANIMATION_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(anim_card, "global_position", end_global_position, duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tween.finished.connect(func(): anim_card.queue_free())

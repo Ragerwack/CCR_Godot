@@ -38,6 +38,7 @@ func setup(sources: Array[Dictionary], nav_target_rect: Rect2) -> void:
 
 func play() -> void:
 	_rng.randomize()
+	AudioManager.play_sfx("forge_start", 1.0, 0.012)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	z_index = 3000
@@ -54,6 +55,7 @@ func play() -> void:
 	_relic_rect = _get_centered_relic_rect()
 	await _fly_art_to_relic_slots(art_nodes, _relic_rect)
 	var relic := await _form_relic(art_nodes)
+	AudioManager.play_sfx("forge_success", 1.0, 0.0)
 	await _hold_relic_before_nav(relic)
 	await _send_relic_to_nav(relic)
 	queue_free()
@@ -61,6 +63,7 @@ func play() -> void:
 
 func play_store_to_nav() -> void:
 	_rng.randomize()
+	AudioManager.play_sfx("vault_store")
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	z_index = 3000
@@ -76,6 +79,7 @@ func play_store_to_nav() -> void:
 
 func play_discard() -> void:
 	_rng.randomize()
+	AudioManager.play_sfx("discard")
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	z_index = 3000

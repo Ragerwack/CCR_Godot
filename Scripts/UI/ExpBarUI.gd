@@ -1,6 +1,8 @@
 extends Control
 class_name ExpBarUI
 
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+
 var _bg: ColorRect        # 底层背景
 var _fill_fg: ColorRect   # 前景填充条（深色底）
 var _fill_bar: ColorRect  # 经验进度条（亮色）
@@ -65,17 +67,28 @@ func setup_ui() -> void:
 	_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_glow)
 
-	# ── 经验数值标签 ──
+	# ── 经验图标与数值 ──
+	var value_center := CenterContainer.new()
+	value_center.name = "ExpValueCenter"
+	value_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	value_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(value_center)
+	var value_row := HBoxContainer.new()
+	value_row.name = "ExpValueRow"
+	value_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	value_row.add_theme_constant_override("separation", 2)
+	value_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	value_row.add_child(CCRVisualStyle.make_status_icon("status_experience", "ExperienceIcon", 14.0))
 	_label = Label.new()
 	_label.name = "ExpValueLabel"
-	_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.add_theme_font_size_override("font_size", 11)
 	_label.add_theme_color_override("font_color", Color.WHITE)
 	_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
 	_label.add_theme_constant_override("outline_size", 2)
-	add_child(_label)
+	value_row.add_child(_label)
+	value_center.add_child(value_row)
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:

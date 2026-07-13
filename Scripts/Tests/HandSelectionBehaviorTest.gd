@@ -15,6 +15,7 @@ func _ready() -> void:
 		GameManager.player_data.hand_cards.append(null)
 
 	var hand_ui := HandAreaUI.new()
+	hand_ui.size = Vector2(1200, 600)
 	add_child(hand_ui)
 	await get_tree().process_frame
 	hand_ui.refresh_display()
@@ -81,6 +82,16 @@ func _ready() -> void:
 	hand_ui._input(_mouse_press(MOUSE_BUTTON_LEFT, discard_button.get_global_rect().get_center()))
 	if hand_ui.get_selected_hand_index() != 0:
 		return _fail("action_button_click_cleared_selection")
+
+	var hand_center := hand_ui.get_global_rect().get_center()
+	hand_ui._input(_mouse_press(MOUSE_BUTTON_WHEEL_UP, hand_center))
+	await get_tree().create_timer(HandAreaUI.PAGE_ROLL_DURATION + 0.08).timeout
+	if hand_ui.current_page != 1:
+		return _fail("wheel_up_did_not_page_hand")
+	hand_ui._input(_mouse_press(MOUSE_BUTTON_WHEEL_DOWN, hand_center))
+	await get_tree().create_timer(HandAreaUI.PAGE_ROLL_DURATION + 0.08).timeout
+	if hand_ui.current_page != 0:
+		return _fail("wheel_down_did_not_page_hand")
 
 	print("HAND_SELECTION_BEHAVIOR ok")
 	get_tree().quit(0)

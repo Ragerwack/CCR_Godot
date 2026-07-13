@@ -19,6 +19,7 @@ const ACTION_STORE_VAULT := "ccr_action_store_vault"
 const ACTION_DISCARD := "ccr_action_discard"
 const ACTION_NAV_PREV := "ccr_nav_prev"
 const ACTION_NAV_NEXT := "ccr_nav_next"
+const ACTION_HAND_PAGE := "ccr_hand_page"
 const ACTION_POINTER_PRIMARY := "ccr_pointer_primary"
 const ACTION_POINTER_SECONDARY := "ccr_pointer_secondary"
 
@@ -27,6 +28,7 @@ const ACTION_ORDER := [
 	ACTION_POINTER_SECONDARY,
 	ACTION_NAV_PREV,
 	ACTION_NAV_NEXT,
+	ACTION_HAND_PAGE,
 	ACTION_DRAW_FREE,
 	ACTION_SYNTHESIZE,
 	ACTION_STORE_VAULT,
@@ -40,6 +42,7 @@ const ACTION_LABEL_KEYS := {
 	ACTION_POINTER_SECONDARY: "ui.controller.action.pointer_secondary",
 	ACTION_NAV_PREV: "ui.controller.action.nav_prev",
 	ACTION_NAV_NEXT: "ui.controller.action.nav_next",
+	ACTION_HAND_PAGE: "ui.controller.action.hand_page",
 	ACTION_DRAW_FREE: "ui.controller.action.draw_free",
 	ACTION_SYNTHESIZE: "ui.controller.action.synthesize",
 	ACTION_STORE_VAULT: "ui.controller.action.store_vault",
@@ -53,6 +56,8 @@ const DEFAULT_BINDINGS := {
 	ACTION_POINTER_SECONDARY: "button:%d" % JOY_BUTTON_RIGHT_SHOULDER,
 	ACTION_NAV_PREV: "button:%d" % JOY_BUTTON_LEFT_SHOULDER,
 	ACTION_NAV_NEXT: "button:%d" % JOY_BUTTON_RIGHT_SHOULDER,
+	# 手牌翻页不区分上下方向，右摇杆上下任一方向都会翻到下一页。
+	ACTION_HAND_PAGE: "axis_any:%d" % JOY_AXIS_RIGHT_Y,
 	ACTION_DRAW_FREE: "button:%d" % JOY_BUTTON_A,
 	ACTION_SYNTHESIZE: "button:%d" % JOY_BUTTON_X,
 	ACTION_STORE_VAULT: "button:%d" % JOY_BUTTON_Y,
@@ -76,6 +81,7 @@ const BINDING_OPTIONS := [
 	{"id": "button:%d" % JOY_BUTTON_DPAD_RIGHT, "label_key": "ui.controller.binding.dpad_right"},
 	{"id": "button:%d" % JOY_BUTTON_LEFT_STICK, "label_key": "ui.controller.binding.left_stick"},
 	{"id": "button:%d" % JOY_BUTTON_RIGHT_STICK, "label_key": "ui.controller.binding.right_stick"},
+	{"id": "axis_any:%d" % JOY_AXIS_RIGHT_Y, "label_key": "ui.controller.binding.right_stick_vertical"},
 ]
 
 var _bindings: Dictionary = {}
@@ -188,27 +194,34 @@ func _apply_input_map() -> void:
 		if not InputMap.has_action(action_id):
 			InputMap.add_action(action_id, 0.5)
 		InputMap.action_erase_events(action_id)
-		var event := _binding_to_event(get_binding(action_id))
-		if event != null:
+		for event in _binding_to_events(get_binding(action_id)):
 			InputMap.action_add_event(action_id, event)
 
-func _binding_to_event(binding_id: String) -> InputEvent:
+func _binding_to_events(binding_id: String) -> Array[InputEvent]:
+	var events: Array[InputEvent] = []
 	var parts := binding_id.split(":", false)
 	if parts.size() < 2:
-		return null
+		return events
 	match parts[0]:
 		"button":
 			var event := InputEventJoypadButton.new()
 			event.button_index = int(parts[1])
-			return event
+			events.append(event)
 		"axis":
 			if parts.size() < 3:
-				return null
+				return events
 			var event := InputEventJoypadMotion.new()
 			event.axis = int(parts[1])
 			event.axis_value = float(parts[2])
-			return event
-	return null
+			events.append(event)
+		"axis_any":
+			# Godot 的 axis_value 带方向；同一动作注册正反两个事件即可响应摇杆上下。
+			for direction in [-1.0, 1.0]:
+				var event := InputEventJoypadMotion.new()
+				event.axis = int(parts[1])
+				event.axis_value = direction
+				events.append(event)
+	return events
 
 func _is_known_binding(binding_id: String) -> bool:
 	for option in BINDING_OPTIONS:

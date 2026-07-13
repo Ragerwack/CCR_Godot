@@ -14,6 +14,9 @@ var slots: Array[CardSlotUI] = []
 var _btn_free: Button = null
 var _btn_gold: Button = null
 var _btn_gem: Button = null
+var _free_cooldown: Control = null
+var _gold_cooldown: Control = null
+var _gem_cooldown: Control = null
 var _free_cost_label: Label = null
 var _gold_cost_label: Label = null
 var _gem_cost_label: Label = null
@@ -21,10 +24,27 @@ var _free_countdown_label: Label = null
 var _is_refreshing: bool = false
 var auto_warm_enabled: bool = true
 var _roll_ensure_elapsed: float = 0.0
+var _draw_reveal_tweens: Array[Tween] = []
+var _draw_reveal_generation: int = 0
+var _refresh_column: Control = null
+var _side_button_width: float = 110.0
+var _side_button_height: float = 36.0
 
 const DRAW_DROP_STAGGER_PER_CARD: float = 0.0625
+const RAPID_DRAW_DROP_STAGGER_PER_CARD: float = 0.0125
+const WHITE_DRAW_REVEAL_INTERVAL: float = 0.15
 const ROLL_ENSURE_INTERVAL_SECONDS: float = 10.0
 const SLOT_SPACING: float = 8.0
+const BUTTON_LABEL_HEIGHT: float = 18.0
+const ACTION_LABEL_GAP: float = 6.0
+const AssetActionCooldownScript = preload("res://Scripts/UI/AssetActionCooldown.gd")
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+
+func configure_side_button_metrics(button_width: float, button_height: float) -> void:
+	_side_button_width = maxf(70.0, button_width)
+	_side_button_height = maxf(28.0, button_height)
+	if is_node_ready():
+		_apply_refresh_column_layout()
 
 func _ready() -> void:
 	setup_ui()
@@ -55,6 +75,10 @@ func _process(delta: float) -> void:
 		return
 	_roll_ensure_elapsed = 0.0
 	_auto_warm_next_refresh_roll()
+
+
+func _exit_tree() -> void:
+	_cancel_scheduled_draw_reveals()
 
 func setup_ui() -> void:
 	# ── 卡槽网格（8×2 = 16 固定） ──
@@ -97,62 +121,124 @@ func _centered_grid_start_x() -> float:
 	return maxf(0.0, centered_global_left - parent_global_x)
 
 func _create_refresh_column() -> void:
-	var vbox = VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
-	# 锚点 right=1.0 时 offset 是从右边缘算起的边距，必须为 0 或负数才能可见
-	vbox.offset_left = -120    # -(110 宽 + 10 右边距)
-	vbox.offset_right = -10
-	vbox.offset_top = -108
-	vbox.offset_bottom = 108
-	vbox.add_theme_constant_override("separation", 6)
-	add_child(vbox)
+	_refresh_column = Control.new()
+	_refresh_column.name = "CardPoolRefreshColumn"
+	_refresh_column.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	add_child(_refresh_column)
 
 	_btn_free = Button.new()
-	_btn_free.custom_minimum_size = Vector2(110, 36)
+	_btn_free.name = "DrawStaminaButton"
 	_btn_free.pressed.connect(_on_free_refresh)
 	_btn_free.mouse_entered.connect(_on_free_refresh_hovered)
-	vbox.add_child(_btn_free)
+	CCRVisualStyle.apply_relic_button(_btn_free, "draw_stamina")
+	_refresh_column.add_child(_btn_free)
+	_free_cooldown = _attach_action_cooldown(_btn_free)
 
 	_free_cost_label = _create_refresh_cost_label()
-	vbox.add_child(_free_cost_label)
+	_refresh_column.add_child(_free_cost_label)
 
 	_btn_gold = Button.new()
+	_btn_gold.name = "DrawGoldButton"
 	_btn_gold.text = Localization.t("ui.card_pool.refresh.gold")
-	_btn_gold.custom_minimum_size = Vector2(110, 36)
 	_btn_gold.pressed.connect(_on_gold_refresh)
 	_btn_gold.mouse_entered.connect(_on_gold_refresh_hovered)
-	vbox.add_child(_btn_gold)
+	CCRVisualStyle.apply_relic_button(_btn_gold, "draw_gold")
+	_refresh_column.add_child(_btn_gold)
+	_gold_cooldown = _attach_action_cooldown(_btn_gold)
 
 	_gold_cost_label = _create_refresh_cost_label()
-	vbox.add_child(_gold_cost_label)
+	_refresh_column.add_child(_gold_cost_label)
 
 	_btn_gem = Button.new()
+	_btn_gem.name = "DrawGemButton"
 	_btn_gem.text = Localization.t("ui.card_pool.refresh.gem")
-	_btn_gem.custom_minimum_size = Vector2(110, 36)
 	_btn_gem.pressed.connect(_on_gem_refresh)
 	_btn_gem.mouse_entered.connect(_on_gem_refresh_hovered)
-	vbox.add_child(_btn_gem)
+	CCRVisualStyle.apply_relic_button(_btn_gem, "draw_gem")
+	_refresh_column.add_child(_btn_gem)
+	_gem_cooldown = _attach_action_cooldown(_btn_gem)
 
 	_gem_cost_label = _create_refresh_cost_label()
-	vbox.add_child(_gem_cost_label)
+	_refresh_column.add_child(_gem_cost_label)
 
 	_free_countdown_label = Label.new()
-	_free_countdown_label.custom_minimum_size = Vector2(110, 34)
 	_free_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_free_countdown_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_free_countdown_label.add_theme_font_size_override("font_size", 11)
 	_free_countdown_label.add_theme_color_override("font_color", Color(0.75, 0.85, 1.0, 0.9))
-	vbox.add_child(_free_countdown_label)
+	_refresh_column.add_child(_free_countdown_label)
+	_apply_refresh_column_layout()
 	_update_refresh_buttons()
 
 func _create_refresh_cost_label() -> Label:
 	var label := Label.new()
-	label.custom_minimum_size = Vector2(110, 18)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_font_size_override("font_size", 11)
 	label.add_theme_color_override("font_color", Color(0.88, 0.92, 1.0, 0.92))
 	return label
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and is_node_ready():
+		_apply_refresh_column_layout()
+
+func _apply_refresh_column_layout() -> void:
+	if _refresh_column == null:
+		return
+	var button_size := Vector2(_side_button_width, _side_button_height)
+	for button in [_btn_free, _btn_gold, _btn_gem]:
+		var typed_button := button as Button
+		if typed_button != null:
+			typed_button.custom_minimum_size = button_size
+			typed_button.size = button_size
+			# 体力、金币、宝石统一按导航按钮的 2/3 高度显示；右侧按钮高为导航按钮的 4/3。
+			CCRVisualStyle.configure_relic_button_metrics(typed_button, _side_button_height, 0.5)
+			typed_button.add_theme_font_size_override("font_size", _action_font_size())
+	for label in [_free_cost_label, _gold_cost_label, _gem_cost_label]:
+		var typed_label := label as Label
+		if typed_label != null:
+			typed_label.custom_minimum_size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
+			typed_label.size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
+	if _free_countdown_label != null:
+		_free_countdown_label.custom_minimum_size = Vector2(_side_button_width, maxf(26.0, _side_button_height * 0.70))
+		_free_countdown_label.size = _free_countdown_label.custom_minimum_size
+	# 三种抽卡按钮分别对齐第一行中心、两行中线和第二行中心。
+	# 这样体力/宝石抽卡会直接对应玩家正在查看的两排卡牌。
+	var first_row_center_y := CardSlotUI.SLOT_SIZE.y * 0.5
+	var second_row_center_y := CardSlotUI.SLOT_SIZE.y + SLOT_SPACING + CardSlotUI.SLOT_SIZE.y * 0.5
+	var gold_center_y := (first_row_center_y + second_row_center_y) * 0.5
+	var button_centers := [first_row_center_y, gold_center_y, second_row_center_y]
+	var buttons := [_btn_free, _btn_gold, _btn_gem]
+	var cost_labels := [_free_cost_label, _gold_cost_label, _gem_cost_label]
+	for index in range(buttons.size()):
+		var button := buttons[index] as Button
+		var cost_label := cost_labels[index] as Label
+		if button != null:
+			button.position = Vector2.ZERO + Vector2(0.0, float(button_centers[index]) - _side_button_height * 0.5)
+		if cost_label != null and button != null:
+			cost_label.position = Vector2(0.0, button.position.y + _side_button_height)
+	if _free_countdown_label != null:
+		_free_countdown_label.position = Vector2(0.0, _btn_gem.position.y + _side_button_height + BUTTON_LABEL_HEIGHT)
+	var content_height := size.y
+	if _free_countdown_label != null:
+		content_height = maxf(content_height, _free_countdown_label.position.y + _free_countdown_label.size.y)
+	_refresh_column.size = Vector2(_side_button_width, content_height)
+	_refresh_column.position = Vector2(_right_region_center_x() - _side_button_width * 0.5, 0.0)
+
+func _action_font_size() -> int:
+	if _side_button_width < 120.0:
+		return 12 if Localization.locale == "en" else 13
+	return 15 if Localization.locale == "en" else 16
+
+func _right_region_center_x() -> float:
+	var viewport_width := get_viewport_rect().size.x
+	var grid_right := _centered_grid_start_x() + _grid_width()
+	var global_center := (grid_right + viewport_width) * 0.5
+	var parent_global_x := global_position.x if is_inside_tree() else 0.0
+	return global_center - parent_global_x
+
+func _grid_height() -> float:
+	return rows * CardSlotUI.SLOT_SIZE.y + (rows - 1) * SLOT_SPACING
 
 func controller_refresh(refresh_type: String) -> void:
 	match refresh_type:
@@ -167,35 +253,44 @@ func controller_refresh(refresh_type: String) -> void:
 func _on_free_refresh() -> void:
 	if _is_refreshing:
 		return
-	if CardPoolSystem.do_refresh("free"):
-		CardPoolSystem.refresh_pool("free")
+	if not _try_start_refresh_cooldown(_free_cooldown):
+		return
+	CardPoolSystem.request_refresh("free")
 	_update_refresh_buttons()
 
 func _on_gem_refresh() -> void:
 	if _is_refreshing:
 		return
-	if CardPoolSystem.do_refresh("gem"):
-		CardPoolSystem.refresh_pool("gem")
+	if not _try_start_refresh_cooldown(_gem_cooldown):
+		return
+	CardPoolSystem.request_refresh("gem")
 	_update_refresh_buttons()
 
 func _on_gold_refresh() -> void:
 	if _is_refreshing:
 		return
+	if not _try_start_refresh_cooldown(_gold_cooldown):
+		return
 	var step_started := Time.get_ticks_msec()
 	var total_started := step_started
 	var gold_before := GameManager.player_data.gold
 	var cost := maxi(1, int(gold_before * 0.01))
+	var buffered := CardPoolSystem.has_pending_confirm() or ApiClient.has_pending_asset_requests()
 	CardPoolSystem.gold_draw_debug_click_started_msec = total_started
-	if CardPoolSystem.do_refresh("gold"):
+	if CardPoolSystem.request_refresh("gold"):
 		_print_gold_draw_step(
 			1,
 			"done",
-			"本地金币扣费检查",
+			"缓冲下一次金币抽卡" if buffered else "本地金币扣费检查",
 			step_started,
 			total_started,
-			{"cost": cost, "gold_before": gold_before, "gold_after": GameManager.player_data.gold}
+			{
+				"buffered": buffered,
+				"cost": cost,
+				"gold_before": gold_before,
+				"gold_after": GameManager.player_data.gold,
+			}
 		)
-		CardPoolSystem.refresh_pool("gold")
 	else:
 		_print_gold_draw_step(
 			1,
@@ -331,12 +426,15 @@ func _resolve_card_index(cards: Array, card: CardInfo, preferred_idx: int) -> in
 # ── 卡池数据更新 ──
 func _on_pool_updated(cards: Array) -> void:
 	var should_animate := bool(CardPoolSystem.animate_next_pool_update)
+	var rapid_animation := bool(CardPoolSystem.rapid_next_pool_update)
 	CardPoolSystem.animate_next_pool_update = false
-	_refresh_display(cards, should_animate)
+	CardPoolSystem.rapid_next_pool_update = false
+	_refresh_display(cards, should_animate, rapid_animation)
 	_update_refresh_buttons()
 	_auto_warm_next_refresh_roll.call_deferred()
 
 func _on_refresh_failed(_reason: String) -> void:
+	AudioManager.play_sfx("error_soft")
 	_update_refresh_buttons()
 
 func _on_refresh_loading_started() -> void:
@@ -359,9 +457,13 @@ func _on_player_data_changed() -> void:
 	_update_refresh_buttons()
 	_auto_warm_next_refresh_roll.call_deferred()
 
-func _refresh_display(cards: Array, animate_draw: bool = false) -> void:
+func _refresh_display(cards: Array, animate_draw: bool = false, rapid_animation: bool = false) -> void:
+	_cancel_scheduled_draw_reveals()
 	# 固定 16 槽，无翻页
 	var unlocked_count = GameManager.player_data.pool_slots
+	var draw_delays: Array[float] = []
+	if animate_draw:
+		draw_delays = _draw_drop_delays(cards, rapid_animation)
 	for i in range(slot_count):
 		if i >= slots.size():
 			continue
@@ -369,18 +471,92 @@ func _refresh_display(cards: Array, animate_draw: bool = false) -> void:
 		# 应用槽位锁定状态（前 N 个解锁，其余锁定）
 		slots[i].set_unlocked(i < unlocked_count)
 		if i < unlocked_count and i < cards.size():
-			slots[i].set_card(cards[i], i)
-			if animate_draw and cards[i] != null:
-				slots[i].play_draw_drop_in(_draw_drop_delay_for_slot(i))
+			var card = cards[i]
+			if animate_draw and card != null:
+				slots[i].clear_slot()
+				_schedule_draw_card_reveal(
+					slots[i],
+					card,
+					i,
+					draw_delays[i] if i < draw_delays.size() else _draw_drop_delay_for_slot(i, rapid_animation),
+					_draw_reveal_generation
+				)
+			else:
+				slots[i].set_card(card, i)
 		else:
 			slots[i].clear_slot()
 		slots[i].visible = true
 
 
-func _draw_drop_delay_for_slot(slot_idx: int) -> float:
+func _schedule_draw_card_reveal(slot: CardSlotUI, card: CardInfo, card_index: int, delay: float, generation: int) -> void:
+	if slot == null or card == null:
+		return
+	if delay <= 0.0:
+		_reveal_draw_card(slot, card, card_index, generation)
+		return
+	var reveal_tween := create_tween()
+	_draw_reveal_tweens.append(reveal_tween)
+	reveal_tween.tween_interval(delay)
+	reveal_tween.tween_callback(func():
+		_reveal_draw_card(slot, card, card_index, generation)
+	)
+	reveal_tween.finished.connect(func():
+		_draw_reveal_tweens.erase(reveal_tween)
+	)
+
+
+func _reveal_draw_card(slot: CardSlotUI, card: CardInfo, card_index: int, generation: int) -> void:
+	if generation != _draw_reveal_generation:
+		return
+	if not is_instance_valid(slot):
+		return
+	slot.set_card(card, card_index)
+	slot.play_draw_drop_in(0.0)
+
+
+func _cancel_scheduled_draw_reveals() -> void:
+	_draw_reveal_generation += 1
+	for tween in _draw_reveal_tweens:
+		if tween != null and tween.is_valid():
+			tween.kill()
+	_draw_reveal_tweens.clear()
+
+
+func _draw_drop_delay_for_slot(slot_idx: int, rapid_animation: bool = false) -> float:
 	var row := int(slot_idx / columns)
 	var col := slot_idx % columns
-	return float(row * columns + col) * DRAW_DROP_STAGGER_PER_CARD
+	var stagger := RAPID_DRAW_DROP_STAGGER_PER_CARD if rapid_animation else DRAW_DROP_STAGGER_PER_CARD
+	return float(row * columns + col) * stagger
+
+
+func _draw_drop_delays(cards: Array, rapid_animation: bool = false) -> Array[float]:
+	var delays: Array[float] = []
+	var next_presentation_start := 0.0
+	for i in range(mini(slot_count, cards.size())):
+		# 白卡是抽卡主力，只承担短 reveal 间隔；其他颜色保持完整演出屏障。
+		delays.append(next_presentation_start)
+		var current_card = cards[i]
+		next_presentation_start += _draw_presentation_duration(current_card)
+	return delays
+
+func _draw_presentation_duration(card: CardInfo) -> float:
+	var base_duration := CardSlotUI.DRAW_DROP_COMPLETE_DURATION
+	if card == null:
+		return base_duration
+	match card.color:
+		CardColor.ColorType.WHITE:
+			return WHITE_DRAW_REVEAL_INTERVAL
+		CardColor.ColorType.GREEN:
+			return maxf(base_duration, CardSlotUI.DRAW_DROP_TOTAL_DURATION + CardSlotUI.GREEN_RARITY_SHINE_DURATION)
+		CardColor.ColorType.BLUE:
+			return CardSlotUI.BLUE_DRAW_FLIP_DURATION + maxf(base_duration, CardSlotUI.DRAW_DROP_TOTAL_DURATION + CardSlotUI.BLUE_RARITY_SHINE_DURATION)
+		CardColor.ColorType.PURPLE:
+			return CardSlotUI.PURPLE_DRAW_PRESENTATION_DURATION
+		CardColor.ColorType.ORANGE:
+			return CardSlotUI.ORANGE_DRAW_PRESENTATION_DURATION
+		CardColor.ColorType.BLACK:
+			return CardSlotUI.BLACK_DRAW_PRESENTATION_DURATION
+	return base_duration
 
 
 # ── 全局拖拽事件 ──
@@ -406,11 +582,11 @@ func _update_refresh_buttons() -> void:
 	else:
 		_btn_free.text = Localization.t("ui.card_pool.refresh.free_regular", [free_remaining])
 
-	_btn_free.disabled = _is_refreshing or free_remaining <= 0
+	_btn_free.disabled = _is_refreshing or free_remaining <= 0 or _is_refresh_cooling_down(_free_cooldown)
 	if _btn_gold != null:
-		_btn_gold.disabled = _is_refreshing or GameManager.player_data.gold <= 0
+		_btn_gold.disabled = _is_refreshing or GameManager.player_data.gold <= 0 or _is_refresh_cooling_down(_gold_cooldown)
 	if _btn_gem != null:
-		_btn_gem.disabled = _is_refreshing or GameManager.player_data.gems < 5
+		_btn_gem.disabled = _is_refreshing or GameManager.player_data.gems < 5 or _is_refresh_cooling_down(_gem_cooldown)
 
 	if _free_cost_label != null:
 		_free_cost_label.text = Localization.t("ui.card_pool.refresh.cost_stamina", [1])
@@ -429,6 +605,35 @@ func _update_refresh_buttons() -> void:
 		_free_countdown_label.text = ""
 		_free_countdown_label.visible = false
 
+
+func _try_start_refresh_cooldown(cooldown: Control) -> bool:
+	if cooldown == null:
+		return true
+	var accepted: bool = cooldown.try_start()
+	_update_refresh_buttons()
+	if accepted:
+		var timer := get_tree().create_timer(cooldown.duration_seconds)
+		timer.timeout.connect(_update_refresh_buttons)
+	return accepted
+
+
+func _is_refresh_cooling_down(cooldown: Control) -> bool:
+	return cooldown != null and cooldown.is_cooling_down()
+
+
+func _attach_action_cooldown(button: Button) -> Control:
+	var existing := button.get_node_or_null("AssetActionCooldown") as Control
+	if existing != null:
+		return existing
+	var cooldown := AssetActionCooldownScript.new() as Control
+	cooldown.name = "AssetActionCooldown"
+	cooldown.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cooldown.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cooldown.z_index = 128
+	button.add_child(cooldown)
+	return cooldown
+
+
 func _get_gold_refresh_cost() -> int:
 	return maxi(1, int(GameManager.player_data.gold * 0.01))
 
@@ -445,7 +650,7 @@ func _auto_warm_next_refresh_roll() -> void:
 		return
 	if _is_refreshing:
 		return
-	if CardPoolSystem.has_pending_confirm():
+	if CardPoolSystem.has_pending_confirm() or ApiClient.has_pending_asset_requests():
 		return
 	var refresh_type := _preferred_refresh_type_for_warm()
 	if refresh_type == "":

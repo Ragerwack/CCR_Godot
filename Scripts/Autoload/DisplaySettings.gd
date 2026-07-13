@@ -125,7 +125,12 @@ func _has_steam_runtime_hint() -> bool:
 
 func _aspect_label(size: Vector2i) -> String:
 	var divisor := _gcd(size.x, size.y)
-	return "%d:%d" % [size.x / divisor, size.y / divisor]
+	var width_ratio := size.x / divisor
+	var height_ratio := size.y / divisor
+	# 16:10 是玩家更熟悉的显示器宽高比写法，避免把等价的 8:5 误解为另一种规格。
+	if width_ratio == 8 and height_ratio == 5:
+		return "16:10"
+	return "%d:%d" % [width_ratio, height_ratio]
 
 func _gcd(a: int, b: int) -> int:
 	var x := absi(a)

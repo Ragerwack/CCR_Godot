@@ -16,6 +16,11 @@ var _gold_unlock_cost_label: Label = null
 var _gem_unlock_btn: Button = null
 var _gem_unlock_cost_label: Label = null
 var _unlock_buttons_busy: bool = false
+var _gold_unlock_cooldown: Control = null
+var _gem_unlock_cooldown: Control = null
+var _action_panel: VBoxContainer = null
+var _side_button_width: float = 110.0
+var _side_button_height: float = 36.0
 
 # ── 选中合成相关 ──
 var _selected_slots: Array[int] = []     # 单选槽位；保留数组形态便于复用现有高亮逻辑
@@ -28,6 +33,7 @@ const SELECT_BORDER_COLOR: Color = Color(1.0, 0.84, 0.0, 0.7)  # 金色
 const RELIC_VIEW_SCENE = preload("res://Scenes/UI/RelicView.tscn")
 const SynthesisAnimationOverlayScript = preload("res://Scripts/UI/SynthesisAnimationOverlay.gd")
 const AssetActionCooldownScript = preload("res://Scripts/UI/AssetActionCooldown.gd")
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
 const VAULT_COLUMNS: int = 8
 const MAX_VISIBLE_ROWS: int = 4
 const EXTRA_LOCKED_ROWS: int = 1
@@ -35,9 +41,17 @@ const VAULT_GRID_LEFT_MARGIN: float = 40.0
 const SLOT_SPACING: float = 8.0
 const UNLOCK_PANEL_WIDTH: float = 130.0
 const UNLOCK_PANEL_RIGHT_MARGIN: float = 10.0
+const BUTTON_LABEL_HEIGHT: float = 24.0
 var _nav_target_rect: Rect2 = Rect2()
 var _vault_synthesis_animation_running: bool = false
 var _synthesis_hidden_indices: Dictionary = {}
+
+func configure_side_button_metrics(button_width: float, button_height: float) -> void:
+	_side_button_width = maxf(70.0, button_width)
+	_side_button_height = maxf(28.0, button_height)
+	if is_node_ready():
+		_layout_right_actions()
+		_layout_slot_label()
 
 func _ready() -> void:
 	columns = VAULT_COLUMNS
@@ -62,10 +76,9 @@ func _load_from_server() -> void:
 func setup_ui() -> void:
 	# 槽位标签
 	var slot_label = Label.new()
-	slot_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	slot_label.position = Vector2(0, 16)
-	slot_label.size = Vector2(200, 25)
+	slot_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	slot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	slot_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	slot_label.text = Localization.t("ui.vault.slot_count", [GameManager.player_data.vault_cards.size(), slot_count])
 	slot_label.name = "SlotLabel"
 	add_child(slot_label)
@@ -83,26 +96,26 @@ func setup_ui() -> void:
 
 	# ── 合成按钮（初始隐藏） ──
 	_synthesize_btn = Button.new()
-	_synthesize_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	_synthesize_btn.offset_left = -120
-	_synthesize_btn.offset_right = -10
-	_synthesize_btn.offset_top = -46
-	_synthesize_btn.offset_bottom = -10
-	_synthesize_btn.custom_minimum_size = Vector2(110, 36)
+	_synthesize_btn.name = "VaultSynthesizeButton"
 	_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
 	_synthesize_btn.visible = true
 	_synthesize_btn.disabled = true
-	add_child(_synthesize_btn)
+	CCRVisualStyle.apply_relic_button(_synthesize_btn, "action_synthesize")
 	_synthesize_cooldown = _attach_action_cooldown(_synthesize_btn)
 	_synthesize_btn.pressed.connect(_on_synthesize_pressed)
 
 	_create_unlock_panel()
+	_action_panel.add_child(_synthesize_btn)
 	_create_slot_grid()
+	_layout_slot_label()
+	_layout_right_actions()
 	refresh_display()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		_layout_relic_preview()
+		_layout_slot_label()
+		_layout_right_actions()
 
 func _create_relic_preview() -> void:
 	_relic_preview = RELIC_VIEW_SCENE.instantiate() as RelicView
@@ -118,46 +131,77 @@ func _layout_relic_preview() -> void:
 	var viewport_size := size if size.x > 0.0 and size.y > 0.0 else get_viewport_rect().size
 	var preview_height := minf(450.0, maxf(280.0, viewport_size.y - 250.0))
 	var preview_width := preview_height * _relic_preview.get_aspect_ratio()
-	var right_edge := viewport_size.x - UNLOCK_PANEL_WIDTH - UNLOCK_PANEL_RIGHT_MARGIN - 10.0
+	var right_edge := _right_region_left_x() - 10.0
 	_relic_preview.size = Vector2(preview_width, preview_height)
 	_relic_preview.position = Vector2(right_edge - preview_width, maxf(80.0, (viewport_size.y - preview_height) * 0.5))
 
 func _create_unlock_panel() -> void:
-	var panel_width := UNLOCK_PANEL_WIDTH
-
-	var panel = VBoxContainer.new()
-	panel.name = "VaultUnlockPanel"
-	panel.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
-	panel.offset_left = -panel_width - UNLOCK_PANEL_RIGHT_MARGIN
-	panel.offset_right = -UNLOCK_PANEL_RIGHT_MARGIN
-	panel.offset_top = -72
-	panel.offset_bottom = 72
-	panel.add_theme_constant_override("separation", 8)
-	add_child(panel)
+	_action_panel = VBoxContainer.new()
+	_action_panel.name = "VaultActionPanel"
+	_action_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_action_panel.add_theme_constant_override("separation", 8)
+	add_child(_action_panel)
 
 	_gold_unlock_btn = Button.new()
-	_gold_unlock_btn.custom_minimum_size = Vector2(panel_width, 38)
+	_gold_unlock_btn.name = "VaultExpandGoldButton"
 	_gold_unlock_btn.text = Localization.t("ui.vault.unlock_gold")
 	_gold_unlock_btn.pressed.connect(func(): _on_unlock_slot_pressed("gold"))
-	panel.add_child(_gold_unlock_btn)
+	CCRVisualStyle.apply_relic_button(_gold_unlock_btn, "vault_expand_gold")
+	_action_panel.add_child(_gold_unlock_btn)
+	_gold_unlock_cooldown = _attach_action_cooldown(_gold_unlock_btn)
 
 	_gold_unlock_cost_label = Label.new()
-	_gold_unlock_cost_label.custom_minimum_size = Vector2(panel_width, 24)
 	_gold_unlock_cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_gold_unlock_cost_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	panel.add_child(_gold_unlock_cost_label)
+	_action_panel.add_child(_gold_unlock_cost_label)
 
 	_gem_unlock_btn = Button.new()
-	_gem_unlock_btn.custom_minimum_size = Vector2(panel_width, 38)
+	_gem_unlock_btn.name = "VaultExpandGemButton"
 	_gem_unlock_btn.text = Localization.t("ui.vault.unlock_gem")
 	_gem_unlock_btn.pressed.connect(func(): _on_unlock_slot_pressed("gem"))
-	panel.add_child(_gem_unlock_btn)
+	CCRVisualStyle.apply_relic_button(_gem_unlock_btn, "vault_expand_gem")
+	_action_panel.add_child(_gem_unlock_btn)
+	_gem_unlock_cooldown = _attach_action_cooldown(_gem_unlock_btn)
 
 	_gem_unlock_cost_label = Label.new()
-	_gem_unlock_cost_label.custom_minimum_size = Vector2(panel_width, 24)
 	_gem_unlock_cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_gem_unlock_cost_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	panel.add_child(_gem_unlock_cost_label)
+	_action_panel.add_child(_gem_unlock_cost_label)
+
+func _layout_slot_label() -> void:
+	var label := get_node_or_null("SlotLabel") as Label
+	if label == null:
+		return
+	var label_size := Vector2(maxf(_side_button_width, 120.0), 28.0)
+	label.size = label_size
+	label.custom_minimum_size = label_size
+	label.position = Vector2(_right_region_center_x() - label_size.x * 0.5, maxf(0.0, _grid_side_width() * 0.5 - label_size.y * 0.5))
+
+func _layout_right_actions() -> void:
+	if _action_panel == null:
+		return
+	var button_size := Vector2(_side_button_width, _side_button_height)
+	for button in [_synthesize_btn, _gold_unlock_btn, _gem_unlock_btn]:
+		var typed_button := button as Button
+		if typed_button != null:
+			typed_button.custom_minimum_size = button_size
+			typed_button.size = button_size
+			var icon_ratio := 2.0 / 3.0 if typed_button == _synthesize_btn else 0.5
+			CCRVisualStyle.configure_relic_button_metrics(typed_button, _side_button_height, icon_ratio)
+			typed_button.add_theme_font_size_override("font_size", _action_font_size())
+	for label in [_gold_unlock_cost_label, _gem_unlock_cost_label]:
+		var typed_label := label as Label
+		if typed_label != null:
+			typed_label.custom_minimum_size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
+	var child_count := _action_panel.get_child_count()
+	var content_height := _side_button_height * 3.0 + BUTTON_LABEL_HEIGHT * 2.0 + 8.0 * float(maxi(0, child_count - 1))
+	_action_panel.size = Vector2(_side_button_width, content_height)
+	_action_panel.position = Vector2(_right_region_center_x() - _side_button_width * 0.5, maxf(0.0, (size.y - content_height) * 0.5))
+
+func _action_font_size() -> int:
+	if _side_button_width < 120.0:
+		return 11 if Localization.locale == "en" else 12
+	return 14 if Localization.locale == "en" else 15
 
 func _create_slot_grid() -> void:
 	var slot_size = CardSlotUI.SLOT_SIZE
@@ -167,7 +211,7 @@ func _create_slot_grid() -> void:
 	var content_height = render_rows * slot_size.y + (render_rows - 1) * SLOT_SPACING
 	var viewport_height = visible_rows * slot_size.y + (visible_rows - 1) * SLOT_SPACING
 	var available_width = size.x if size.x > 0.0 else get_viewport_rect().size.x
-	var right_reserved = UNLOCK_PANEL_WIDTH + UNLOCK_PANEL_RIGHT_MARGIN + 10.0
+	var right_reserved = _right_region_width()
 	var start_x = _centered_grid_start_x(total_width)
 	if start_x + total_width + right_reserved > available_width:
 		start_x = maxf(VAULT_GRID_LEFT_MARGIN, available_width - total_width - right_reserved)
@@ -210,6 +254,26 @@ func _centered_grid_start_x(total_width: float) -> float:
 	var centered_global_left := maxf(0.0, (viewport_width - total_width) * 0.5)
 	var parent_global_x := global_position.x if is_inside_tree() else 0.0
 	return maxf(0.0, centered_global_left - parent_global_x)
+
+func _grid_width() -> float:
+	return VAULT_COLUMNS * CardSlotUI.SLOT_SIZE.x + (VAULT_COLUMNS - 1) * SLOT_SPACING
+
+func _grid_side_width() -> float:
+	var viewport_width := get_viewport_rect().size.x
+	return maxf(0.0, (viewport_width - _grid_width()) * 0.5)
+
+func _right_region_left_x() -> float:
+	var parent_global_x := global_position.x if is_inside_tree() else 0.0
+	var grid_global_left := _grid_side_width()
+	return grid_global_left + _grid_width() - parent_global_x
+
+func _right_region_width() -> float:
+	var viewport_width := get_viewport_rect().size.x
+	var parent_global_x := global_position.x if is_inside_tree() else 0.0
+	return maxf(0.0, viewport_width - parent_global_x - _right_region_left_x())
+
+func _right_region_center_x() -> float:
+	return _right_region_left_x() + _right_region_width() * 0.5
 
 func _on_player_data_changed() -> void:
 	refresh_display()
@@ -355,6 +419,7 @@ func refresh_display() -> void:
 
 		# 恢复选中高亮
 		_update_slot_selection_visual(i)
+		slots[i].refresh_card_title_text_color()
 
 	var label = get_node_or_null("SlotLabel") as Label
 	if label != null:
@@ -374,9 +439,9 @@ func _update_unlock_buttons() -> void:
 	var has_quote := not quote.is_empty()
 
 	if _gold_unlock_btn != null:
-		_gold_unlock_btn.disabled = _unlock_buttons_busy
+		_gold_unlock_btn.disabled = _unlock_buttons_busy or _is_unlock_cooling_down(_gold_unlock_cooldown)
 	if _gem_unlock_btn != null:
-		_gem_unlock_btn.disabled = _unlock_buttons_busy
+		_gem_unlock_btn.disabled = _unlock_buttons_busy or _is_unlock_cooling_down(_gem_unlock_cooldown)
 	if _gold_unlock_cost_label != null:
 		_gold_unlock_cost_label.text = Localization.t("ui.vault.unlock_gold_cost", [gold_cost]) if has_quote else Localization.t("ui.vault.unlock_cost_loading")
 	if _gem_unlock_cost_label != null:
@@ -384,6 +449,9 @@ func _update_unlock_buttons() -> void:
 
 func _on_unlock_slot_pressed(currency: String) -> void:
 	if _unlock_buttons_busy:
+		return
+	var cooldown := _gold_unlock_cooldown if currency == "gold" else _gem_unlock_cooldown
+	if not _try_start_unlock_cooldown(cooldown):
 		return
 	_unlock_buttons_busy = true
 	_update_unlock_buttons()
@@ -403,6 +471,21 @@ func _on_unlock_slot_pressed(currency: String) -> void:
 	_unlock_buttons_busy = false
 	if is_inside_tree():
 		refresh_display()
+
+
+func _try_start_unlock_cooldown(cooldown: Control) -> bool:
+	if cooldown == null:
+		return true
+	var accepted: bool = cooldown.try_start()
+	_update_unlock_buttons()
+	if accepted:
+		var timer := get_tree().create_timer(cooldown.duration_seconds)
+		timer.timeout.connect(_update_unlock_buttons)
+	return accepted
+
+
+func _is_unlock_cooling_down(cooldown: Control) -> bool:
+	return cooldown != null and cooldown.is_cooling_down()
 
 func _on_slot_clicked(index: int) -> void:
 	if index >= slots.size():
@@ -448,6 +531,7 @@ func _update_slot_selection_visual(slot_idx: int) -> void:
 		node.queue_free()
 
 	slot.set_selected(is_selected)
+	slot.refresh_card_title_text_color()
 
 func _clear_selection() -> void:
 	_selected_slots.clear()

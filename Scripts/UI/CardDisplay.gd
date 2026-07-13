@@ -40,12 +40,17 @@ var _color_bar: ColorRect
 var _card_name_region: Control
 var _series_tag_region: Control
 var _series_tag_label: Label
+var _rarity_shine_overlay: ColorRect
+var _rarity_shine_material: ShaderMaterial
+var _blue_draw_back: TextureRect
+var _active_title_text_color: Color = CARD_TEXT_COLOR
 var _hovered: bool = false
 var _dragging_preview: bool = false
 var _drop_targeted: bool = false
 var _drag_anchor_ratio: Vector2 = Vector2(0.5, 0.5)
 var _has_drag_anchor: bool = false
 var _scale_tween: Tween = null
+var _rarity_shine_tween: Tween = null
 var hover_uses_slot_bounds: bool = true
 var hover_scale_enabled: bool = true
 
@@ -54,6 +59,7 @@ static var _shared_color_image_map: Dictionary = {}
 static var _texture_cache: Dictionary = {}
 static var _art_texture_cache: Dictionary = {}
 static var _rounded_mask_shader: Shader = null
+static var _green_draw_shine_shader: Shader = null
 const HOVER_SCALE: float = 2.0
 const DROP_TARGET_SCALE: float = 1.08
 const HOVER_TRANSITION_DURATION: float = 0.3
@@ -71,6 +77,9 @@ const CARD_TEXT_COLOR_RED: Color = Color(1.000000, 0.858824, 0.592157, 1.0)
 const INFO_PANEL_BORDER_COLOR: Color = Color(0.850980, 0.866667, 0.898039, 1.0)
 const INFO_PANEL_BG_COLOR: Color = Color(0.972549, 0.976471, 0.984314, 1.0)
 const CARD_CORNER_RADIUS_RATIO: float = 1.0 / 13.0
+const GREEN_DRAW_SHINE_DURATION: float = 0.50
+const BLUE_DRAW_FLIP_DURATION: float = 0.60
+const BLUE_DRAW_SHINE_DURATION: float = GREEN_DRAW_SHINE_DURATION
 const ART_CORNER_RADIUS_RATIO: float = 0.1
 const ART_RECT_RATIO: Rect2 = Rect2(0.06, 0.09, 0.88, 0.56)
 const DECK_NAME_RECT_RATIO: Rect2 = Rect2(0.10, 0.01, 0.80, 0.07)
@@ -100,6 +109,33 @@ void fragment() {
 	float edge = max(fwidth(signed_distance), 0.0005);
 	source.a *= 1.0 - smoothstep(-edge, edge, signed_distance);
 	COLOR = source;
+}
+"""
+const GREEN_DRAW_SHINE_SHADER: String = """
+shader_type canvas_item;
+
+uniform float progress = -0.20;
+uniform float aspect_ratio = 0.718;
+uniform float radius_ratio = 0.0769230769;
+uniform vec4 shine_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
+
+void fragment() {
+	vec2 point = vec2(UV.x - 0.5, (UV.y - 0.5) / aspect_ratio);
+	vec2 half_size = vec2(0.5, 0.5 / aspect_ratio);
+	vec2 distance_to_corner = abs(point) - half_size + vec2(radius_ratio);
+	float signed_distance = length(max(distance_to_corner, vec2(0.0)))
+		+ min(max(distance_to_corner.x, distance_to_corner.y), 0.0)
+		- radius_ratio;
+	float rounded_edge = max(fwidth(signed_distance), 0.0005);
+	float rounded_alpha = 1.0 - smoothstep(-rounded_edge, rounded_edge, signed_distance);
+
+	// 光带沿左上到右下方向移动；颜色由抽卡稀有度传入。
+	float diagonal = (UV.x + UV.y) * 0.5;
+	float distance_to_band = abs(diagonal - progress);
+	float soft_band = 1.0 - smoothstep(0.025, 0.125, distance_to_band);
+	float bright_core = 1.0 - smoothstep(0.0, 0.035, distance_to_band);
+	float alpha = (soft_band * 0.28 + bright_core * 0.16) * rounded_alpha;
+	COLOR = vec4(shine_color.rgb, alpha * shine_color.a);
 }
 """
 
@@ -140,6 +176,17 @@ func setup_ui() -> void:
 	_color_border.material = _new_rounded_mask_material(CARD_SIZE)
 	_color_border.visible = show_color_border
 	add_child(_color_border)
+
+	_blue_draw_back = TextureRect.new()
+	_blue_draw_back.name = "BlueDrawCardBack"
+	_blue_draw_back.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_blue_draw_back.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	_blue_draw_back.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_blue_draw_back.material = _new_rounded_mask_material(CARD_SIZE)
+	_blue_draw_back.texture = _color_image_map.get(CardColor.ColorType.BLUE)
+	_blue_draw_back.visible = false
+	_blue_draw_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_blue_draw_back)
 
 	_art_shadow = CCRVisualStyle.make_shadow_panel("ArtCenteredShadow", int(roundf(CARD_SIZE.x * ART_RECT_RATIO.size.x * ART_CORNER_RADIUS_RATIO)), 8, Vector2.ZERO, Color(0, 0, 0, 0.34))
 	_art_shadow.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -254,6 +301,16 @@ func setup_ui() -> void:
 	_color_bar.visible = false
 	add_child(_color_bar)
 
+	_rarity_shine_overlay = ColorRect.new()
+	_rarity_shine_overlay.name = "GreenDrawShine"
+	_rarity_shine_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_rarity_shine_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_rarity_shine_overlay.color = Color.WHITE
+	_rarity_shine_material = _new_green_draw_shine_material(size if size.x > 0.0 and size.y > 0.0 else CARD_SIZE)
+	_rarity_shine_overlay.material = _rarity_shine_material
+	_rarity_shine_overlay.visible = false
+	add_child(_rarity_shine_overlay)
+
 	mouse_filter = MOUSE_FILTER_STOP
 	_apply_card_layout()
 
@@ -275,13 +332,30 @@ static func _new_rounded_mask_material(card_size: Vector2, corner_radius_ratio: 
 	material.set_shader_parameter("radius_ratio", corner_radius_ratio)
 	return material
 
+static func _new_green_draw_shine_material(card_size: Vector2) -> ShaderMaterial:
+	if _green_draw_shine_shader == null:
+		_green_draw_shine_shader = Shader.new()
+		_green_draw_shine_shader.code = GREEN_DRAW_SHINE_SHADER
+	var material := ShaderMaterial.new()
+	material.shader = _green_draw_shine_shader
+	material.set_shader_parameter("progress", -0.20)
+	material.set_shader_parameter("shine_color", Color.WHITE)
+	material.set_shader_parameter("aspect_ratio", card_size.x / maxf(card_size.y, 1.0))
+	material.set_shader_parameter("radius_ratio", CARD_CORNER_RADIUS_RATIO)
+	return material
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		pivot_offset = size * 0.5
 		_apply_card_layout()
+		_update_green_draw_shine_mask()
+		refresh_title_text_color()
+	elif what == NOTIFICATION_THEME_CHANGED:
+		refresh_title_text_color()
 	elif what == NOTIFICATION_DRAG_END:
 		_dragging_preview = false
 		_apply_hover_transform()
+		refresh_title_text_color()
 		# 通知父级 CardSlotUI 清理拖出遮罩
 		card_drag_ended.emit(card, card_index)
 		# Godot 原生拖拽取消时（未落在有效 drop target），_drop_data 不会被调用
@@ -489,6 +563,7 @@ func _apply_card_layout() -> void:
 	_center_label_in_region(_deck_name_label, _deck_name_region)
 	_center_label_in_region(_card_name_label, _card_name_region)
 	_center_label_in_region(_series_tag_label, _series_tag_region)
+	refresh_title_text_color()
 
 func _load_color_images() -> void:
 	if not _shared_color_image_map.is_empty():
@@ -524,11 +599,15 @@ func _apply_color_border(ct: CardColor.ColorType) -> void:
 		_fallback_color_rect.color = _get_color_by_card_color(ct)
 
 func set_card(c: CardInfo, idx: int = -1) -> void:
+	stop_draw_rarity_effect()
+	stop_blue_draw_flip()
 	card = c
 	card_index = idx
 	_update_display()
 
 func clear() -> void:
+	stop_draw_rarity_effect()
+	stop_blue_draw_flip()
 	card = null
 	card_index = -1
 	_hovered = false
@@ -542,6 +621,91 @@ func clear() -> void:
 	_art_image.texture = null
 	_color_bar.color = Color(0.2, 0.2, 0.25, 1.0)
 	_apply_title_text_color(CardColor.ColorType.WHITE)
+
+func play_green_draw_shine(duration: float = GREEN_DRAW_SHINE_DURATION) -> void:
+	if card != null and card.color == CardColor.ColorType.GREEN:
+		_play_draw_shine(Color.WHITE, duration)
+
+func play_blue_draw_shine(duration: float = BLUE_DRAW_SHINE_DURATION) -> void:
+	if card != null and card.color == CardColor.ColorType.BLUE:
+		_play_draw_shine(Color(0.31, 0.72, 1.0, 1.0), duration)
+
+func _play_draw_shine(shine_color: Color, duration: float) -> void:
+	stop_draw_rarity_effect()
+	if _rarity_shine_overlay == null or _rarity_shine_material == null or get_tree() == null:
+		return
+	_rarity_shine_overlay.visible = true
+	_rarity_shine_material.set_shader_parameter("progress", -0.20)
+	_rarity_shine_material.set_shader_parameter("shine_color", shine_color)
+	_rarity_shine_tween = create_tween()
+	_rarity_shine_tween.tween_method(_set_green_draw_shine_progress, -0.20, 1.20, maxf(0.01, duration)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_rarity_shine_tween.finished.connect(func():
+		_rarity_shine_tween = null
+		if _rarity_shine_overlay != null:
+			_rarity_shine_overlay.visible = false
+	)
+
+func stop_draw_rarity_effect() -> void:
+	if _rarity_shine_tween != null and _rarity_shine_tween.is_valid():
+		_rarity_shine_tween.kill()
+	_rarity_shine_tween = null
+	if _rarity_shine_material != null:
+		_rarity_shine_material.set_shader_parameter("progress", -0.20)
+	if _rarity_shine_overlay != null:
+		_rarity_shine_overlay.visible = false
+
+func is_green_draw_shine_playing() -> bool:
+	return _rarity_shine_overlay != null and _rarity_shine_overlay.visible
+
+func _set_green_draw_shine_progress(value: float) -> void:
+	if _rarity_shine_material != null:
+		_rarity_shine_material.set_shader_parameter("progress", value)
+
+func _update_green_draw_shine_mask() -> void:
+	if _rarity_shine_material == null:
+		return
+	var current_size := size if size.x > 0.0 and size.y > 0.0 else CARD_SIZE
+	_rarity_shine_material.set_shader_parameter("aspect_ratio", current_size.x / maxf(current_size.y, 1.0))
+
+## 蓝卡浮空翻转：背面只显示蓝色卡牌背景图，不显示插图或文字。
+func begin_blue_draw_flip() -> void:
+	if card == null or card.color != CardColor.ColorType.BLUE:
+		return
+	_set_blue_draw_back_visible(false)
+	set_blue_draw_flip_progress(0.0)
+
+func set_blue_draw_flip_progress(progress: float) -> void:
+	if card == null or card.color != CardColor.ColorType.BLUE:
+		return
+	var clamped_progress := clampf(progress, 0.0, 1.0)
+	_set_blue_draw_back_visible(clamped_progress >= 0.25 and clamped_progress < 0.75)
+	var horizontal_scale := maxf(0.025, absf(cos(clamped_progress * TAU)))
+	scale = Vector2(horizontal_scale, 1.0)
+
+func finish_blue_draw_flip() -> void:
+	_set_blue_draw_back_visible(false)
+	scale = Vector2.ONE
+
+func stop_blue_draw_flip() -> void:
+	finish_blue_draw_flip()
+
+func is_blue_draw_back_visible() -> bool:
+	return _blue_draw_back != null and _blue_draw_back.visible
+
+func _set_blue_draw_back_visible(visible: bool) -> void:
+	if _blue_draw_back == null:
+		return
+	_blue_draw_back.visible = visible
+	var front_visible := not visible
+	if _color_border != null:
+		_color_border.visible = front_visible and show_color_border and card != null
+	if _fallback_color_rect != null:
+		_fallback_color_rect.visible = false
+	for node in [_art_shadow, _art_image, _deck_name_region, _number_badge, _card_name_region, _description_panel, _description_label, _series_tag_region, _color_bar]:
+		if node != null:
+			node.visible = front_visible
+	if visible and _rarity_shine_overlay != null:
+		_rarity_shine_overlay.visible = false
 
 func _update_display() -> void:
 	if card == null:
@@ -711,10 +875,10 @@ func _get_title_text_color(c: CardColor.ColorType) -> Color:
 func _apply_title_text_color(c: CardColor.ColorType) -> void:
 	if _deck_name_label == null or _card_name_label == null or _series_tag_label == null:
 		return
-	var title_color := _get_title_text_color(c)
-	_deck_name_label.add_theme_color_override("font_color", title_color)
-	_card_name_label.add_theme_color_override("font_color", title_color)
-	_series_tag_label.add_theme_color_override("font_color", title_color)
+	_active_title_text_color = _get_title_text_color(c)
+	_deck_name_label.add_theme_color_override("font_color", _active_title_text_color)
+	_card_name_label.add_theme_color_override("font_color", _active_title_text_color)
+	_series_tag_label.add_theme_color_override("font_color", _active_title_text_color)
 
 func refresh_title_text_color() -> void:
 	if card == null:

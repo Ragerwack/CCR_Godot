@@ -27,8 +27,28 @@ func _ready() -> void:
 	if splash == null or splash.call("_selected_country_code") != "EARTH":
 		_fail("registration nationality does not default to EARTH")
 		return
+	var login_exit_button := splash.find_child("LoginExitButton", true, false) as Button
+	if login_exit_button == null or login_exit_button.text != "Exit Game":
+		_fail("login exit button is missing or not localized")
+		return
 
 	main.call("_set_game_ui_visible", true)
+	var player_info := main.get("_player_info") as PlayerInfoUI
+	if player_info == null:
+		_fail("player info is missing")
+		return
+	var avatar_host := player_info.find_child("AvatarHost", true, false) as ColorRect
+	var avatar_image := player_info.find_child("AvatarImage", true, false) as TextureRect
+	var expected_avatar_height := float(main.call("_target_player_avatar_height"))
+	if avatar_host == null or avatar_image == null:
+		_fail("avatar nodes are missing")
+		return
+	if avatar_host.color.a > 0.01:
+		_fail("avatar host still has visible color frame")
+		return
+	if absf(avatar_host.size.y - expected_avatar_height) > 1.0 or absf(avatar_image.size.y - expected_avatar_height) > 1.0:
+		_fail("avatar size was not doubled")
+		return
 	nav_buttons.nav_button_clicked.emit("settings")
 	await get_tree().process_frame
 	if not _has_text(center_area, "Settings") or not _has_text(center_area, "Resolution") or not _has_resolution_option(center_area) or not _has_window_mode_option(center_area):
@@ -112,6 +132,8 @@ func _has_resolution_option(root: Node) -> bool:
 	for i in range(resolution_select.item_count):
 		var resolution: Vector2i = resolution_select.get_item_metadata(i)
 		if not DisplaySettings.is_supported_resolution(resolution):
+			return false
+		if resolution.y * 8 == resolution.x * 5 and resolution_select.get_item_text(i).find("(16:10)") < 0:
 			return false
 	return true
 

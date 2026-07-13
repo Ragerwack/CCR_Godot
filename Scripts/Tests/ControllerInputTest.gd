@@ -13,6 +13,11 @@ func _ready() -> void:
 		return _fail("primary_binding_missing")
 	if ControllerInput.get_binding(ControllerInput.ACTION_DRAW_FREE) == "":
 		return _fail("draw_free_binding_missing")
+	var expected_hand_page_binding := "axis_any:%d" % JOY_AXIS_RIGHT_Y
+	if ControllerInput.get_binding(ControllerInput.ACTION_HAND_PAGE) != expected_hand_page_binding:
+		return _fail("hand_page_default_binding_wrong")
+	if InputMap.action_get_events(ControllerInput.ACTION_HAND_PAGE).size() != 2:
+		return _fail("hand_page_axis_events_missing")
 	var cursor_texture := ControllerInput.call("_load_cursor_texture") as Texture2D
 	if cursor_texture == null:
 		return _fail("cursor_texture_missing")
@@ -28,6 +33,8 @@ func _ready() -> void:
 	var options := ControllerInput.get_binding_options()
 	if options.is_empty():
 		return _fail("binding_options_missing")
+	if not options.any(func(option): return str(option.get("id", "")) == expected_hand_page_binding):
+		return _fail("hand_page_binding_option_missing")
 	var replacement := str(options[0].get("id", ""))
 	ControllerInput.set_binding(ControllerInput.ACTION_DRAW_FREE, replacement)
 	if ControllerInput.get_binding(ControllerInput.ACTION_DRAW_FREE) != replacement:

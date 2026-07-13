@@ -16,6 +16,10 @@ const EXP_BAR_RATIO: float = 0.024   # 接近 MMORPG 底部细经验条的屏占
 const EXP_BAR_MIN_HEIGHT: int = 16
 const EXP_BAR_MAX_HEIGHT: int = 24
 const CARD_SLOT_HEIGHT_RATIO: float = 0.21
+const CARD_GRID_COLUMNS: int = 8
+const CARD_GRID_SPACING: float = 8.0
+const PLAYER_INFO_FONT_SIZE: int = 18
+const PLAYER_INFO_VERTICAL_PADDING: float = 70.0
 
 var _player_info: PlayerInfoUI
 var _currency: CurrencyUI
@@ -374,8 +378,11 @@ func _shutdown_session_before_quit() -> void:
 
 func setup_ui() -> void:
 	var vp_size = get_viewport_rect().size
-	var exp_bar_h = clampi(int(vp_size.y * EXP_BAR_RATIO), EXP_BAR_MIN_HEIGHT, EXP_BAR_MAX_HEIGHT)
+	var exp_bar_h = _exp_bar_height(vp_size)
 	_configure_card_slot_size(vp_size)
+	var left_region := _left_region_width(vp_size)
+	var avatar_height := _target_player_avatar_height(vp_size)
+	var side_button_width := _side_button_width(vp_size)
 
 	_main_background = TextureRect.new()
 	_main_background.name = "MainBackgroundImage"
@@ -389,37 +396,38 @@ func setup_ui() -> void:
 	# ── 顶部栏：PlayerInfo（左上）+ Currency（右上贴边） ──
 	_player_info = PlayerInfoUI.new()
 	_player_info.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_player_info.position = Vector2(10, 10)
-	_player_info.size = Vector2(LEFT_PANEL_WIDTH, 130)
-	_player_info.configure_avatar_size(_target_player_avatar_height())
+	_player_info.position = Vector2.ZERO
+	_player_info.size = _player_info_size(vp_size)
+	_player_info.configure_text_font_size(PLAYER_INFO_FONT_SIZE)
+	_player_info.configure_avatar_size(avatar_height)
 	add_child(_player_info)
 
 	_currency = CurrencyUI.new()
 	_currency.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	# 体力、金币、宝石并排显示，位于菜单按钮左侧。
-	_currency.offset_left = -285
-	_currency.offset_right = -55   # -(50 菜单宽 + 5 间距)
-	_currency.offset_top = 10
-	_currency.offset_bottom = 46   # 10 + 36 高（单行）
+	# 体力、金币、宝石按导航按钮高度响应式缩放，文字仍由客户端实时绘制。
+	_currency.configure_icon_size(_currency_icon_size(vp_size))
 	add_child(_currency)
+	_apply_currency_layout(vp_size)
 
 	# ── 左侧导航 ──
 	_nav_buttons = NavButtons.new()
 	_nav_buttons.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	# 导航栏占满左侧栏从 TOP_BAR_HEIGHT 到底部经验条上方，内部按钮垂直居中
 	_nav_buttons.offset_left = 0
-	_nav_buttons.offset_right = LEFT_PANEL_WIDTH
-	_nav_buttons.offset_top = TOP_BAR_HEIGHT
+	_nav_buttons.offset_right = left_region
+	_nav_buttons.offset_top = _nav_region_top(vp_size)
 	_nav_buttons.offset_bottom = vp_size.y - exp_bar_h
+	_nav_buttons.configure_button_metrics(side_button_width, _nav_button_height(vp_size))
 	add_child(_nav_buttons)
 
-	# ── 中央内容区（无右侧面板，全宽） ──
+	# ── 内容区：全屏宽度，具体页面按卡槽网格边界避让左右区域 ──
 	_center_area = Control.new()
 	_center_area.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_center_area.position = Vector2(LEFT_PANEL_WIDTH, 0)
-	_center_area.size = Vector2(vp_size.x - LEFT_PANEL_WIDTH, vp_size.y - exp_bar_h)
+	_center_area.position = Vector2.ZERO
+	_center_area.size = Vector2(vp_size.x, vp_size.y - exp_bar_h)
 	_center_area.name = "CenterArea"
 	add_child(_center_area)
+	# 内容区是全屏 Control，必须压在左侧导航下方，否则透明区域会截获导航按钮点击。
+	move_child(_center_area, 1)
 
 	# ── 底部经验条 ──
 	_exp_bar_ui = ExpBarUI.new()
@@ -451,20 +459,26 @@ func _refresh_layout_after_resize() -> void:
 
 func _apply_shell_layout() -> void:
 	var vp_size := get_viewport_rect().size
-	var exp_bar_h := clampi(int(vp_size.y * EXP_BAR_RATIO), EXP_BAR_MIN_HEIGHT, EXP_BAR_MAX_HEIGHT)
+	var exp_bar_h := _exp_bar_height(vp_size)
 	_configure_card_slot_size(vp_size)
+	var left_region := _left_region_width(vp_size)
+	var avatar_height := _target_player_avatar_height(vp_size)
 	if is_instance_valid(_nav_buttons):
 		_nav_buttons.offset_left = 0
-		_nav_buttons.offset_right = LEFT_PANEL_WIDTH
-		_nav_buttons.offset_top = TOP_BAR_HEIGHT
+		_nav_buttons.offset_right = left_region
+		_nav_buttons.offset_top = _nav_region_top(vp_size)
 		_nav_buttons.offset_bottom = vp_size.y - exp_bar_h
+		_nav_buttons.configure_button_metrics(_side_button_width(vp_size), _nav_button_height(vp_size))
 	if is_instance_valid(_center_area):
-		_center_area.position = Vector2(LEFT_PANEL_WIDTH, 0)
-		_center_area.size = Vector2(vp_size.x - LEFT_PANEL_WIDTH, vp_size.y - exp_bar_h)
+		_center_area.position = Vector2.ZERO
+		_center_area.size = Vector2(vp_size.x, vp_size.y - exp_bar_h)
 	if is_instance_valid(_exp_bar_ui):
 		_exp_bar_ui.offset_top = -exp_bar_h
 	if is_instance_valid(_player_info):
-		_player_info.configure_avatar_size(_target_player_avatar_height())
+		_player_info.size = _player_info_size(vp_size)
+		_player_info.configure_text_font_size(PLAYER_INFO_FONT_SIZE)
+		_player_info.configure_avatar_size(avatar_height)
+	_apply_currency_layout(vp_size)
 
 func _rebuild_current_view() -> void:
 	match _current_view_id:
@@ -479,14 +493,77 @@ func _rebuild_current_view() -> void:
 func _configure_card_slot_size(vp_size: Vector2) -> void:
 	var aspect := CardSlotUI.SLOT_SIZE.x / CardSlotUI.SLOT_SIZE.y
 	var slot_h_by_height := maxf(1.0, vp_size.y * CARD_SLOT_HEIGHT_RATIO)
-	var available_width := maxf(320.0, vp_size.x - LEFT_PANEL_WIDTH - 64.0)
+	var available_width := maxf(320.0, vp_size.x - 64.0)
 	var max_slot_width := maxf(1.0, (available_width - 7.0 * 8.0) / 8.0)
 	var slot_h := minf(slot_h_by_height, max_slot_width / aspect)
 	var slot_size := Vector2(roundf(slot_h * aspect), roundf(slot_h))
 	CardSlotUI.configure_slot_size(slot_size)
 
-func _target_player_avatar_height() -> float:
-	return roundf(CardSlotUI.SLOT_SIZE.y * CardDisplay.ART_RECT_RATIO.size.y * 0.90)
+func _exp_bar_height(vp_size: Vector2) -> int:
+	return clampi(int(vp_size.y * EXP_BAR_RATIO), EXP_BAR_MIN_HEIGHT, EXP_BAR_MAX_HEIGHT)
+
+func _card_grid_width() -> float:
+	return CARD_GRID_COLUMNS * CardSlotUI.SLOT_SIZE.x + (CARD_GRID_COLUMNS - 1) * CARD_GRID_SPACING
+
+func _left_region_width(vp_size: Vector2 = Vector2.ZERO) -> float:
+	var size_for_calc := vp_size if vp_size.x > 0.0 else get_viewport_rect().size
+	return maxf(0.0, (size_for_calc.x - _card_grid_width()) * 0.5)
+
+func _content_region_rect(vp_size: Vector2 = Vector2.ZERO) -> Rect2:
+	var size_for_calc := vp_size if vp_size.x > 0.0 else get_viewport_rect().size
+	var left := _left_region_width(size_for_calc)
+	return Rect2(Vector2(left, 0.0), Vector2(maxf(0.0, size_for_calc.x - left), maxf(0.0, size_for_calc.y - _exp_bar_height(size_for_calc))))
+
+func _side_button_width(vp_size: Vector2 = Vector2.ZERO) -> float:
+	return roundf(_left_region_width(vp_size) * 0.8)
+
+func _target_player_avatar_height(vp_size: Vector2 = Vector2.ZERO) -> float:
+	var desired := roundf(CardSlotUI.SLOT_SIZE.y * CardDisplay.ART_RECT_RATIO.size.y * 1.80)
+	var side_width := _left_region_width(vp_size)
+	var max_fit := maxf(52.0, side_width * 0.78)
+	return roundf(clampf(desired, 52.0, max_fit))
+
+func _nav_button_height(vp_size: Vector2 = Vector2.ZERO) -> float:
+	return roundf(_target_player_avatar_height(vp_size) * 0.25)
+
+func _right_button_height(vp_size: Vector2 = Vector2.ZERO) -> float:
+	return roundf(_target_player_avatar_height(vp_size) / 3.0)
+
+func _currency_icon_size(vp_size: Vector2 = Vector2.ZERO) -> float:
+	return roundf(_nav_button_height(vp_size) * 2.0 / 3.0)
+
+func _apply_currency_layout(vp_size: Vector2 = Vector2.ZERO) -> void:
+	if not is_instance_valid(_currency):
+		return
+	var icon_size := _currency_icon_size(vp_size)
+	var row_width := maxf(230.0, icon_size * 3.0 + 170.0)
+	var row_height := maxf(36.0, icon_size)
+	_currency.configure_icon_size(icon_size)
+	_currency.offset_left = -55.0 - row_width
+	_currency.offset_right = -55.0
+	_currency.offset_top = 10.0
+	_currency.offset_bottom = 10.0 + row_height
+
+func _nav_region_top(vp_size: Vector2 = Vector2.ZERO) -> float:
+	var avatar_height := _target_player_avatar_height(vp_size)
+	var side_width := _left_region_width(vp_size)
+	var avatar_top := maxf(4.0, (side_width - avatar_height) * 0.5)
+	return avatar_top + avatar_height + PLAYER_INFO_VERTICAL_PADDING
+
+func _player_info_size(vp_size: Vector2 = Vector2.ZERO) -> Vector2:
+	var side_width := _left_region_width(vp_size)
+	var avatar_height := _target_player_avatar_height(vp_size)
+	var avatar_top := maxf(4.0, (side_width - avatar_height) * 0.5)
+	return Vector2(side_width, avatar_top + avatar_height + PLAYER_INFO_VERTICAL_PADDING)
+
+func _make_content_region_host(node_name: String) -> Control:
+	var rect := _content_region_rect(get_viewport_rect().size)
+	var host := Control.new()
+	host.name = node_name
+	host.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	host.position = rect.position
+	host.size = rect.size
+	return host
 
 # ══════════════════════════════════════════════════
 #  导航
@@ -525,9 +602,11 @@ func _show_card_pool() -> void:
 	_clear_center()
 
 	_card_pool_ui = CardPoolUI.new()
+	_card_pool_ui.configure_side_button_metrics(_side_button_width(), _right_button_height())
 	_card_pool_ui.card_double_clicked.connect(_on_card_pool_double_click)
 
 	_hand_area_ui = HandAreaUI.new()
+	_hand_area_ui.configure_side_button_metrics(_side_button_width(), _right_button_height())
 	# 连接手牌区操作信号
 	_hand_area_ui.synthesize_requested.connect(_on_hand_synthesize)
 	_hand_area_ui.discard_requested.connect(_on_hand_discard)
@@ -565,9 +644,12 @@ func _show_today_decks() -> void:
 	_current_view_id = "today_decks"
 	_nav_buttons.select_by_id("today_decks")
 	_clear_center()
+	var host := _make_content_region_host("TodayDecksContentRegion")
+	_center_area.add_child(host)
 	_today_decks_ui = TodayDecksUIScript.new()
+	_today_decks_ui.configure_layout(_exp_bar_height(get_viewport_rect().size))
 	_today_decks_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_center_area.add_child(_today_decks_ui)
+	host.add_child(_today_decks_ui)
 	_apply_game_text_color(_center_area)
 
 func _sync_before_leaving_card_pool() -> Dictionary:
@@ -579,20 +661,26 @@ func _show_vault() -> void:
 	_current_view_id = "vault"
 	_nav_buttons.select_by_id("vault")
 	_clear_center()
+	var host := _make_content_region_host("VaultContentRegion")
+	_center_area.add_child(host)
 	_vault_ui = VaultUI.new()
+	_vault_ui.configure_side_button_metrics(_side_button_width(), _right_button_height())
 	_vault_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	if is_instance_valid(_nav_buttons):
 		_vault_ui.set_synthesis_nav_target_rect(_nav_buttons.get_button_global_rect("deck_panel"))
-	_center_area.add_child(_vault_ui)
+	host.add_child(_vault_ui)
 	_apply_game_text_color(_center_area)
 
 func _show_deck_collection() -> void:
 	_current_view_id = "deck_panel"
 	_nav_buttons.select_by_id("deck_panel")
 	_clear_center()
+	var host := _make_content_region_host("MuseumContentRegion")
+	_center_area.add_child(host)
 	_deck_collection_ui = DeckCollectionUI.new()
+	_deck_collection_ui.configure_layout(_exp_bar_height(get_viewport_rect().size))
 	_deck_collection_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_center_area.add_child(_deck_collection_ui)
+	host.add_child(_deck_collection_ui)
 	_apply_game_text_color(_center_area)
 
 func _refresh_page_data_background(id: String) -> void:
@@ -694,6 +782,7 @@ func _build_menu_panel() -> Control:
 		"profile": _build_profile_settings_page(vbox)
 		_: _build_basic_settings_page(vbox)
 
+	_apply_settings_font_delta(panel, 2)
 	return panel
 
 func _select_settings_tab(tab_id: String) -> void:
@@ -846,6 +935,7 @@ func _build_profile_settings_page(vbox: VBoxContainer) -> void:
 	var region_select := OptionButton.new()
 	region_select.name = "RegionSelect"
 	region_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	region_select.custom_minimum_size = Vector2(0, 42)
 	var selected_region_index := 0
 	var region_index := 0
 	for entry in CountryCatalog.localized_entries(Localization.locale):
@@ -856,6 +946,7 @@ func _build_profile_settings_page(vbox: VBoxContainer) -> void:
 			selected_region_index = region_index
 		region_index += 1
 	region_select.select(selected_region_index)
+	_configure_region_popup_bounds(region_select)
 	region_row.add_child(region_select)
 	vbox.add_child(region_row)
 
@@ -869,6 +960,44 @@ func _build_profile_settings_page(vbox: VBoxContainer) -> void:
 		if region_code != GameManager.player_data.country:
 			_save_region(region_code, region_select, status_label)
 	)
+
+func _configure_region_popup_bounds(select: OptionButton) -> void:
+	var popup := select.get_popup()
+	if popup == null:
+		return
+	popup.max_size = Vector2i(0, int(get_viewport_rect().size.y * 0.9))
+	popup.about_to_popup.connect(func():
+		_clamp_region_popup_bounds.call_deferred(select)
+	)
+
+func _clamp_region_popup_bounds(select: OptionButton) -> void:
+	if select == null or not select.is_inside_tree():
+		return
+	var popup := select.get_popup()
+	if popup == null:
+		return
+	var select_rect := select.get_global_rect()
+	var viewport_height := get_viewport_rect().size.y
+	var min_y := int(maxf(0.0, select_rect.position.y - select_rect.size.y))
+	var max_bottom := int(viewport_height * 0.9)
+	var popup_position := popup.position
+	if popup_position.y < min_y:
+		popup_position.y = min_y
+	popup.position = popup_position
+	var max_height := maxi(int(select_rect.size.y), max_bottom - popup_position.y)
+	popup.max_size = Vector2i(0, max_height)
+	if popup.size.y > max_height:
+		popup.size = Vector2i(popup.size.x, max_height)
+
+func _apply_settings_font_delta(root: Node, delta: int) -> void:
+	for child in root.get_children():
+		if child is Label or child is Button or child is OptionButton:
+			var control := child as Control
+			var current := control.get_theme_font_size("font_size")
+			if current <= 0:
+				current = 16
+			control.add_theme_font_size_override("font_size", current + delta)
+		_apply_settings_font_delta(child, delta)
 
 func _show_avatar_picker() -> void:
 	var popup := PopupPanel.new()
@@ -953,6 +1082,8 @@ func _return_from_menu() -> void:
 
 func _on_locale_changed(_locale: String) -> void:
 	_nav_buttons.refresh_labels()
+	if is_instance_valid(_player_info):
+		_player_info.refresh()
 	if not _game_ui_active:
 		return
 	var localized_data_view := _current_view_id
@@ -1047,6 +1178,9 @@ func _on_controller_action_pressed(action_id: String) -> void:
 		ControllerInput.ACTION_NAV_NEXT:
 			if is_instance_valid(_nav_buttons):
 				_nav_buttons.select_next_enabled(1)
+		ControllerInput.ACTION_HAND_PAGE:
+			if _current_view_id == "card_pool" and is_instance_valid(_hand_area_ui):
+				_hand_area_ui.request_page_flip()
 		ControllerInput.ACTION_DRAW_FREE:
 			if is_instance_valid(_card_pool_ui):
 				_card_pool_ui.controller_refresh("free")
@@ -1385,10 +1519,15 @@ func _apply_hand_synthesis_result(result: Dictionary, fallback_indices: Array[in
 # ══════════════════════════════════════════════════
 
 func _on_card_pool_double_click(card: CardInfo, slot_index: int) -> void:
-	if not ApiClient.is_logged_in():
-		CardPoolSystem.quick_move_to_hand(card)
+	if card == null:
 		return
-	CardPoolSystem.quick_move_to_hand(card)
+	var target_index := _first_empty_hand_slot()
+	if target_index < 0:
+		CardPoolSystem.refresh_failed.emit(Localization.t("error.card.hand_full"))
+		return
+	AudioManager.play_sfx("card_move")
+	DragSystem.play_quick_move_animation(card, "pool", slot_index, "hand", target_index)
+	CardPoolSystem.quick_move_to_hand(card, target_index)
 
 # ══════════════════════════════════════════════════
 #  手牌双击 → 移回卡池
@@ -1397,7 +1536,36 @@ func _on_card_pool_double_click(card: CardInfo, slot_index: int) -> void:
 func _on_hand_double_click(card: CardInfo, slot_index: int) -> void:
 	if card == null:
 		return
+	var target_index := _first_empty_pool_slot()
+	if target_index < 0:
+		CardPoolSystem.refresh_failed.emit(Localization.t("error.card.pool_full"))
+		return
+	AudioManager.play_sfx("card_move")
+	DragSystem.play_quick_move_animation(card, "hand", slot_index, "pool", target_index)
 	CardPoolSystem.quick_move_from_hand_to_pool(card, slot_index)
+
+func _first_empty_hand_slot() -> int:
+	if _hand_area_ui == null:
+		return -1
+	var hand_cards := GameManager.player_data.hand_cards
+	var target_index := -1
+	for index in range(GameManager.player_data.hand_slots):
+		if index >= hand_cards.size() or hand_cards[index] == null:
+			target_index = index
+			break
+	if target_index < 0:
+		return -1
+	var target_page := floori(float(target_index) / float(_hand_area_ui.slot_count))
+	if target_page != _hand_area_ui.current_page:
+		_hand_area_ui.current_page = target_page
+		_hand_area_ui.refresh_display()
+	return target_index
+
+func _first_empty_pool_slot() -> int:
+	for index in range(GameManager.player_data.pool_slots):
+		if index >= CardPoolSystem.current_pool.size() or CardPoolSystem.current_pool[index] == null:
+			return index
+	return -1
 
 func _on_scene_changed(scene_name: String) -> void:
 	match scene_name:

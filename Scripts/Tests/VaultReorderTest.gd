@@ -48,6 +48,8 @@ func _ready() -> void:
 		_make_card(204, "合成卡4", 4),
 		_make_card(205, "合成卡5", 5),
 	]
+	for card in GameManager.player_data.vault_cards:
+		card.color = CardColor.ColorType.PURPLE
 	vault_ui.refresh_display()
 	await get_tree().process_frame
 	vault_ui._on_slot_clicked(0)
@@ -58,6 +60,10 @@ func _ready() -> void:
 	var slot_highlight: Panel = vault_ui.slots[0].get("_selected_highlight")
 	if slot_highlight == null or not slot_highlight.visible:
 		return _fail("vault_selection_glow_missing")
+	_force_slot_title_color(vault_ui.slots[0], CardDisplay.CARD_TEXT_COLOR)
+	vault_ui._update_slot_selection_visual(0)
+	if not _slot_title_color_matches(vault_ui.slots[0], CardDisplay.CARD_TEXT_COLOR_PURPLE):
+		return _fail("vault_title_color_not_restored_after_visual_refresh")
 	vault_ui._on_slot_clicked(1)
 	if vault_ui._selected_slots.size() != 1 or int(vault_ui._selected_slots[0]) != 1:
 		return _fail("single_select_replace_wrong")
@@ -110,6 +116,28 @@ func _make_card(id_value: int, name: String, number: int) -> CardInfo:
 		"card_name": name,
 		"description": "保险箱换位测试卡。",
 	})
+
+func _force_slot_title_color(slot: CardSlotUI, color: Color) -> void:
+	var display := slot.card_display
+	if display == null:
+		return
+	for label_name in ["_deck_name_label", "_card_name_label", "_series_tag_label"]:
+		var label := display.get(label_name) as Label
+		if label != null:
+			label.add_theme_color_override("font_color", color)
+
+func _slot_title_color_matches(slot: CardSlotUI, expected: Color) -> bool:
+	var display := slot.card_display
+	if display == null:
+		return false
+	for label_name in ["_deck_name_label", "_card_name_label", "_series_tag_label"]:
+		var label := display.get(label_name) as Label
+		if label == null or not _color_close(label.get_theme_color("font_color"), expected):
+			return false
+	return true
+
+func _color_close(a: Color, b: Color, epsilon: float = 0.005) -> bool:
+	return absf(a.r - b.r) <= epsilon and absf(a.g - b.g) <= epsilon and absf(a.b - b.b) <= epsilon and absf(a.a - b.a) <= epsilon
 
 
 func _fail(reason: String) -> void:

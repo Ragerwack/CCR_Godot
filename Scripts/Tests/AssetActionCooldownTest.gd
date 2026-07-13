@@ -22,8 +22,14 @@ func _ready() -> void:
 		return _fail("duration_wrong")
 	if cooldown.mouse_filter != Control.MOUSE_FILTER_IGNORE:
 		return _fail("mouse_filter_wrong")
+	if not (cooldown.material is ShaderMaterial):
+		return _fail("shape_mask_material_missing")
+	if cooldown.visible:
+		return _fail("cooldown_visible_before_start")
 	if not cooldown.try_start():
 		return _fail("first_start_rejected")
+	if not cooldown.visible:
+		return _fail("cooldown_not_visible_after_start")
 	if not cooldown.is_cooling_down():
 		return _fail("cooldown_not_running")
 	if cooldown.try_start():

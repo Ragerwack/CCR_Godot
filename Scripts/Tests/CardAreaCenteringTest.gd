@@ -38,6 +38,18 @@ func _ready() -> void:
 		return
 	if not _assert_hand_clip_expands_shadow_bounds(hand_ui):
 		return
+	var side_width := float(pool_margins["left"])
+	if not _assert_player_info_layout(main, side_width):
+		return
+	if not _assert_nav_buttons_layout(main, side_width):
+		return
+	var expected_right_button_height := float(main.call("_target_player_avatar_height")) / 3.0
+	if not _assert_right_action_column(pool_ui, side_width, expected_right_button_height, "pool_refresh"):
+		return
+	if not _assert_pool_draw_button_positions(pool_ui):
+		return
+	if not _assert_right_action_column(hand_ui, side_width, expected_right_button_height, "hand_action"):
+		return
 
 	main.call("_show_vault")
 	await get_tree().process_frame
@@ -50,8 +62,9 @@ func _ready() -> void:
 	var vault_margins := _assert_slot_area_centered("vault", vault_ui.slots, viewport_size.x)
 	if vault_margins.is_empty():
 		return
+	if not _assert_vault_right_region(vault_ui, side_width):
+		return
 
-	var side_width := float(pool_margins["left"])
 	var long_short_ratio := viewport_size.y / side_width
 	var width_height_ratio := side_width / viewport_size.y
 	print("CARD_AREA_CENTERING ok left=%.1f right=%.1f side_long_short=%.4f side_width_height=%.4f" % [
@@ -96,6 +109,154 @@ func _assert_slot_area_centered(area_name: String, slots: Array, viewport_width:
 		_fail("%s_not_centered_left_%.1f_right_%.1f" % [area_name, left_margin, right_margin])
 		return {}
 	return {"left": left_margin, "right": right_margin}
+
+func _assert_player_info_layout(main: MainUI, side_width: float) -> bool:
+	var player_info := main.get("_player_info") as PlayerInfoUI
+	if player_info == null:
+		_fail("player_info_missing")
+		return false
+	var avatar_host := player_info.find_child("AvatarHost", true, false) as Control
+	var labels := player_info.find_children("*", "Label", true, false)
+	var id_label := labels[0] as Label if not labels.is_empty() else null
+	if avatar_host == null:
+		_fail("avatar_host_missing")
+		return false
+	var avatar_rect := avatar_host.get_global_rect()
+	var center := avatar_rect.get_center()
+	if absf(center.x - side_width * 0.5) > CENTER_TOLERANCE or absf(center.y - side_width * 0.5) > CENTER_TOLERANCE:
+		_fail("avatar_center_not_axis_symmetric_%s" % str(center))
+		return false
+	if id_label == null or id_label.get_theme_font_size("font_size") < 18:
+		_fail("player_info_font_not_enlarged")
+		return false
+	return true
+
+func _assert_nav_buttons_layout(main: MainUI, side_width: float) -> bool:
+	var nav_buttons := main.get("_nav_buttons") as NavButtons
+	if nav_buttons == null:
+		_fail("nav_buttons_missing")
+		return false
+	var buttons: Array = nav_buttons.get("buttons")
+	if buttons.is_empty():
+		_fail("nav_button_list_empty")
+		return false
+	var center_area := main.get("_center_area") as Control
+	if center_area == null:
+		_fail("center_area_missing")
+		return false
+	if center_area.get_index() > nav_buttons.get_index():
+		_fail("center_area_blocks_nav_buttons")
+		return false
+	var expected_width := side_width * 0.8
+	var expected_height := float(main.call("_target_player_avatar_height")) * 0.25
+	for button in buttons:
+		var btn := button as Button
+		if btn == null:
+			continue
+		var rect := btn.get_global_rect()
+		if absf(rect.size.x - expected_width) > 1.0 or absf(rect.size.y - expected_height) > 1.0:
+			_fail("nav_button_size_wrong")
+			return false
+		if absf(rect.get_center().x - side_width * 0.5) > CENTER_TOLERANCE:
+			_fail("nav_button_not_centered_left_region")
+			return false
+	var first_gap := maxf(4.0, (nav_buttons.size.y - expected_height * buttons.size()) / float(buttons.size() + 1))
+	var compressed_gap := maxf(0.0, first_gap - expected_height / float(buttons.size() - 1))
+	for index in range(buttons.size()):
+		var button := buttons[index] as Button
+		var expected_y := first_gap + index * (expected_height + compressed_gap)
+		if absf(button.position.y - expected_y) > CENTER_TOLERANCE:
+			_fail("nav_button_vertical_compression_wrong")
+			return false
+	var prior_last_y := first_gap + (buttons.size() - 1) * (expected_height + first_gap)
+	if absf(prior_last_y - buttons[buttons.size() - 1].position.y - expected_height) > CENTER_TOLERANCE:
+		_fail("nav_last_button_not_raised_one_height")
+		return false
+	return true
+
+func _assert_pool_draw_button_positions(pool_ui: CardPoolUI) -> bool:
+	var stamina := pool_ui.find_child("DrawStaminaButton", true, false) as Button
+	var gold := pool_ui.find_child("DrawGoldButton", true, false) as Button
+	var gem := pool_ui.find_child("DrawGemButton", true, false) as Button
+	if stamina == null or gold == null or gem == null:
+		_fail("pool_draw_buttons_missing")
+		return false
+	var expected_stamina_center_y := CardSlotUI.SLOT_SIZE.y * 0.5
+	var expected_gem_center_y := CardSlotUI.SLOT_SIZE.y + 8.0 + CardSlotUI.SLOT_SIZE.y * 0.5
+	var expected_gold_center_y := (expected_stamina_center_y + expected_gem_center_y) * 0.5
+	var gold_center_y := gold.global_position.y + gold.size.y * 0.5 - pool_ui.global_position.y
+	if absf(gold_center_y - expected_gold_center_y) > CENTER_TOLERANCE:
+		_fail("gold_draw_not_on_pool_midline")
+		return false
+	var stamina_center_y := stamina.global_position.y + stamina.size.y * 0.5 - pool_ui.global_position.y
+	var gem_center_y := gem.global_position.y + gem.size.y * 0.5 - pool_ui.global_position.y
+	if absf(stamina_center_y - expected_stamina_center_y) > CENTER_TOLERANCE:
+		_fail("stamina_draw_not_on_first_row_center")
+		return false
+	if absf(gem_center_y - expected_gem_center_y) > CENTER_TOLERANCE:
+		_fail("gem_draw_not_on_second_row_center")
+		return false
+	return true
+
+func _assert_right_action_column(root: Node, side_width: float, expected_button_height: float, reason_prefix: String) -> bool:
+	var column := root.find_child("*Column", true, false) as Control
+	if column == null:
+		_fail(reason_prefix + "_column_missing")
+		return false
+	var expected_center_x := EXPECTED_VIEWPORT_SIZE.x - side_width * 0.5
+	var rect := column.get_global_rect()
+	if absf(rect.get_center().x - expected_center_x) > CENTER_TOLERANCE:
+		_fail(reason_prefix + "_not_centered_right_region")
+		return false
+	for child in column.get_children():
+		var button := child as Button
+		if button == null:
+			continue
+		var button_rect := button.get_global_rect()
+		if absf(button_rect.size.x - side_width * 0.8) > 1.0:
+			_fail(reason_prefix + "_button_width_wrong")
+			return false
+		if absf(button_rect.size.y - expected_button_height) > 1.0:
+			_fail(reason_prefix + "_button_height_wrong")
+			return false
+	if root is HandAreaUI:
+		var hand_ui := root as HandAreaUI
+		var buttons := [
+			hand_ui.find_child("HandPageButton", true, false),
+			hand_ui.find_child("HandSynthesizeButton", true, false),
+			hand_ui.find_child("HandDiscardButton", true, false),
+			hand_ui.find_child("HandStoreVaultButton", true, false),
+		]
+		for index in range(buttons.size()):
+			var button := buttons[index] as Button
+			if button == null:
+				_fail("hand_action_button_missing_%d" % index)
+				return false
+			var first_center_y := CardSlotUI.SLOT_SIZE.y * 0.25
+			var last_center_y := CardSlotUI.SLOT_SIZE.y + 8.0 + CardSlotUI.SLOT_SIZE.y * 0.75
+			var expected_center_y := first_center_y + (last_center_y - first_center_y) * float(index) / 3.0
+			if absf(button.get_global_rect().get_center().y - hand_ui.global_position.y - expected_center_y) > CENTER_TOLERANCE:
+				_fail("hand_action_vertical_layout_wrong_%d" % index)
+				return false
+	return true
+
+func _assert_vault_right_region(vault_ui: VaultUI, side_width: float) -> bool:
+	var label := vault_ui.find_child("SlotLabel", true, false) as Label
+	if label == null:
+		_fail("vault_slot_label_missing")
+		return false
+	var expected_center_x := EXPECTED_VIEWPORT_SIZE.x - side_width * 0.5
+	if absf(label.get_global_rect().get_center().x - expected_center_x) > CENTER_TOLERANCE:
+		_fail("vault_slot_label_not_centered_right_region")
+		return false
+	var action_panel := vault_ui.find_child("VaultActionPanel", true, false) as Control
+	if action_panel == null:
+		_fail("vault_action_panel_missing")
+		return false
+	if absf(action_panel.get_global_rect().get_center().x - expected_center_x) > CENTER_TOLERANCE:
+		_fail("vault_action_panel_not_centered_right_region")
+		return false
+	return true
 
 
 func _find_child_by_script(root: Node, script_resource: Script) -> Node:
