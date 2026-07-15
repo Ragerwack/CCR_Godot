@@ -19,12 +19,12 @@ var current_page: int = 0
 var _slots_clip: Control = null
 var _slots_layer: Control = null
 var _page_animating: bool = false
+var _page_flip_queued: bool = false
 var _selected_hand_index: int = -1
 var _btn_page: Button = null
 var _btn_synth: Button = null
 var _btn_discard: Button = null
 var _btn_vault: Button = null
-var _page_cooldown: Control = null
 var _synth_cooldown: Control = null
 var _discard_cooldown: Control = null
 var _vault_cooldown: Control = null
@@ -62,7 +62,9 @@ func _input(event: InputEvent) -> void:
 	if not mb.pressed:
 		return
 	if (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN) and get_global_rect().has_point(mb.position):
-		flip_page()
+		# 一次实体滚轮拨动可能连续产生多个事件；动画期间直接忽略重复事件，
+		# 避免第二个事件被缓冲后又自动翻回原页。
+		flip_page(false)
 		get_viewport().set_input_as_handled()
 		return
 	if _selected_hand_index < 0:
@@ -127,7 +129,6 @@ func _create_action_column() -> void:
 	_btn_page.text = Localization.t("ui.hand.page")
 	CCRVisualStyle.apply_relic_button(_btn_page, "action_page")
 	_action_column.add_child(_btn_page)
-	_page_cooldown = _attach_action_cooldown(_btn_page)
 	_btn_page.pressed.connect(request_page_flip)
 
 	# 合成
@@ -215,12 +216,15 @@ func _right_region_center_x() -> float:
 
 # ── 翻页 ──
 func request_page_flip() -> void:
-	if _try_start_button_cooldown(_page_cooldown):
-		flip_page()
+	flip_page(true)
 
 
-func flip_page() -> void:
+func flip_page(queue_during_animation: bool = false) -> void:
 	if _page_animating:
+		# 按钮/手柄连点最多缓冲一次；滚轮突发事件不缓冲。
+		# 翻页始终是纯本地动作，不经过资产按钮冷却，也不切成 disabled 灰态。
+		if queue_during_animation:
+			_page_flip_queued = true
 		return
 	clear_selection()
 	var max_page = max(0, ceili(float(total_slots) / float(slot_count)) - 1)
@@ -274,6 +278,10 @@ func _roll_to_page(next_page: int) -> void:
 		_slots_layer.position = SLOT_CLIP_PADDING
 		incoming_layer.queue_free()
 		_page_animating = false
+		_update_action_buttons()
+		if _page_flip_queued:
+			_page_flip_queued = false
+			flip_page.call_deferred(true)
 	)
 
 
@@ -482,6 +490,15 @@ func _visible_slot_for_global_index(global_idx: int) -> CardSlotUI:
 		return null
 	return slots[local_idx]
 
+func get_reward_unlock_target(global_idx: int) -> Dictionary:
+	var slot := _visible_slot_for_global_index(global_idx)
+	if slot == null or slot.is_unlocked() or not slot.visible or not slot.is_inside_tree():
+		return {}
+	var lock_rect := slot.get_lock_icon_global_rect()
+	if lock_rect.size.x <= 1.0 or lock_rect.size.y <= 1.0:
+		return {}
+	return {"target_rect": lock_rect, "target_slot": slot}
+
 
 func _is_point_over_action_button(global_point: Vector2) -> bool:
 	for button in [_btn_page, _btn_synth, _btn_discard, _btn_vault]:
@@ -573,7 +590,7 @@ func _update_action_buttons() -> void:
 	_ensure_selection_valid()
 	var has_selection := _selected_hand_index >= 0
 	if _btn_page != null:
-		_btn_page.disabled = _page_animating or _is_button_cooling_down(_page_cooldown)
+		_btn_page.disabled = false
 	if _btn_discard != null:
 		_btn_discard.disabled = (not has_selection) or _is_button_cooling_down(_discard_cooldown)
 	if _btn_vault != null:
@@ -587,9 +604,6 @@ func _try_start_button_cooldown(cooldown: Control) -> bool:
 		return true
 	var accepted: bool = cooldown.try_start()
 	_update_action_buttons()
-	if accepted:
-		var timer := get_tree().create_timer(cooldown.duration_seconds)
-		timer.timeout.connect(_update_action_buttons)
 	return accepted
 
 
@@ -607,6 +621,7 @@ func _attach_action_cooldown(button: Button) -> Control:
 	cooldown.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cooldown.z_index = 128
 	button.add_child(cooldown)
+	cooldown.cooldown_finished.connect(_update_action_buttons)
 	return cooldown
 
 

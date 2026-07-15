@@ -24,6 +24,14 @@ func _ready() -> void:
 	for i in range(5):
 		if not hand_ui.slots[i].is_occupied:
 			return _fail("initial_slot_empty_" + str(i))
+	GameManager.player_data.hand_slots = 15
+	hand_ui.refresh_display()
+	if hand_ui.get_reward_unlock_target(15).is_empty():
+		return _fail("visible_locked_reward_target_missing")
+	if not hand_ui.get_reward_unlock_target(16).is_empty():
+		return _fail("hidden_page_reward_target_should_be_offscreen")
+	GameManager.player_data.hand_slots = 16
+	hand_ui.refresh_display()
 
 	var indices := [0, 1, 2, 3, 4]
 	hand_ui.hide_synthesis_slots_for_animation(indices)

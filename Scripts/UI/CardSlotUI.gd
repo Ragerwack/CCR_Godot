@@ -720,6 +720,21 @@ func set_unlocked(val: bool, show_new_unlock_glow: bool = false) -> void:
 func is_unlocked() -> bool:
 	return _unlocked
 
+func get_lock_icon_global_rect() -> Rect2:
+	if _unlocked or _lock_icon == null or not _lock_icon.visible or not _lock_icon.is_inside_tree():
+		return Rect2()
+	return _lock_icon.get_global_rect()
+
+## 奖励钥匙抵达时先让锁与钥匙同时消失；随后由服务端结果正式刷新槽位状态。
+func consume_reward_key_unlock() -> void:
+	if _unlocked:
+		return
+	if _lock_icon != null:
+		_lock_icon.visible = false
+	if _lock_overlay != null:
+		_lock_overlay.visible = false
+	show_unlock_glow()
+
 func _set_lock_visible() -> void:
 	var locked = not _unlocked
 	if _lock_overlay:

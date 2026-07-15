@@ -29,6 +29,8 @@ func _ready() -> void:
 	var hand_ui := _find_child_by_script(center_area, HandAreaUIScript) as HandAreaUI
 	if pool_ui == null or hand_ui == null:
 		return _fail("draw_page_areas_missing")
+	if not _assert_slot_title_color(pool_ui.slots[0], CardDisplay.CARD_TEXT_COLOR_PURPLE, "draw_page"):
+		return
 
 	var pool_margins := _assert_slot_area_centered("pool", pool_ui.slots, viewport_size.x)
 	if pool_margins.is_empty():
@@ -57,10 +59,14 @@ func _ready() -> void:
 	var vault_ui := _find_child_by_script(center_area, VaultUIScript) as VaultUI
 	if vault_ui == null:
 		return _fail("vault_ui_missing")
+	if not _assert_slot_title_color(vault_ui.slots[0], CardDisplay.CARD_TEXT_COLOR_BLUE, "vault_page"):
+		return
 	if _has_direct_label_text(vault_ui, "保险箱"):
 		return _fail("vault_title_still_visible")
 	var vault_margins := _assert_slot_area_centered("vault", vault_ui.slots, viewport_size.x)
 	if vault_margins.is_empty():
+		return
+	if not _assert_vault_viewport_expands_shadow_bounds(vault_ui):
 		return
 	if not _assert_vault_right_region(vault_ui, side_width):
 		return
@@ -85,11 +91,43 @@ func _prepare_player_data() -> void:
 	GameManager.player_data.vault_cards = []
 	CardPoolSystem.current_pool = []
 	for i in range(16):
-		GameManager.player_data.pool_cards.append(null)
+		var pool_card: CardInfo = null
+		var vault_card: CardInfo = null
+		if i == 0:
+			pool_card = _make_card("purple", "抽卡页标题色测试")
+			vault_card = _make_card("blue", "保险箱标题色测试")
+		GameManager.player_data.pool_cards.append(pool_card)
 		GameManager.player_data.hand_cards.append(null)
-		GameManager.player_data.vault_cards.append(null)
-		CardPoolSystem.current_pool.append(null)
+		GameManager.player_data.vault_cards.append(vault_card)
+		CardPoolSystem.current_pool.append(pool_card)
 	GameManager.vault_raw_slot_data = []
+
+
+func _make_card(color_name: String, deck_name: String) -> CardInfo:
+	return CardInfo.new({
+		"id": "1",
+		"series_name": "测试系列",
+		"deck_name": deck_name,
+		"card_number": 1,
+		"color": color_name,
+		"card_name": "测试子卡",
+		"description": "测试描述",
+	})
+
+
+func _assert_slot_title_color(slot: CardSlotUI, expected: Color, context: String) -> bool:
+	if slot == null or slot.card_display == null:
+		_fail(context + "_card_display_missing")
+		return false
+	for label_name in ["_deck_name_label", "_card_name_label", "_series_tag_label"]:
+		var label := slot.card_display.get(label_name) as Label
+		if label == null or not label.get_theme_color("font_color").is_equal_approx(expected):
+			_fail(context + "_title_color_overwritten_by_page_style")
+			return false
+		if label.has_theme_color_override("font_shadow_color"):
+			_fail(context + "_title_shadow_leaked_from_page_style")
+			return false
+	return true
 
 
 func _assert_slot_area_centered(area_name: String, slots: Array, viewport_width: float) -> Dictionary:
@@ -292,6 +330,30 @@ func _assert_hand_clip_expands_shadow_bounds(hand_ui: HandAreaUI) -> bool:
 		return false
 	if clip_rect.end.x <= last_rect.end.x or clip_rect.end.y <= last_rect.end.y:
 		_fail("hand_clip_not_expanded_after_slots")
+		return false
+	return true
+
+func _assert_vault_viewport_expands_shadow_bounds(vault_ui: VaultUI) -> bool:
+	var viewport := vault_ui.get("_slot_viewport") as ScrollContainer
+	if viewport == null:
+		_fail("vault_viewport_missing")
+		return false
+	if vault_ui.slots.size() < 8:
+		_fail("vault_slots_missing_for_shadow_test")
+		return false
+	var first_slot := vault_ui.slots[0] as Control
+	var last_first_row_slot := vault_ui.slots[7] as Control
+	if first_slot == null or last_first_row_slot == null:
+		_fail("vault_shadow_slot_nodes_invalid")
+		return false
+	var viewport_rect := viewport.get_global_rect()
+	var first_rect := first_slot.get_global_rect()
+	var last_rect := last_first_row_slot.get_global_rect()
+	if viewport_rect.position.x >= first_rect.position.x or viewport_rect.position.y >= first_rect.position.y:
+		_fail("vault_viewport_not_expanded_before_first_row")
+		return false
+	if viewport_rect.end.x <= last_rect.end.x:
+		_fail("vault_viewport_not_expanded_after_right_column")
 		return false
 	return true
 

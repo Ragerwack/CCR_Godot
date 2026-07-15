@@ -39,10 +39,14 @@ const MAX_VISIBLE_ROWS: int = 4
 const EXTRA_LOCKED_ROWS: int = 1
 const VAULT_GRID_LEFT_MARGIN: float = 40.0
 const SLOT_SPACING: float = 8.0
+const VAULT_GRID_SHADOW_SAFE_PADDING: Vector2 = Vector2(24.0, 24.0)
 const UNLOCK_PANEL_WIDTH: float = 130.0
 const UNLOCK_PANEL_RIGHT_MARGIN: float = 10.0
 const BUTTON_LABEL_HEIGHT: float = 24.0
 var _nav_target_rect: Rect2 = Rect2()
+var _vault_nav_target_rect: Rect2 = Rect2()
+var _gold_target_rect: Rect2 = Rect2()
+var _gems_target_rect: Rect2 = Rect2()
 var _vault_synthesis_animation_running: bool = false
 var _synthesis_hidden_indices: Dictionary = {}
 
@@ -66,6 +70,12 @@ func _ready() -> void:
 
 func set_synthesis_nav_target_rect(rect: Rect2) -> void:
 	_nav_target_rect = rect
+
+func set_synthesis_reward_target_rects(museum_rect: Rect2, vault_rect: Rect2, gold_rect: Rect2, gems_rect: Rect2) -> void:
+	_nav_target_rect = museum_rect
+	_vault_nav_target_rect = vault_rect
+	_gold_target_rect = gold_rect
+	_gems_target_rect = gems_rect
 
 func _load_from_server() -> void:
 	await GameManager.sync_vault_from_server()
@@ -210,6 +220,10 @@ func _create_slot_grid() -> void:
 	var total_width = columns * slot_size.x + (columns - 1) * SLOT_SPACING
 	var content_height = render_rows * slot_size.y + (render_rows - 1) * SLOT_SPACING
 	var viewport_height = visible_rows * slot_size.y + (visible_rows - 1) * SLOT_SPACING
+	var viewport_width_with_shadow = total_width + VAULT_GRID_SHADOW_SAFE_PADDING.x * 2.0
+	var viewport_height_with_shadow = viewport_height + VAULT_GRID_SHADOW_SAFE_PADDING.y * 2.0
+	var canvas_width_with_shadow = total_width + VAULT_GRID_SHADOW_SAFE_PADDING.x * 2.0
+	var canvas_height_with_shadow = content_height + VAULT_GRID_SHADOW_SAFE_PADDING.y * 2.0
 	var available_width = size.x if size.x > 0.0 else get_viewport_rect().size.x
 	var right_reserved = _right_region_width()
 	var start_x = _centered_grid_start_x(total_width)
@@ -218,11 +232,11 @@ func _create_slot_grid() -> void:
 	var start_y = 56.0
 
 	if _slot_viewport != null:
-		_slot_viewport.position = Vector2(start_x, start_y)
-		_slot_viewport.size = Vector2(total_width, viewport_height)
+		_slot_viewport.position = Vector2(start_x - VAULT_GRID_SHADOW_SAFE_PADDING.x, start_y - VAULT_GRID_SHADOW_SAFE_PADDING.y)
+		_slot_viewport.size = Vector2(viewport_width_with_shadow, viewport_height_with_shadow)
 		_slot_viewport.custom_minimum_size = _slot_viewport.size
 	if _slot_canvas != null:
-		_slot_canvas.size = Vector2(total_width, content_height)
+		_slot_canvas.size = Vector2(canvas_width_with_shadow, canvas_height_with_shadow)
 		_slot_canvas.custom_minimum_size = _slot_canvas.size
 
 	for i in range(slots.size(), slot_count):
@@ -243,8 +257,8 @@ func _create_slot_grid() -> void:
 	for i in range(slots.size()):
 		var row = i / columns
 		var col = i % columns
-		var x = col * (slot_size.x + SLOT_SPACING)
-		var y = row * (slot_size.y + SLOT_SPACING)
+		var x = VAULT_GRID_SHADOW_SAFE_PADDING.x + col * (slot_size.x + SLOT_SPACING)
+		var y = VAULT_GRID_SHADOW_SAFE_PADDING.y + row * (slot_size.y + SLOT_SPACING)
 		slots[i].position = Vector2(x, y)
 		slots[i].visible = i < slot_count
 
@@ -478,9 +492,6 @@ func _try_start_unlock_cooldown(cooldown: Control) -> bool:
 		return true
 	var accepted: bool = cooldown.try_start()
 	_update_unlock_buttons()
-	if accepted:
-		var timer := get_tree().create_timer(cooldown.duration_seconds)
-		timer.timeout.connect(_update_unlock_buttons)
 	return accepted
 
 
@@ -598,34 +609,61 @@ func _on_synthesize_pressed() -> void:
 	if _selected_slots.size() != 1:
 		return
 
+	# 不让合成动画抢跑到仍在前序资产请求之后排队的合成请求前面。
+	_vault_synthesis_animation_running = true
+	await _wait_for_prior_asset_operations()
+	if not is_inside_tree() or _selected_slots.size() != 1:
+		_vault_synthesis_animation_running = false
+		_update_synthesize_button()
+		return
+
 	var vault = GameManager.player_data.vault_cards
 	var selected_idx := int(_selected_slots[0])
 	if selected_idx < 0 or selected_idx >= vault.size() or vault[selected_idx] == null:
+		_vault_synthesis_animation_running = false
+		_update_synthesize_button()
 		return
 	var selected_slots := _find_synthesizable_indices_for_card(vault[selected_idx], selected_idx)
 	if selected_slots.size() != 5:
+		_vault_synthesis_animation_running = false
+		_update_synthesize_button()
 		return
 
 	_synthesize_btn.disabled = true
 	_synthesize_btn.text = Localization.t("ui.synthesis.vault.done")
 
 	var animation_sources := get_synthesis_animation_sources(selected_slots)
-	_vault_synthesis_animation_running = true
 	hide_synthesis_slots_for_animation(selected_slots)
-	await _play_vault_synthesis_animation(animation_sources)
+	var overlay = SynthesisAnimationOverlayScript.new()
+	overlay.name = "VaultSynthesisAnimationOverlay"
+	overlay.setup(animation_sources, _nav_target_rect, true)
+	get_tree().root.add_child(overlay)
+	var completion := {"success": false, "result": {}, "error": ""}
+	_confirm_vault_synthesis_for_animation.call_deferred(selected_slots.duplicate(), overlay, completion)
+	await overlay.play()
 	_vault_synthesis_animation_running = false
 
-	_apply_vault_synthesis_pending_removal(selected_slots)
-	_confirm_vault_synthesis_background(selected_slots)
+	if completion.get("success", false):
+		_apply_vault_synthesis_pending_removal(selected_slots)
+		_apply_vault_synthesis_confirmed_result(completion.get("result", {}))
+		_sync_after_vault_synthesis_success_background()
+	else:
+		print("[VaultUI] 合成失败: ", completion.get("error", "未知错误"))
+		await _recover_after_vault_synthesis_failure()
+
+
+func _wait_for_prior_asset_operations() -> void:
+	while is_inside_tree() and (
+		CardPoolSystem.has_pending_confirm()
+		or ApiClient.has_pending_asset_requests()
+	):
+		await get_tree().process_frame
 
 func _try_start_synthesize_cooldown() -> bool:
 	if _synthesize_cooldown == null:
 		return true
 	var accepted: bool = _synthesize_cooldown.try_start()
 	_update_synthesize_button()
-	if accepted:
-		var timer := get_tree().create_timer(_synthesize_cooldown.duration_seconds)
-		timer.timeout.connect(_update_synthesize_button)
 	return accepted
 
 func _is_synthesize_cooling_down() -> bool:
@@ -641,6 +679,10 @@ func _attach_action_cooldown(button: Button) -> Control:
 	cooldown.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cooldown.z_index = 128
 	button.add_child(cooldown)
+	if button == _synthesize_btn:
+		cooldown.cooldown_finished.connect(_update_synthesize_button)
+	else:
+		cooldown.cooldown_finished.connect(_update_unlock_buttons)
 	return cooldown
 
 func get_synthesis_animation_sources(indices: Array) -> Array[Dictionary]:
@@ -730,15 +772,40 @@ func _find_synthesizable_indices_for_card(selected_card: CardInfo, selected_idx:
 		result.append(int(by_number[number]))
 	return result
 
-func _confirm_vault_synthesis_background(selected_slots: Array) -> void:
+func _confirm_vault_synthesis_for_animation(
+	selected_slots: Array,
+	overlay: SynthesisAnimationOverlay,
+	completion: Dictionary
+) -> void:
 	var resp = await ApiClient.synthesize(selected_slots, "vault")
 	if resp["success"]:
 		var result_data: Dictionary = resp["data"]
-		_apply_vault_synthesis_confirmed_result(result_data)
-		_sync_after_vault_synthesis_success_background()
+		completion["success"] = true
+		completion["result"] = result_data
+		if is_instance_valid(overlay):
+			overlay.set_reward_items(_resolve_vault_synthesis_reward_targets(result_data), true)
 	else:
-		print("[VaultUI] 合成失败: ", resp.get("error", "未知错误"))
-		await _recover_after_vault_synthesis_failure()
+		completion["error"] = str(resp.get("error", "未知错误"))
+		if is_instance_valid(overlay):
+			overlay.set_reward_items([], false)
+
+func _resolve_vault_synthesis_reward_targets(result_data: Dictionary) -> Array[Dictionary]:
+	var resolved: Array[Dictionary] = []
+	for raw_entry in SynthesisAnimationOverlay.extract_reward_entries(result_data):
+		var entry: Dictionary = raw_entry.duplicate()
+		match str(entry.get("type", "")):
+			"gold":
+				entry["target_rect"] = _gold_target_rect
+			"gems":
+				entry["target_rect"] = _gems_target_rect
+			"slot":
+				if str(entry.get("slot_type", "")) == "vault":
+					entry["target_rect"] = _vault_nav_target_rect
+				else:
+					var viewport_size := get_viewport_rect().size
+					entry["target_rect"] = Rect2(Vector2(viewport_size.x * 0.5 - 21.0, viewport_size.y + 48.0), Vector2(42.0, 42.0))
+		resolved.append(entry)
+	return resolved
 
 func _apply_vault_synthesis_pending_removal(selected_slots: Array) -> void:
 	var vault = GameManager.player_data.vault_cards

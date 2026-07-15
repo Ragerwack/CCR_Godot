@@ -19,11 +19,15 @@ var _failed := false
 func _ready() -> void:
 	get_window().size = Vector2i(1920, 1200)
 	Localization.set_locale("zh-CN")
+	# 测试只隔离当前进程的登录态，不改写开发者本机保存的 token。
+	ApiClient._auth_token = ""
+	ApiClient._refresh_token = ""
 	_prepare_player_data()
 	if not _assert_source_assets():
 		return
 
 	var main := MainUI.new()
+	main.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(main)
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -34,6 +38,22 @@ func _ready() -> void:
 	if not _assert_draw_and_hand(main):
 		return
 	if not _assert_status_icons(main):
+		return
+	var currency_probe_path := OS.get_environment("CCR_MAIN_CURRENCY_PROBE_PATH")
+	if currency_probe_path != "" and DisplayServer.get_name() != "headless":
+		var splash := main.find_child("SplashScreenUI", true, false) as Control
+		if splash != null:
+			splash.hide()
+		GameManager.player_data.add_gold(9_223_372_036_854_774_807)
+		GameManager.player_data.add_gems(2_147_483_597)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var currency := main.get("_currency") as CurrencyUI
+		await get_tree().create_timer(AssetNumberRoll.ROLL_DURATION + 0.06).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(currency_probe_path)
+		print("MAIN_CURRENCY_PROBE ok")
+		get_tree().quit(0)
 		return
 	if not await _assert_button_icon_hover_motion(main):
 		return
@@ -147,6 +167,11 @@ func _assert_draw_and_hand(main: MainUI) -> bool:
 		var button := center.find_child(str(node_name), true, false) as Button
 		if button == null or not _assert_button(button, str(targets[node_name]), "action"):
 			return _fail("draw_or_hand_button_missing_%s" % str(node_name))
+		if node_name == "HandPageButton":
+			if button.has_node("AssetActionCooldown"):
+				return _fail("hand_page_button_must_not_have_cooldown")
+		elif not _assert_action_cooldown(button):
+			return false
 	var action_buttons: Array[Button] = []
 	for node_name in targets:
 		action_buttons.append(center.find_child(str(node_name), true, false) as Button)
@@ -168,6 +193,8 @@ func _assert_vault(main: MainUI) -> bool:
 		var button := center.find_child(str(node_name), true, false) as Button
 		if button == null or not _assert_button(button, str(targets[node_name]), "action"):
 			return _fail("vault_button_missing_%s" % str(node_name))
+		if not _assert_action_cooldown(button):
+			return false
 	var locked_slot_icon := center.find_child("LockedSlotIcon", true, false) as TextureRect
 	if locked_slot_icon == null or locked_slot_icon.texture == null:
 		return _fail("locked_slot_icon_missing")
@@ -267,6 +294,25 @@ func _assert_button(button: Button, icon_id: String, variant: String) -> bool:
 	for emoji in TARGET_EMOJI:
 		if button.text.find(emoji) >= 0:
 			return _fail("button_text_still_contains_emoji_%s" % button.name)
+	return true
+
+func _assert_action_cooldown(button: Button) -> bool:
+	var cooldown := button.get_node_or_null("AssetActionCooldown") as ColorRect
+	if cooldown == null:
+		return _fail("button_cooldown_missing_%s" % button.name)
+	if cooldown.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		return _fail("button_cooldown_blocks_input_%s" % button.name)
+	if cooldown.size.distance_to(button.size) > 0.1:
+		return _fail("button_cooldown_size_wrong_%s" % button.name)
+	var icon := CCRVisualStyle.get_button_icon(button)
+	if icon != null and cooldown.z_index <= icon.z_index:
+		return _fail("button_cooldown_below_icon_%s" % button.name)
+	cooldown.start()
+	if not cooldown.visible or not cooldown.is_cooling_down():
+		return _fail("button_cooldown_did_not_start_%s" % button.name)
+	var shader_material := cooldown.material as ShaderMaterial
+	if shader_material == null or float(shader_material.get_shader_parameter("remaining")) <= 0.0:
+		return _fail("button_cooldown_shader_inactive_%s" % button.name)
 	return true
 
 func _assert_icon_column_aligned(buttons: Array[Button], group_name: String) -> bool:

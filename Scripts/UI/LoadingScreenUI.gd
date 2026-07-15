@@ -45,7 +45,7 @@ func set_tip(category: String, title: String, body: String, short_tip: String = 
 	_tip_category_label.text = category.to_upper()
 	_tip_title_label.text = title
 	_tip_body_label.text = body
-	_tip_short_label.text = short_tip
+	_tip_short_label.text = "短提示 · " + short_tip if not short_tip.is_empty() else ""
 	_tip_tween = create_tween()
 	_tip_tween.tween_property(_loading_panel, "modulate:a", 0.72, 0.12)
 	_tip_tween.tween_property(_loading_panel, "modulate:a", 1.0, 0.18)
@@ -103,23 +103,27 @@ func _setup_ui() -> void:
 
 	var vbox := VBoxContainer.new()
 	vbox.name = "LoadingContent"
-	vbox.add_theme_constant_override("separation", 12)
+	vbox.add_theme_constant_override("separation", 14)
 	_margin.add_child(vbox)
 
 	_tip_category_label = _make_label("TipCategoryLabel", LOADING_TEXT_COLOR, 20)
+	# 载入提示只展示标题、正文、短提示三层；分类字段只保留为数据元信息。
+	_tip_category_label.visible = false
 	vbox.add_child(_tip_category_label)
 
 	_tip_title_label = _make_label("TipTitleLabel", LOADING_TEXT_COLOR, 34)
 	_tip_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_tip_title_label.custom_minimum_size = Vector2(0, 44)
 	vbox.add_child(_tip_title_label)
 
 	_tip_body_label = _make_label("TipBodyLabel", LOADING_TEXT_COLOR, 24)
 	_tip_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_tip_body_label.custom_minimum_size = Vector2(0, 64)
+	_tip_body_label.custom_minimum_size = Vector2(0, 76)
 	vbox.add_child(_tip_body_label)
 
 	_tip_short_label = _make_label("TipShortLabel", LOADING_TEXT_COLOR, 18)
 	_tip_short_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_tip_short_label.custom_minimum_size = Vector2(0, 38)
 	vbox.add_child(_tip_short_label)
 
 	var bottom_right := VBoxContainer.new()
@@ -183,9 +187,9 @@ func _apply_responsive_layout() -> void:
 
 	var small := vp_size.x <= SMALL_SCREEN_MAX_WIDTH or vp_size.y <= 850.0
 	_loading_panel.anchor_left = 0.14 if small else 0.24
-	_loading_panel.anchor_top = 0.69 if small else 0.72
+	_loading_panel.anchor_top = 0.45 if small else 0.56
 	_loading_panel.anchor_right = 0.86 if small else 0.76
-	_loading_panel.anchor_bottom = 0.91 if small else 0.90
+	_loading_panel.anchor_bottom = 0.84 if small else 0.88
 	_loading_panel.offset_left = 0.0
 	_loading_panel.offset_top = 0.0
 	_loading_panel.offset_right = 0.0
@@ -235,7 +239,7 @@ func _make_label(node_name: String, color: Color, font_size: int) -> Label:
 	label.name = node_name
 	label.add_theme_color_override("font_color", color)
 	label.add_theme_font_size_override("font_size", font_size)
-	label.clip_text = true
+	label.clip_text = false
 	return label
 
 func _make_panel_style() -> StyleBoxFlat:

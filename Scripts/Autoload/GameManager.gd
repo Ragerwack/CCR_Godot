@@ -1,5 +1,7 @@
 extends Node
 
+const PlayerStateCacheScript = preload("res://Scripts/Autoload/PlayerStateCache.gd")
+
 signal scene_changed(scene_name: String)
 signal pool_refreshed()
 signal free_refresh_ready()
@@ -43,6 +45,9 @@ var _optional_login_sync_in_flight: bool = false
 var _pool_hand_layout_dirty: bool = false
 var _pool_hand_layout_revision: int = 0
 var _last_announced_level: int = 1
+var profile_cache_version: int = 0
+var relic_inventory_cache_version: int = 0
+var _player_state_cache = PlayerStateCacheScript.new()
 
 const _LEVEL_REWARD_TOTALS: Dictionary = {
 	1: {"gold": 100, "gems": 50},
@@ -140,6 +145,7 @@ func apply_login_user(user_data: Dictionary) -> void:
 	player_data.exp = user_data.get("exp", 0)
 	player_data.gold = user_data.get("gold", 100)
 	player_data.gems = user_data.get("gems", 50)
+	player_data.combat_power = int(user_data.get("combatPower", player_data.combat_power))
 	player_data.country = str(user_data.get("country", "EARTH"))
 	player_data.avatar_id = str(user_data.get("avatar", AvatarCatalog.DEFAULT_AVATAR_ID))
 	if not AvatarCatalog.is_known_avatar(player_data.avatar_id):
@@ -152,6 +158,9 @@ func apply_login_user(user_data: Dictionary) -> void:
 		last_free_refresh_time_unix = _parse_server_time_unix(last_free_time)
 	_update_free_refresh_max()
 	_update_free_refresh_cooldown_from_state()
+	profile_cache_version = int(user_data.get("profileVersion", 0))
+	relic_inventory_cache_version = int(user_data.get("relicInventoryVersion", 0))
+	_load_verified_local_player_cache()
 	player_data.changed.emit()
 
 func apply_draw_key(key_data: Dictionary) -> void:
@@ -162,6 +171,7 @@ func apply_draw_key(key_data: Dictionary) -> void:
 	## 从 profile 响应同步完整数据
 func apply_profile(profile: Dictionary) -> void:
 	var old_level := int(player_data.level)
+	var old_profile_cache_version := profile_cache_version
 	player_data.user_id = int(profile.get("id", player_data.user_id))
 	player_data.nickname = profile.get("username", player_data.nickname)
 	player_data.level = profile.get("level", player_data.level)
@@ -173,6 +183,8 @@ func apply_profile(profile: Dictionary) -> void:
 	player_data.avatar_id = str(profile.get("avatar", player_data.avatar_id))
 	if not AvatarCatalog.is_known_avatar(player_data.avatar_id):
 		player_data.avatar_id = AvatarCatalog.DEFAULT_AVATAR_ID
+	profile_cache_version = int(profile.get("profileVersion", profile_cache_version))
+	relic_inventory_cache_version = int(profile.get("relicInventoryVersion", relic_inventory_cache_version))
 
 	# 免费刷新
 	var fc = profile.get("freeRefreshCount", null)
@@ -192,6 +204,8 @@ func apply_profile(profile: Dictionary) -> void:
 	if int(player_data.level) > old_level and (_cache_loaded.get("profile", false) or _cache_loaded.get("level", false)):
 		_emit_level_up(old_level, int(player_data.level))
 	_cache_loaded["profile"] = true
+	if profile_cache_version > 0 and profile_cache_version != old_profile_cache_version and ApiClient.is_logged_in():
+		sync_player_cache_from_server.call_deferred()
 
 ## 从 /user/level API 响应应用等级阈值信息
 func _apply_level_info(level_info: Dictionary) -> void:
@@ -393,6 +407,79 @@ func _apply_decks(decks_data: Array) -> void:
 		DeckSystem.add_synthesized_deck(d)
 	_cache_loaded["decks"] = true
 
+func _load_verified_local_player_cache() -> void:
+	if player_data.user_id <= 0 or profile_cache_version <= 0 or relic_inventory_cache_version <= 0:
+		return
+	var snapshot := _player_state_cache.load_snapshot(player_data.user_id)
+	if snapshot.is_empty():
+		return
+	var payload: Dictionary = snapshot.get("payload", {})
+	if int(snapshot.get("profile_version", 0)) == profile_cache_version:
+		_apply_cached_identity(payload.get("identity", {}))
+	if (
+		int(snapshot.get("relic_inventory_version", 0)) == relic_inventory_cache_version
+		and str(snapshot.get("relic_locale", "")) == Localization.get_http_locale()
+	):
+		var cached_relics = payload.get("relics", [])
+		if cached_relics is Array:
+			_apply_decks(cached_relics)
+			FileLogger.perf("player_cache_local_hit", {"relic_count": cached_relics.size()})
+
+func _apply_cached_identity(identity: Dictionary) -> void:
+	if identity.is_empty() or int(identity.get("id", 0)) != player_data.user_id:
+		return
+	player_data.nickname = str(identity.get("username", player_data.nickname))
+	player_data.country = str(identity.get("country", player_data.country))
+	player_data.avatar_id = str(identity.get("avatar", player_data.avatar_id))
+	if not AvatarCatalog.is_known_avatar(player_data.avatar_id):
+		player_data.avatar_id = AvatarCatalog.DEFAULT_AVATAR_ID
+
+func sync_player_cache_from_server() -> Dictionary:
+	if not ApiClient.is_logged_in() or player_data.user_id <= 0:
+		return {"success": false, "error": "玩家尚未登录"}
+	var locale := Localization.get_http_locale()
+	var request := _player_state_cache.build_sync_request(player_data.user_id, locale)
+	var response := await ApiClient.sync_player_cache(request)
+	if not response.get("success", false):
+		FileLogger.warn("玩家缓存条件同步失败: " + str(response.get("error", "")))
+		return response
+	var data: Dictionary = response.get("data", {})
+	if int(data.get("player_id", 0)) != player_data.user_id:
+		return {"success": false, "error": "玩家缓存响应账号不一致"}
+	var old_snapshot := _player_state_cache.load_snapshot(player_data.user_id)
+	var old_payload: Dictionary = old_snapshot.get("payload", {})
+	var identity: Dictionary = old_payload.get("identity", {}) if old_payload.get("identity", {}) is Dictionary else {}
+	var relics: Array = old_payload.get("relics", []) if old_payload.get("relics", []) is Array else []
+	var profile_section: Dictionary = data.get("profile", {})
+	var relic_section: Dictionary = data.get("relic_inventory", {})
+	if str(profile_section.get("status", "")) == "replace":
+		identity = profile_section.get("snapshot", {})
+	if str(relic_section.get("status", "")) == "replace":
+		relics = relic_section.get("snapshot", [])
+	var versions: Dictionary = data.get("versions", {})
+	profile_cache_version = int(versions.get("profile_version", profile_cache_version))
+	relic_inventory_cache_version = int(versions.get("relic_inventory_version", relic_inventory_cache_version))
+	if identity.is_empty() or not (relics is Array):
+		return {"success": false, "error": "玩家缓存响应缺少可用快照"}
+	_player_state_cache.save_snapshot(
+		player_data.user_id,
+		profile_cache_version,
+		relic_inventory_cache_version,
+		str(data.get("relic_locale", locale)),
+		identity,
+		relics
+	)
+	_apply_cached_identity(identity)
+	_apply_decks(relics)
+	player_data.changed.emit()
+	data_synced.emit()
+	FileLogger.perf("player_cache_sync_done", {
+		"profile_status": profile_section.get("status", ""),
+		"relic_status": relic_section.get("status", ""),
+		"relic_count": relics.size(),
+	})
+	return response
+
 ## 同步全量数据（profile + level + 卡牌 + 套牌）
 func sync_all_from_server() -> void:
 	var started := Time.get_ticks_msec()
@@ -485,42 +572,23 @@ func sync_optional_login_data_background(include_config: bool = true) -> void:
 	_optional_login_sync_in_flight = true
 	var started := Time.get_ticks_msec()
 	FileLogger.perf("login_optional_tasks_start", {"include_config": include_config})
+	# 先完成轻量版本握手；新设备可尽早拿到 relic，命中设备只收到 current。
+	var decks_resp := await sync_player_cache_from_server()
 
 	var base := ApiClient.get_api_base_url()
 	var requests: Array[Dictionary] = [
-		{"key": "profile", "url": base + "/user/profile", "timeout": 20.0},
 		{"key": "level", "url": base + "/player/level", "timeout": 20.0},
-		{"key": "vault", "url": base + "/game/cards?type=vault", "timeout": 20.0},
-		{"key": "decks", "url": base + "/game/decks", "timeout": 20.0},
 	]
 	if include_config:
 		requests.append({"key": "config", "url": base + "/game/config", "timeout": 20.0})
 
 	var results := await ApiClient.batch_request(requests)
 
-	var profile_resp: Dictionary = results.get("profile", {})
-	if profile_resp.get("success", false):
-		apply_profile(profile_resp["data"])
-	else:
-		FileLogger.warn("登录后台 profile 同步失败: " + profile_resp.get("error", ""))
-
 	var level_resp: Dictionary = results.get("level", {})
 	if level_resp.get("success", false):
 		_apply_level_info(level_resp["data"])
 	else:
 		FileLogger.warn("登录后台等级同步失败: " + level_resp.get("error", ""))
-
-	var vault_resp: Dictionary = results.get("vault", {})
-	if vault_resp.get("success", false):
-		_apply_card_slots("vault", vault_resp["data"])
-	else:
-		FileLogger.warn("登录后台保险箱同步失败: " + vault_resp.get("error", ""))
-
-	var decks_resp: Dictionary = results.get("decks", {})
-	if decks_resp.get("success", false):
-		_apply_decks(decks_resp["data"])
-	else:
-		FileLogger.warn("登录后台博物馆同步失败: " + decks_resp.get("error", ""))
 
 	if include_config:
 		var config_resp: Dictionary = results.get("config", {})
@@ -533,9 +601,7 @@ func sync_optional_login_data_background(include_config: bool = true) -> void:
 	FileLogger.perf("login_optional_tasks_done", {
 		"success": true,
 		"total_ms": Time.get_ticks_msec() - started,
-		"vault": vault_resp.get("success", false),
 		"decks": decks_resp.get("success", false),
-		"profile": profile_resp.get("success", false),
 		"level": level_resp.get("success", false),
 		"config": results.get("config", {}).get("success", false) if include_config else null,
 	})
@@ -544,10 +610,9 @@ func sync_optional_login_data_background(include_config: bool = true) -> void:
 func sync_decks_from_server() -> void:
 	var started := Time.get_ticks_msec()
 	FileLogger.perf("new_data_request_start", {"page": "deck_panel"})
-	var decks_resp := await ApiClient.get_decks()
+	var decks_resp := await sync_player_cache_from_server()
 	if decks_resp.get("success", false):
-		_apply_decks(decks_resp["data"])
-		FileLogger.log("博物馆套牌同步成功, 套牌数=" + str(decks_resp["data"].size()))
+		FileLogger.log("博物馆套牌条件同步成功, 套牌数=" + str(DeckSystem.player_decks.size()))
 	else:
 		FileLogger.warn("博物馆套牌同步失败: " + decks_resp.get("error", ""))
 	FileLogger.perf("new_data_request_done", {"page": "deck_panel", "success": decks_resp.get("success", false), "total_ms": Time.get_ticks_msec() - started})
@@ -668,7 +733,8 @@ func try_free_refresh() -> bool:
 		if newbie_free_refresh_count <= 0:
 			free_refresh_count = free_refresh_max_count
 			last_free_refresh_time_unix = Time.get_unix_time_from_system()
-		_update_free_refresh_cooldown_from_state()
+			_update_free_refresh_cooldown_from_state()
+		# 赠送体力尚未耗尽时倒计时不会变化，但资源栏仍需要立即刷新余额。
 		free_refresh_cooldown_updated.emit(free_refresh_cooldown)
 		return true
 	if free_refresh_count > 0:

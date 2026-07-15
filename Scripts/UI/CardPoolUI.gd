@@ -487,6 +487,17 @@ func _refresh_display(cards: Array, animate_draw: bool = false, rapid_animation:
 			slots[i].clear_slot()
 		slots[i].visible = true
 
+func get_reward_unlock_target(slot_index: int) -> Dictionary:
+	if slot_index < 0 or slot_index >= slots.size():
+		return {}
+	var slot := slots[slot_index] as CardSlotUI
+	if slot == null or slot.is_unlocked() or not slot.visible or not slot.is_inside_tree():
+		return {}
+	var lock_rect := slot.get_lock_icon_global_rect()
+	if lock_rect.size.x <= 1.0 or lock_rect.size.y <= 1.0:
+		return {}
+	return {"target_rect": lock_rect, "target_slot": slot}
+
 
 func _schedule_draw_card_reveal(slot: CardSlotUI, card: CardInfo, card_index: int, delay: float, generation: int) -> void:
 	if slot == null or card == null:
@@ -611,9 +622,6 @@ func _try_start_refresh_cooldown(cooldown: Control) -> bool:
 		return true
 	var accepted: bool = cooldown.try_start()
 	_update_refresh_buttons()
-	if accepted:
-		var timer := get_tree().create_timer(cooldown.duration_seconds)
-		timer.timeout.connect(_update_refresh_buttons)
 	return accepted
 
 
@@ -631,6 +639,7 @@ func _attach_action_cooldown(button: Button) -> Control:
 	cooldown.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cooldown.z_index = 128
 	button.add_child(cooldown)
+	cooldown.cooldown_finished.connect(_update_refresh_buttons)
 	return cooldown
 
 

@@ -356,9 +356,6 @@ func _try_start_synthesize_cooldown() -> bool:
 		return true
 	var accepted: bool = _synthesize_cooldown.try_start()
 	update_button_state()
-	if accepted:
-		var timer := get_tree().create_timer(_synthesize_cooldown.duration_seconds)
-		timer.timeout.connect(update_button_state)
 	return accepted
 
 
@@ -376,4 +373,5 @@ func _attach_action_cooldown(button: Button) -> Control:
 	cooldown.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cooldown.z_index = 128
 	button.add_child(cooldown)
+	cooldown.cooldown_finished.connect(update_button_state)
 	return cooldown

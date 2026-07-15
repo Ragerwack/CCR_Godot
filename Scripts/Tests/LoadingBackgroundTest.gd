@@ -35,7 +35,7 @@ func _test_loading_screen_scene() -> void:
 	if background.stretch_mode != TextureRect.STRETCH_SCALE:
 		_fail("loading background is not stretch scale")
 		return
-	loading.set_tip("basic", "测试标题", "测试正文", "测试短提示")
+	loading.set_tip("basic", "合成圣物的条件", "合成圣物需要凑齐同一个卡组、同一种颜色、编号不同的 5 张子卡。例如：同一套卡组的白色 1/5、2/5、3/5、4/5、5/5，可以合成一个白色圣物。", "同卡组、同颜色、5 个不同编号，才能合成圣物。")
 	loading.set_progress(42.0, "同步中")
 	loading.set_server_status("服务器在线")
 	loading.set_version("CCR test")
@@ -46,21 +46,34 @@ func _test_loading_screen_scene() -> void:
 		_fail("loading panel missing")
 		return
 	var vp_size := get_viewport().get_visible_rect().size
-	var expected_left := 0.14 if vp_size.x <= 1400.0 or vp_size.y <= 850.0 else 0.24
-	var expected_right := 0.86 if vp_size.x <= 1400.0 or vp_size.y <= 850.0 else 0.76
-	if absf(panel.anchor_left - expected_left) > 0.001 or absf(panel.anchor_right - expected_right) > 0.001:
+	var is_small := vp_size.x <= 1400.0 or vp_size.y <= 850.0
+	var expected_left := 0.14 if is_small else 0.24
+	var expected_right := 0.86 if is_small else 0.76
+	var expected_top := 0.45 if is_small else 0.56
+	var expected_bottom := 0.84 if is_small else 0.88
+	if absf(panel.anchor_left - expected_left) > 0.001 or absf(panel.anchor_right - expected_right) > 0.001 or absf(panel.anchor_top - expected_top) > 0.001 or absf(panel.anchor_bottom - expected_bottom) > 0.001:
 		_fail("loading panel does not use responsive anchors")
 		return
 	var body := loading.find_child("TipBodyLabel", true, false) as Label
 	if body == null or body.autowrap_mode == TextServer.AUTOWRAP_OFF:
 		_fail("tip body wrapping is disabled")
 		return
-	if body.text != "测试正文":
+	if body.text != "合成圣物需要凑齐同一个卡组、同一种颜色、编号不同的 5 张子卡。例如：同一套卡组的白色 1/5、2/5、3/5、4/5、5/5，可以合成一个白色圣物。":
 		_fail("loading tip changed during one loading session")
 		return
 	var short_tip := loading.find_child("TipShortLabel", true, false) as Label
-	if short_tip == null or short_tip.text != "测试短提示" or short_tip.autowrap_mode == TextServer.AUTOWRAP_OFF:
+	if short_tip == null or short_tip.text != "短提示 · 同卡组、同颜色、5 个不同编号，才能合成圣物。" or short_tip.autowrap_mode == TextServer.AUTOWRAP_OFF or short_tip.clip_text:
 		_fail("loading short tip did not render")
+		return
+	var title := loading.find_child("TipTitleLabel", true, false) as Label
+	if title == null or title.clip_text or not title.visible or not body.visible or not short_tip.visible:
+		_fail("loading title, body, and short tip are not all visible")
+		return
+	if title.global_position.y >= body.global_position.y or body.global_position.y >= short_tip.global_position.y:
+		_fail("loading tip is not ordered as title, body, short tip")
+		return
+	if not panel.get_global_rect().encloses(title.get_global_rect()) or not panel.get_global_rect().encloses(body.get_global_rect()) or not panel.get_global_rect().encloses(short_tip.get_global_rect()):
+		_fail("loading tip content exceeds its panel")
 		return
 	var loading_content := loading.find_child("LoadingContent", true, false) as VBoxContainer
 	if loading_content == null:

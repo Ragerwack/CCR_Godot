@@ -537,12 +537,14 @@ func _apply_currency_layout(vp_size: Vector2 = Vector2.ZERO) -> void:
 		return
 	var icon_size := _currency_icon_size(vp_size)
 	var row_width := maxf(230.0, icon_size * 3.0 + 170.0)
-	var row_height := maxf(36.0, icon_size)
 	_currency.configure_icon_size(icon_size)
-	_currency.offset_left = -55.0 - row_width
+	# 18px 字体在不同 Godot/系统字体环境下的实际最小高度可能超过 36px。
+	# 高度也按内容计算，避免只修复横向扩展后仍切掉数字上下边缘。
+	var row_height := maxf(36.0, _currency.get_required_row_height())
 	_currency.offset_right = -55.0
 	_currency.offset_top = 10.0
 	_currency.offset_bottom = 10.0 + row_height
+	_currency.configure_layout(row_width)
 
 func _nav_region_top(vp_size: Vector2 = Vector2.ZERO) -> float:
 	var avatar_height := _target_player_avatar_height(vp_size)
@@ -667,7 +669,12 @@ func _show_vault() -> void:
 	_vault_ui.configure_side_button_metrics(_side_button_width(), _right_button_height())
 	_vault_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	if is_instance_valid(_nav_buttons):
-		_vault_ui.set_synthesis_nav_target_rect(_nav_buttons.get_button_global_rect("deck_panel"))
+		_vault_ui.set_synthesis_reward_target_rects(
+			_nav_buttons.get_button_global_rect("deck_panel"),
+			_nav_buttons.get_button_global_rect("vault"),
+			_currency.get_resource_icon_global_rect("gold") if is_instance_valid(_currency) else Rect2(),
+			_currency.get_resource_icon_global_rect("gems") if is_instance_valid(_currency) else Rect2()
+		)
 	host.add_child(_vault_ui)
 	_apply_game_text_color(_center_area)
 
@@ -1162,6 +1169,12 @@ func _make_controller_binding_row(action_id: String) -> HBoxContainer:
 
 func _apply_game_text_color(root: Node = null) -> void:
 	var target := root if root != null else self
+	# 卡牌内部文字由 CardDisplay 按稀有度独立管理。页面级主题如果继续递归，
+	# 会在页面切换、后台同步和 resize 时把卡牌标题染回统一深色，随后卡牌
+	# 自身刷新又改回稀有度颜色，形成玩家看到的颜色反复跳变。
+	if target is CardDisplay:
+		(target as CardDisplay).refresh_title_text_color()
+		return
 	for child in target.get_children():
 		if child is Label:
 			if child.name != "ExpValueLabel":
@@ -1228,6 +1241,18 @@ func _on_hand_synthesize() -> void:
 	var selected_indices := _hand_area_ui.get_selected_synthesis_indices()
 	if selected_indices.size() != 5:
 		return
+
+	# 先等此前的抽卡布局确认等资产请求排空，再启动合成视觉流程。
+	# 否则合成请求会在 ApiClient 队列尾部等待，而画面已经先走到 relic 阶段。
+	_synthesis_animation_running = true
+	await _wait_for_prior_asset_operations()
+	if not is_inside_tree() or not is_instance_valid(_hand_area_ui):
+		_synthesis_animation_running = false
+		return
+	selected_indices = _hand_area_ui.get_selected_synthesis_indices()
+	if selected_indices.size() != 5:
+		_synthesis_animation_running = false
+		return
 	var animation_sources := _hand_area_ui.get_synthesis_animation_sources(selected_indices)
 
 	var old_pool_cards: Array = CardPoolSystem.current_pool.duplicate()
@@ -1235,22 +1260,45 @@ func _on_hand_synthesize() -> void:
 		old_pool_cards = GameManager.player_data.pool_cards.duplicate()
 	var old_hand_cards: Array = GameManager.player_data.hand_cards.duplicate()
 
-	_synthesis_animation_running = true
 	_hand_area_ui.hide_synthesis_slots_for_animation(selected_indices)
-	await _play_hand_synthesis_animation(animation_sources)
-	_synthesis_animation_running = false
-
-	_apply_hand_synthesis_pending_removal(selected_indices)
-	if is_instance_valid(_hand_area_ui):
-		_hand_area_ui.clear_synthesis_animation_hidden_slots()
-		_hand_area_ui.clear_selection()
-		_hand_area_ui.refresh_display()
-
-	_confirm_hand_synthesis_background(
+	var overlay = SynthesisAnimationOverlayScript.new()
+	overlay.name = "SynthesisAnimationOverlay"
+	overlay.setup(
+		animation_sources,
+		_nav_buttons.get_button_global_rect("deck_panel") if is_instance_valid(_nav_buttons) else Rect2(),
+		true
+	)
+	get_tree().root.add_child(overlay)
+	var completion := {"success": false, "result": {}, "error": ""}
+	_confirm_hand_synthesis_for_animation.call_deferred(
 		selected_indices.duplicate(),
 		old_pool_cards,
-		old_hand_cards
+		old_hand_cards,
+		overlay,
+		completion
 	)
+	await overlay.play()
+	_synthesis_animation_running = false
+
+	if completion.get("success", false):
+		_apply_hand_synthesis_pending_removal(selected_indices)
+		_apply_synthesis_confirmed_result(completion.get("result", {}))
+		if is_instance_valid(_hand_area_ui):
+			_hand_area_ui.clear_synthesis_animation_hidden_slots()
+			_hand_area_ui.clear_selection()
+			_hand_area_ui.refresh_display()
+		_sync_after_synthesis_success_background()
+	else:
+		push_error("合成失败: ", completion.get("error", "未知错误"))
+		await _recover_after_synthesis_failure()
+
+
+func _wait_for_prior_asset_operations() -> void:
+	while is_inside_tree() and (
+		CardPoolSystem.has_pending_confirm()
+		or ApiClient.has_pending_asset_requests()
+	):
+		await get_tree().process_frame
 
 func _play_hand_synthesis_animation(animation_sources: Array[Dictionary]) -> void:
 	if animation_sources.is_empty() or get_tree() == null:
@@ -1282,20 +1330,60 @@ func _play_hand_single_card_animation(animation_sources: Array[Dictionary], mode
 		_:
 			overlay.queue_free()
 
-func _confirm_hand_synthesis_background(selected_indices: Array, old_pool_cards: Array, old_hand_cards: Array) -> void:
+func _confirm_hand_synthesis_for_animation(
+	selected_indices: Array,
+	old_pool_cards: Array,
+	old_hand_cards: Array,
+	overlay: SynthesisAnimationOverlay,
+	completion: Dictionary
+) -> void:
 	var sync_resp := await ApiClient.sync_pool_hand_layout(old_pool_cards, old_hand_cards)
 	if not sync_resp.get("success", false):
-		push_error("合成前同步失败: ", sync_resp.get("error", ""))
-		await _recover_after_synthesis_failure()
+		completion["error"] = "合成前同步失败: " + str(sync_resp.get("error", ""))
+		if is_instance_valid(overlay):
+			overlay.set_reward_items([], false)
 		return
 
 	var resp := await ApiClient.synthesize(selected_indices, "hand")
 	if resp.get("success", false):
-		_apply_synthesis_confirmed_result(resp.get("data", {}))
-		_sync_after_synthesis_success_background()
+		var result: Dictionary = resp.get("data", {})
+		completion["success"] = true
+		completion["result"] = result
+		if is_instance_valid(overlay):
+			overlay.set_reward_items(_resolve_synthesis_reward_targets(result), true)
 	else:
-		push_error("合成失败: ", resp.get("error", ""))
-		await _recover_after_synthesis_failure()
+		completion["error"] = str(resp.get("error", "未知错误"))
+		if is_instance_valid(overlay):
+			overlay.set_reward_items([], false)
+
+func _resolve_synthesis_reward_targets(result: Dictionary) -> Array[Dictionary]:
+	var resolved: Array[Dictionary] = []
+	for raw_entry in SynthesisAnimationOverlay.extract_reward_entries(result):
+		var entry: Dictionary = raw_entry.duplicate()
+		match str(entry.get("type", "")):
+			"gold":
+				entry["target_rect"] = _currency.get_resource_icon_global_rect("gold") if is_instance_valid(_currency) else Rect2()
+			"gems":
+				entry["target_rect"] = _currency.get_resource_icon_global_rect("gems") if is_instance_valid(_currency) else Rect2()
+			"slot":
+				var target := _resolve_slot_reward_target(str(entry.get("slot_type", "")), int(entry.get("slot_index", -1)))
+				entry.merge(target, true)
+		resolved.append(entry)
+	return resolved
+
+func _resolve_slot_reward_target(slot_type: String, slot_index: int) -> Dictionary:
+	if slot_type == "vault" and is_instance_valid(_nav_buttons):
+		return {"target_rect": _nav_buttons.get_button_global_rect("vault")}
+	var visible_target: Dictionary = {}
+	if slot_type == "hand" and is_instance_valid(_hand_area_ui):
+		visible_target = _hand_area_ui.get_reward_unlock_target(slot_index)
+	elif slot_type == "pool" and is_instance_valid(_card_pool_ui):
+		visible_target = _card_pool_ui.get_reward_unlock_target(slot_index)
+	if not visible_target.is_empty():
+		return visible_target
+	# 手牌翻页后不可见（以及当前页不存在）的解锁目标统一飞出屏幕下方。
+	var viewport_size := get_viewport_rect().size
+	return {"target_rect": Rect2(Vector2(viewport_size.x * 0.5 - 21.0, viewport_size.y + 48.0), Vector2(42.0, 42.0))}
 
 func _apply_hand_synthesis_pending_removal(selected_indices: Array) -> void:
 	var indices := selected_indices.duplicate()

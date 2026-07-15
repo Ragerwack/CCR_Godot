@@ -620,6 +620,16 @@ func update_profile(changes: Dictionary) -> Dictionary:
 		profile_failed.emit(str(resp.get("error", "更新用户资料失败")))
 	return resp
 
+## 条件同步玩家稳定资料与博物馆 relic 快照。
+func sync_player_cache(cache_state: Dictionary) -> Dictionary:
+	return await _request(
+		_api_url("/user/cache-sync"),
+		HTTPClient.METHOD_POST,
+		JSON.stringify(cache_state),
+		HTTP_TIMEOUT_SECONDS,
+		READ_RETRY_ATTEMPTS
+	)
+
 # ══════════════════════════════════════════════════
 #  游戏
 # ══════════════════════════════════════════════════

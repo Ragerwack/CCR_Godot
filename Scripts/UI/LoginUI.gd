@@ -275,6 +275,7 @@ func _finish_successful_auth(resp: Dictionary) -> void:
 	_loading_label.visible = true
 	_show_loading_screen_ui(Localization.t("ui.login.syncing"), 55.0)
 	await GameManager.sync_initial_card_pool_from_server()
+	GameManager.sync_optional_login_data_background.call_deferred(true)
 	_loading_label.visible = false
 	login_completed.emit()
 	_close()

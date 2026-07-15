@@ -89,6 +89,16 @@ func _ready() -> void:
 		if content_host == null or absf(first_card.global_position.x - content_host.global_position.x - expected_left_shift) > 0.1:
 			_fail("today deck cards are not shifted right by experience bar height")
 			return
+		var scroll := center_area.find_child("TodayDeckScroll", true, false) as ScrollContainer
+		var card_shadow := first_card.find_child("CardShadow", false, false) as Panel
+		var shadow_style := card_shadow.get_theme_stylebox("panel") as StyleBoxFlat if card_shadow != null else null
+		if scroll == null or shadow_style == null:
+			_fail("today deck first-card shadow setup is missing")
+			return
+		var left_shadow_bleed := maxf(0.0, float(shadow_style.shadow_size) - shadow_style.shadow_offset.x)
+		if first_card.global_position.x - scroll.get_global_rect().position.x < left_shadow_bleed - 0.1:
+			_fail("today deck first-card left shadow is clipped")
+			return
 		if absf(first_card.custom_minimum_size.x - expected_size.x) > 0.1 or absf(first_card.custom_minimum_size.y - expected_size.y) > 0.1:
 			_fail("today deck card size is not same as draw card size")
 			return

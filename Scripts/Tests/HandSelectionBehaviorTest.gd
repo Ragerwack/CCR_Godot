@@ -85,6 +85,8 @@ func _ready() -> void:
 
 	var hand_center := hand_ui.get_global_rect().get_center()
 	hand_ui._input(_mouse_press(MOUSE_BUTTON_WHEEL_UP, hand_center))
+	# 同一次滚轮拨动产生的重复事件不得排队，否则动画结束后会自动翻回。
+	hand_ui._input(_mouse_press(MOUSE_BUTTON_WHEEL_UP, hand_center))
 	await get_tree().create_timer(HandAreaUI.PAGE_ROLL_DURATION + 0.08).timeout
 	if hand_ui.current_page != 1:
 		return _fail("wheel_up_did_not_page_hand")
@@ -92,6 +94,22 @@ func _ready() -> void:
 	await get_tree().create_timer(HandAreaUI.PAGE_ROLL_DURATION + 0.08).timeout
 	if hand_ui.current_page != 0:
 		return _fail("wheel_down_did_not_page_hand")
+
+	var page_button := hand_ui.get("_btn_page") as Button
+	if page_button == null:
+		return _fail("page_button_missing")
+	if page_button.has_node("AssetActionCooldown"):
+		return _fail("page_button_still_has_asset_cooldown")
+	hand_ui.request_page_flip()
+	await get_tree().create_timer(0.05).timeout
+	if page_button.disabled:
+		return _fail("page_button_disabled_during_local_animation")
+	hand_ui.request_page_flip()
+	await get_tree().create_timer(HandAreaUI.PAGE_ROLL_DURATION * 2.0 + 0.15).timeout
+	if hand_ui.current_page != 0:
+		return _fail("rapid_page_click_was_not_buffered")
+	if page_button.disabled:
+		return _fail("page_button_stuck_disabled_after_rapid_click")
 
 	print("HAND_SELECTION_BEHAVIOR ok")
 	get_tree().quit(0)

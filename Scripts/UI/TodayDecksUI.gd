@@ -86,16 +86,25 @@ func _build_shell() -> void:
 	var scroll := ScrollContainer.new()
 	scroll.name = "TodayDeckScroll"
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.offset_left = _left_pad
+	# 安全边距必须放在 ScrollContainer 内部；把滚动容器本身右移会让首列卡牌
+	# 仍然紧贴裁切边界，从而裁掉 CardDisplay 向左外扩的柔影。
+	scroll.offset_left = 0
 	scroll.offset_top = _top_pad + KEY_ROW_HEIGHT + 10.0
 	scroll.offset_right = 0
 	scroll.offset_bottom = -18
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	root.add_child(scroll)
+
+	var content_margin := MarginContainer.new()
+	content_margin.name = "TodayDeckContentMargin"
+	content_margin.add_theme_constant_override("margin_left", int(ceil(_left_pad)))
+	content_margin.custom_minimum_size = Vector2(_left_pad + cards_width, 0)
+	scroll.add_child(content_margin)
 
 	_content = VBoxContainer.new()
 	_content.custom_minimum_size = Vector2(cards_width, 0)
 	_content.add_theme_constant_override("separation", ROW_GAP)
-	scroll.add_child(_content)
+	content_margin.add_child(_content)
 
 func _ensure_draw_key() -> void:
 	if not GameManager.draw_key.is_empty():

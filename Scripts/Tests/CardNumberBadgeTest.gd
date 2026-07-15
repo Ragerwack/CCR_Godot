@@ -99,6 +99,8 @@ func _ready() -> void:
 		return
 	if not _advanced_title_colors_are_consistent():
 		return
+	if not _card_text_styles_survive_global_page_styling():
+		return
 	if not await _slot_title_colors_survive_reuse_and_draw_animation():
 		return
 	if not await _green_draw_shine_runs_only_after_landing():
@@ -179,6 +181,57 @@ func _advanced_title_colors_are_consistent() -> bool:
 			return false
 		display.queue_free()
 	return true
+
+func _card_text_styles_survive_global_page_styling() -> bool:
+	var page_root := Control.new()
+	add_child(page_root)
+	var display := CardDisplay.new()
+	display.size = Vector2(200, 280)
+	page_root.add_child(display)
+	display.set_card(CardInfo.new({
+		"id": "1",
+		"series_name": "测试系列",
+		"deck_name": "测试卡组",
+		"card_number": 3,
+		"color": "purple",
+		"card_name": "测试子卡",
+		"description": "测试描述",
+	}), 0)
+
+	var main_style_applier := MainUI.new()
+	# 直接复现抽卡页/保险箱页创建、后台同步和 resize 都会调用的页面级染色。
+	# 重复调用用于防止修复只依赖某一次通知或动画结束后的补刷。
+	main_style_applier.call("_apply_game_text_color", page_root)
+	main_style_applier.call("_apply_game_text_color", page_root)
+
+	var deck_label: Label = display.get("_deck_name_label")
+	var card_name_label: Label = display.get("_card_name_label")
+	var series_label: Label = display.get("_series_tag_label")
+	var number_label: Label = display.get("_number_label")
+	var description_label: Label = display.get("_description_label")
+	var passed := true
+	for title_label in [deck_label, card_name_label, series_label]:
+		if title_label == null or not _color_close(title_label.get_theme_color("font_color"), CardDisplay.CARD_TEXT_COLOR_PURPLE):
+			_fail("global page styling overwrote rarity title color")
+			passed = false
+			break
+		if title_label.has_theme_color_override("font_shadow_color"):
+			_fail("global page styling leaked label shadow into card title")
+			passed = false
+			break
+	if passed:
+		for fixed_label in [number_label, description_label]:
+			if fixed_label == null or not _color_close(fixed_label.get_theme_color("font_color"), CardDisplay.CARD_TEXT_COLOR):
+				_fail("global page styling overwrote fixed card text color")
+				passed = false
+				break
+			if fixed_label.has_theme_color_override("font_shadow_color"):
+				_fail("global page styling leaked label shadow into fixed card text")
+				passed = false
+				break
+	main_style_applier.queue_free()
+	page_root.queue_free()
+	return passed
 
 func _slot_title_colors_survive_reuse_and_draw_animation() -> bool:
 	var slot := CardSlotUI.new()
