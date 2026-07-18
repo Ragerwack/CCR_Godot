@@ -11,6 +11,9 @@ var slots: Array[CardSlotUI] = []
 var _raw_slot_data: Array = []  # 服务端原始槽位数据（含 unlocked 等信息）
 var _slot_viewport: ScrollContainer = null
 var _slot_canvas: Control = null
+var _organize_btn: Button = null
+var _organize_cooldown: Control = null
+var _organize_busy: bool = false
 var _gold_unlock_btn: Button = null
 var _gold_unlock_cost_label: Label = null
 var _gem_unlock_btn: Button = null
@@ -18,7 +21,7 @@ var _gem_unlock_cost_label: Label = null
 var _unlock_buttons_busy: bool = false
 var _gold_unlock_cooldown: Control = null
 var _gem_unlock_cooldown: Control = null
-var _action_panel: VBoxContainer = null
+var _action_panel: Control = null
 var _side_button_width: float = 110.0
 var _side_button_height: float = 36.0
 
@@ -43,8 +46,16 @@ const VAULT_GRID_SHADOW_SAFE_PADDING: Vector2 = Vector2(24.0, 24.0)
 const UNLOCK_PANEL_WIDTH: float = 130.0
 const UNLOCK_PANEL_RIGHT_MARGIN: float = 10.0
 const BUTTON_LABEL_HEIGHT: float = 24.0
+const UNLOCK_KEY_TEXTURE_PATH := "res://Resources/UI/Icons/Status/status_slot_key.png"
+const UNLOCK_KEY_REVERSE_DURATION: float = 0.80
+const UNLOCK_KEY_TARGET_DURATION: float = 1.20
+const UNLOCK_KEY_FADE_DURATION: float = 0.08
+const UNLOCK_KEY_REVERSE_DISTANCE: float = 58.0
+const UNLOCK_KEY_START_SPINS_PER_SECOND: float = 5.0
+const UNLOCK_KEY_SCALE: float = 2.0
 var _nav_target_rect: Rect2 = Rect2()
 var _vault_nav_target_rect: Rect2 = Rect2()
+var _stamina_target_rect: Rect2 = Rect2()
 var _gold_target_rect: Rect2 = Rect2()
 var _gems_target_rect: Rect2 = Rect2()
 var _vault_synthesis_animation_running: bool = false
@@ -71,11 +82,12 @@ func _ready() -> void:
 func set_synthesis_nav_target_rect(rect: Rect2) -> void:
 	_nav_target_rect = rect
 
-func set_synthesis_reward_target_rects(museum_rect: Rect2, vault_rect: Rect2, gold_rect: Rect2, gems_rect: Rect2) -> void:
+func set_synthesis_reward_target_rects(museum_rect: Rect2, vault_rect: Rect2, gold_rect: Rect2, gems_rect: Rect2, stamina_rect: Rect2 = Rect2()) -> void:
 	_nav_target_rect = museum_rect
 	_vault_nav_target_rect = vault_rect
 	_gold_target_rect = gold_rect
 	_gems_target_rect = gems_rect
+	_stamina_target_rect = stamina_rect
 
 func _load_from_server() -> void:
 	await GameManager.sync_vault_from_server()
@@ -115,7 +127,6 @@ func setup_ui() -> void:
 	_synthesize_btn.pressed.connect(_on_synthesize_pressed)
 
 	_create_unlock_panel()
-	_action_panel.add_child(_synthesize_btn)
 	_create_slot_grid()
 	_layout_slot_label()
 	_layout_right_actions()
@@ -146,11 +157,20 @@ func _layout_relic_preview() -> void:
 	_relic_preview.position = Vector2(right_edge - preview_width, maxf(80.0, (viewport_size.y - preview_height) * 0.5))
 
 func _create_unlock_panel() -> void:
-	_action_panel = VBoxContainer.new()
+	_action_panel = Control.new()
 	_action_panel.name = "VaultActionPanel"
 	_action_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_action_panel.add_theme_constant_override("separation", 8)
 	add_child(_action_panel)
+
+	_organize_btn = Button.new()
+	_organize_btn.name = "VaultOrganizeButton"
+	_organize_btn.text = Localization.t("ui.vault.organize")
+	_organize_btn.pressed.connect(_on_organize_vault_pressed)
+	CCRVisualStyle.apply_relic_button(_organize_btn, "vault_organize")
+	_action_panel.add_child(_organize_btn)
+	_organize_cooldown = _attach_action_cooldown(_organize_btn)
+
+	_action_panel.add_child(_synthesize_btn)
 
 	_gold_unlock_btn = Button.new()
 	_gold_unlock_btn.name = "VaultExpandGoldButton"
@@ -191,7 +211,7 @@ func _layout_right_actions() -> void:
 	if _action_panel == null:
 		return
 	var button_size := Vector2(_side_button_width, _side_button_height)
-	for button in [_synthesize_btn, _gold_unlock_btn, _gem_unlock_btn]:
+	for button in [_organize_btn, _synthesize_btn, _gold_unlock_btn, _gem_unlock_btn]:
 		var typed_button := button as Button
 		if typed_button != null:
 			typed_button.custom_minimum_size = button_size
@@ -203,10 +223,23 @@ func _layout_right_actions() -> void:
 		var typed_label := label as Label
 		if typed_label != null:
 			typed_label.custom_minimum_size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
-	var child_count := _action_panel.get_child_count()
-	var content_height := _side_button_height * 3.0 + BUTTON_LABEL_HEIGHT * 2.0 + 8.0 * float(maxi(0, child_count - 1))
+
+	var button_step := _side_button_height + BUTTON_LABEL_HEIGHT + 8.0
+	var content_height := _side_button_height + button_step * 3.0 + BUTTON_LABEL_HEIGHT
 	_action_panel.size = Vector2(_side_button_width, content_height)
 	_action_panel.position = Vector2(_right_region_center_x() - _side_button_width * 0.5, maxf(0.0, (size.y - content_height) * 0.5))
+
+	var button_rows := [_organize_btn, _synthesize_btn, _gold_unlock_btn, _gem_unlock_btn]
+	for i in range(button_rows.size()):
+		var button := button_rows[i] as Button
+		if button != null:
+			button.position = Vector2(0.0, button_step * float(i))
+	if _gold_unlock_cost_label != null:
+		_gold_unlock_cost_label.size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
+		_gold_unlock_cost_label.position = Vector2(0.0, _gold_unlock_btn.position.y + _side_button_height + 2.0)
+	if _gem_unlock_cost_label != null:
+		_gem_unlock_cost_label.size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
+		_gem_unlock_cost_label.position = Vector2(0.0, _gem_unlock_btn.position.y + _side_button_height + 2.0)
 
 func _action_font_size() -> int:
 	if _side_button_width < 120.0:
@@ -440,10 +473,16 @@ func refresh_display() -> void:
 		label.text = Localization.t("ui.vault.slot_count", [_count_occupied(cards), _count_unlocked_slots()])
 
 	_update_unlock_buttons()
+	_update_organize_button()
 
 	# 更新合成按钮状态
 	_update_synthesize_button()
 	FileLogger.perf("ui_render_done", {"page": "vault", "component": "slot_grid", "slots": slot_count, "total_ms": Time.get_ticks_msec() - render_started})
+
+func _update_organize_button() -> void:
+	if _organize_btn == null:
+		return
+	_organize_btn.disabled = _organize_busy or _is_organize_cooling_down() or not ApiClient.is_logged_in()
 
 func _update_unlock_buttons() -> void:
 	var quote: Dictionary = GameManager.vault_slot_quote
@@ -460,6 +499,46 @@ func _update_unlock_buttons() -> void:
 		_gold_unlock_cost_label.text = Localization.t("ui.vault.unlock_gold_cost", [gold_cost]) if has_quote else Localization.t("ui.vault.unlock_cost_loading")
 	if _gem_unlock_cost_label != null:
 		_gem_unlock_cost_label.text = Localization.t("ui.vault.unlock_gem_cost", [gem_cost]) if has_quote else Localization.t("ui.vault.unlock_cost_loading")
+
+func _on_organize_vault_pressed() -> void:
+	if _organize_busy or not ApiClient.is_logged_in():
+		return
+	if not _try_start_organize_cooldown():
+		return
+	_organize_busy = true
+	_update_organize_button()
+	await _wait_for_prior_asset_operations()
+	if not is_inside_tree():
+		_organize_busy = false
+		return
+
+	var resp := await ApiClient.organize_vault()
+	if resp.get("success", false):
+		var data: Dictionary = resp.get("data", {})
+		var vault_slots: Array = data.get("vault", [])
+		if not vault_slots.is_empty():
+			GameManager.apply_vault_slots_from_server(vault_slots)
+		else:
+			await GameManager.sync_vault_from_server()
+		_clear_selection()
+	else:
+		print("[VaultUI] 整理保险箱失败: ", resp.get("error", "未知错误"))
+		AudioManager.play_sfx("error_soft")
+		await GameManager.sync_vault_from_server()
+
+	_organize_busy = false
+	if is_inside_tree():
+		refresh_display()
+
+func _try_start_organize_cooldown() -> bool:
+	if _organize_cooldown == null:
+		return true
+	var accepted: bool = _organize_cooldown.try_start()
+	_update_organize_button()
+	return accepted
+
+func _is_organize_cooling_down() -> bool:
+	return _organize_cooldown != null and _organize_cooldown.is_cooling_down()
 
 func _on_unlock_slot_pressed(currency: String) -> void:
 	if _unlock_buttons_busy:
@@ -480,11 +559,139 @@ func _on_unlock_slot_pressed(currency: String) -> void:
 			return
 		quote = GameManager.vault_slot_quote
 	var slot_index := int(quote.get("next_slot_index", _count_unlocked_slots()))
-	await GameManager.handle_unlock_slot("vault", slot_index, currency)
+	await _prepare_unlock_animation_target(slot_index)
+	var resp := await ApiClient.unlock_slot("vault", slot_index, currency)
+	if not resp.get("success", false):
+		print("[VaultUI] 保险箱槽位购买失败: ", resp.get("error", "未知错误"))
+		AudioManager.play_sfx("error_soft")
+		await GameManager.sync_vault_from_server()
+		await GameManager.sync_vault_slot_quote_from_server()
+		_unlock_buttons_busy = false
+		if is_inside_tree():
+			refresh_display()
+		return
+
+	await _play_unlock_key_animation(currency, slot_index)
+	var profile_resp := await ApiClient.get_profile()
+	if profile_resp.get("success", false):
+		GameManager.apply_profile(profile_resp["data"])
+	await GameManager.sync_vault_from_server()
+	await GameManager.sync_vault_slot_quote_from_server()
 
 	_unlock_buttons_busy = false
 	if is_inside_tree():
 		refresh_display()
+
+func _prepare_unlock_animation_target(slot_index: int) -> void:
+	if slot_index < 0:
+		return
+	if slot_index >= slot_count:
+		var target_rows := int(floor(float(slot_index) / float(columns))) + 1
+		slot_count = maxi(slot_count, target_rows * columns)
+	_create_slot_grid()
+	await get_tree().process_frame
+	_scroll_unlock_slot_into_view(slot_index)
+	await get_tree().process_frame
+
+func _scroll_unlock_slot_into_view(slot_index: int) -> void:
+	if _slot_viewport == null or slot_index < 0 or slot_index >= slots.size():
+		return
+	var slot := slots[slot_index] as CardSlotUI
+	if slot == null:
+		return
+	var current_scroll := float(_slot_viewport.scroll_vertical)
+	var visible_top := current_scroll
+	var visible_bottom := current_scroll + _slot_viewport.size.y
+	var slot_top := slot.position.y - VAULT_GRID_SHADOW_SAFE_PADDING.y
+	var slot_bottom := slot.position.y + slot.size.y + VAULT_GRID_SHADOW_SAFE_PADDING.y
+	if slot_top < visible_top:
+		_slot_viewport.scroll_vertical = maxi(0, int(floor(slot_top)))
+	elif slot_bottom > visible_bottom:
+		_slot_viewport.scroll_vertical = maxi(0, int(ceil(slot_bottom - _slot_viewport.size.y)))
+
+func _play_unlock_key_animation(currency: String, slot_index: int) -> void:
+	if not is_inside_tree() or get_tree() == null:
+		return
+	if slot_index < 0 or slot_index >= slots.size():
+		return
+	var target_slot := slots[slot_index] as CardSlotUI
+	if target_slot == null or not target_slot.is_inside_tree():
+		return
+	var target_rect := target_slot.get_lock_icon_global_rect()
+	if target_rect.size.x <= 1.0 or target_rect.size.y <= 1.0:
+		var fallback_size := Vector2.ONE * clampf(CardSlotUI.SLOT_SIZE.x * 0.45, 39.0, 63.0)
+		target_rect = Rect2(target_slot.get_global_rect().get_center() - fallback_size * 0.5, fallback_size)
+
+	var source_button := _gold_unlock_btn if currency == "gold" else _gem_unlock_btn
+	var source_rect := source_button.get_global_rect() if source_button != null and source_button.is_inside_tree() else Rect2()
+	var start_center := Vector2(size.x * 0.5, size.y * 0.5)
+	if source_rect.size.x > 1.0 and source_rect.size.y > 1.0:
+		start_center = Vector2(source_rect.position.x + source_rect.size.x * 0.5, source_rect.position.y + source_rect.size.y + 10.0)
+
+	var target_center := target_rect.get_center()
+	var edge := maxf(target_rect.size.x, target_rect.size.y)
+	var icon := TextureRect.new()
+	icon.name = "VaultUnlockKeyIcon"
+	icon.texture = load(UNLOCK_KEY_TEXTURE_PATH) as Texture2D
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.size = Vector2(edge, edge) * UNLOCK_KEY_SCALE
+	icon.position = start_center - icon.size * 0.5
+	icon.pivot_offset = icon.size * 0.5
+	icon.z_index = 3500
+	get_tree().root.add_child(icon)
+
+	var away := (start_center - target_center).normalized()
+	if away.length() <= 0.01:
+		away = Vector2.DOWN
+	var reverse_center := start_center + away * maxf(UNLOCK_KEY_REVERSE_DISTANCE, edge * 1.15)
+	var side := away.rotated(PI * 0.5) * clampf(start_center.distance_to(target_center) * 0.16, 38.0, 120.0)
+	var control_center := reverse_center.lerp(target_center, 0.50) + side
+	var reverse_tangent := (control_center - reverse_center).normalized()
+	if reverse_tangent.length() <= 0.01:
+		reverse_tangent = (target_center - reverse_center).normalized()
+	var reverse_end_rotation := _key_rotation_for_direction(reverse_tangent)
+	var spin_sweep := 360.0 * UNLOCK_KEY_START_SPINS_PER_SECOND * UNLOCK_KEY_REVERSE_DURATION * 0.5
+	var start_rotation := reverse_end_rotation - spin_sweep
+	icon.rotation_degrees = start_rotation
+	var last_target_rotation := reverse_end_rotation
+
+	var tween := create_tween()
+	tween.tween_method(func(progress: float):
+		if not is_instance_valid(icon):
+			return
+		var eased := 1.0 - pow(1.0 - progress, 3.0)
+		var center := start_center.lerp(reverse_center, eased)
+		var spin_progress := 2.0 * progress - progress * progress
+		icon.position = center - icon.size * 0.5
+		icon.rotation_degrees = start_rotation + spin_sweep * spin_progress
+	, 0.0, 1.0, UNLOCK_KEY_REVERSE_DURATION).set_trans(Tween.TRANS_LINEAR)
+	tween.tween_method(func(progress: float):
+		if not is_instance_valid(icon):
+			return
+		var accelerated := progress * progress
+		var center := _quadratic_bezier(reverse_center, control_center, target_center, accelerated)
+		var tangent := _quadratic_bezier_tangent(reverse_center, control_center, target_center, accelerated)
+		if tangent.length() <= 0.01:
+			tangent = target_center - center
+		var desired_rotation := _key_rotation_for_direction(tangent)
+		var continuous_rotation := _nearest_equivalent_angle_degrees(desired_rotation, last_target_rotation)
+		last_target_rotation = continuous_rotation
+		icon.position = center - icon.size * 0.5
+		icon.rotation_degrees = continuous_rotation
+	, 0.0, 1.0, UNLOCK_KEY_TARGET_DURATION).set_trans(Tween.TRANS_LINEAR)
+	tween.tween_callback(func():
+		if is_instance_valid(target_slot):
+			target_slot.consume_reward_key_unlock()
+		AudioManager.play_sfx("slot_unlock", 1.0, 0.0)
+	)
+	tween.tween_property(icon, "modulate:a", 0.0, UNLOCK_KEY_FADE_DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_callback(func():
+		if is_instance_valid(icon):
+			icon.queue_free()
+	)
+	await tween.finished
 
 
 func _try_start_unlock_cooldown(cooldown: Control) -> bool:
@@ -638,9 +845,10 @@ func _on_synthesize_pressed() -> void:
 	overlay.name = "VaultSynthesisAnimationOverlay"
 	overlay.setup(animation_sources, _nav_target_rect, true)
 	get_tree().root.add_child(overlay)
-	var completion := {"success": false, "result": {}, "error": ""}
+	var completion := {"done": false, "success": false, "result": {}, "error": ""}
 	_confirm_vault_synthesis_for_animation.call_deferred(selected_slots.duplicate(), overlay, completion)
 	await overlay.play()
+	await _wait_for_vault_synthesis_completion(completion)
 	_vault_synthesis_animation_running = false
 
 	if completion.get("success", false):
@@ -657,6 +865,10 @@ func _wait_for_prior_asset_operations() -> void:
 		CardPoolSystem.has_pending_confirm()
 		or ApiClient.has_pending_asset_requests()
 	):
+		await get_tree().process_frame
+
+func _wait_for_vault_synthesis_completion(completion: Dictionary) -> void:
+	while is_inside_tree() and not bool(completion.get("done", false)):
 		await get_tree().process_frame
 
 func _try_start_synthesize_cooldown() -> bool:
@@ -681,6 +893,8 @@ func _attach_action_cooldown(button: Button) -> Control:
 	button.add_child(cooldown)
 	if button == _synthesize_btn:
 		cooldown.cooldown_finished.connect(_update_synthesize_button)
+	elif button == _organize_btn:
+		cooldown.cooldown_finished.connect(_update_organize_button)
 	else:
 		cooldown.cooldown_finished.connect(_update_unlock_buttons)
 	return cooldown
@@ -782,10 +996,12 @@ func _confirm_vault_synthesis_for_animation(
 		var result_data: Dictionary = resp["data"]
 		completion["success"] = true
 		completion["result"] = result_data
+		completion["done"] = true
 		if is_instance_valid(overlay):
 			overlay.set_reward_items(_resolve_vault_synthesis_reward_targets(result_data), true)
 	else:
 		completion["error"] = str(resp.get("error", "未知错误"))
+		completion["done"] = true
 		if is_instance_valid(overlay):
 			overlay.set_reward_items([], false)
 
@@ -798,6 +1014,8 @@ func _resolve_vault_synthesis_reward_targets(result_data: Dictionary) -> Array[D
 				entry["target_rect"] = _gold_target_rect
 			"gems":
 				entry["target_rect"] = _gems_target_rect
+			"stamina":
+				entry["target_rect"] = _stamina_target_rect
 			"slot":
 				if str(entry.get("slot_type", "")) == "vault":
 					entry["target_rect"] = _vault_nav_target_rect
@@ -838,7 +1056,7 @@ func _apply_vault_synthesis_confirmed_result(result_data: Dictionary) -> void:
 
 	var exp_result: Dictionary = result_data.get("exp_result", {})
 	if not exp_result.is_empty():
-		GameManager.apply_exp_result(exp_result)
+		GameManager.apply_exp_result(exp_result, true)
 
 	var deck_data = result_data.get("deck", {})
 	if not deck_data.is_empty():
@@ -934,3 +1152,24 @@ func _is_vault_slot_unlocked(index: int) -> bool:
 		if raw is Dictionary and int(raw.get("slot_index", -1)) == index:
 			return raw.get("unlocked", false)
 	return _raw_slot_data.is_empty() and index < GameManager.player_data.vault_slots
+
+func _quadratic_bezier(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
+	var p := clampf(t, 0.0, 1.0)
+	return a * (1.0 - p) * (1.0 - p) + b * 2.0 * (1.0 - p) * p + c * p * p
+
+func _quadratic_bezier_tangent(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
+	var p := clampf(t, 0.0, 1.0)
+	return (b - a) * 2.0 * (1.0 - p) + (c - b) * 2.0 * p
+
+func _key_rotation_for_direction(direction: Vector2) -> float:
+	if direction.length() <= 0.01:
+		return 0.0
+	return rad_to_deg(direction.angle()) - 90.0
+
+func _nearest_equivalent_angle_degrees(target_degrees: float, reference_degrees: float) -> float:
+	var result := target_degrees
+	while result - reference_degrees > 180.0:
+		result -= 360.0
+	while result - reference_degrees < -180.0:
+		result += 360.0
+	return result

@@ -737,6 +737,17 @@ func sync_vault_layout(vault_cards: Array) -> Dictionary:
 		layout_sync_failed.emit(resp["error"])
 	return resp
 
+func organize_vault() -> Dictionary:
+	var body := JSON.stringify({
+		"operation_id": _new_operation_id("organize_vault"),
+	})
+	var resp := await _asset_request(_api_url("/game/organize-vault"), HTTPClient.METHOD_POST, body, "organize_vault")
+	if resp["success"]:
+		layout_synced.emit(resp["data"])
+	else:
+		layout_sync_failed.emit(resp["error"])
+	return resp
+
 ## 丢弃卡牌
 func discard_card(slot_type: String, slot_index: int) -> Dictionary:
 	var body := JSON.stringify({

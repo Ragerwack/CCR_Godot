@@ -3,7 +3,7 @@ class_name DeckCollectionUI
 
 const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
 
-# 博物馆 — 展示所有已合成圣物，按颜色分组
+# 博物馆 — 展示所有已合成圣物
 
 const RELICS_PER_ROW: int = 5
 const CARD_WIDTH: float = 150.0
@@ -50,7 +50,7 @@ void fragment() {
 }
 """
 
-# 颜色排序顺序（从高到低）
+# 稀有度排序顺序（从高到低）
 const COLOR_ORDER: Array[int] = [
 	6,
 	5,
@@ -86,9 +86,11 @@ var _view_busy: bool = false
 var _view_cancel_requested: bool = false
 var _selected_colors: Dictionary = {}
 var _available_colors: Array[int] = []
-var _selected_series: String = ""
+var _selected_series: String = TODAY_VISIBLE_SERIES_FILTER
 var _sort_mode: String = "standard"
 var _top_padding: float = FILTER_BAR_TOP
+
+static var _session_filter_state: Dictionary = {}
 
 enum ViewState {
 	NONE,
@@ -99,6 +101,7 @@ enum ViewState {
 
 func _ready() -> void:
 	setup_ui()
+	_restore_session_filter_state()
 	render_decks()
 
 func configure_layout(top_padding: float) -> void:
@@ -196,6 +199,12 @@ func _create_filter_bar() -> void:
 	_apply_filter_control_text_style(_sort_option)
 	_filter_bar.add_child(_filter_cell(_sort_option, HORIZONTAL_ALIGNMENT_RIGHT))
 
+	var spacer := Control.new()
+	spacer.name = "MuseumFilterBarSpacer"
+	spacer.custom_minimum_size = Vector2(0, FILTER_BAR_HEIGHT)
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_filter_bar.add_child(spacer)
+
 func _filter_cell(child: Control, align: HorizontalAlignment) -> Control:
 	var cell := Control.new()
 	cell.custom_minimum_size = Vector2(0, FILTER_BAR_HEIGHT)
@@ -250,7 +259,7 @@ func render_decks() -> void:
 
 	var relics := _aggregate_relics(all_decks)
 	_update_filter_options(relics)
-	relics = _apply_relic_filters(relics)
+	relics = _apply_color_filter(_apply_series_filter(relics))
 	_update_collection_progress(relics)
 	_sort_relic_list(relics)
 	if relics.is_empty():
@@ -298,8 +307,8 @@ func _aggregate_relics(decks: Array[Deck]) -> Array[Dictionary]:
 	return relics
 
 func _update_filter_options(relics: Array[Dictionary]) -> void:
-	_update_color_filter_options(relics)
 	_update_series_filter_options(relics)
+	_update_color_filter_options(_apply_series_filter(relics))
 
 func _update_color_filter_options(relics: Array[Dictionary]) -> void:
 	var color_set: Dictionary = {}
@@ -363,6 +372,20 @@ func _update_series_filter_options(relics: Array[Dictionary]) -> void:
 	_series_option.select(selected_index)
 
 func _apply_relic_filters(relics: Array[Dictionary]) -> Array[Dictionary]:
+	return _apply_color_filter(_apply_series_filter(relics))
+
+func _apply_series_filter(relics: Array[Dictionary]) -> Array[Dictionary]:
+	var filtered: Array[Dictionary] = []
+	for relic in relics:
+		if _selected_series == TODAY_VISIBLE_SERIES_FILTER:
+			if not _is_today_visible_relic(relic):
+				continue
+		elif _selected_series != "" and str(relic.get("series_name", "")) != _selected_series:
+			continue
+		filtered.append(relic)
+	return filtered
+
+func _apply_color_filter(relics: Array[Dictionary]) -> Array[Dictionary]:
 	var filtered: Array[Dictionary] = []
 	var has_active_color := false
 	for color_type in _available_colors:
@@ -372,11 +395,6 @@ func _apply_relic_filters(relics: Array[Dictionary]) -> Array[Dictionary]:
 	for relic in relics:
 		var color_type := int(relic.get("color", CardColor.ColorType.WHITE))
 		if has_active_color and not bool(_selected_colors.get(color_type, true)):
-			continue
-		if _selected_series == TODAY_VISIBLE_SERIES_FILTER:
-			if not _is_today_visible_relic(relic):
-				continue
-		elif _selected_series != "" and str(relic.get("series_name", "")) != _selected_series:
 			continue
 		filtered.append(relic)
 	return filtered
@@ -419,27 +437,62 @@ func _sort_relics(a: Dictionary, b: Dictionary) -> bool:
 			if a_oldest != b_oldest:
 				return a_oldest > b_oldest
 		_:
-			var a_id := int(a.get("deck_def_id", 0))
-			var b_id := int(b.get("deck_def_id", 0))
-			if a_id != b_id:
-				return a_id < b_id
+			var a_rarity_rank := _rarity_sort_rank(int(a.get("color", CardColor.ColorType.WHITE)))
+			var b_rarity_rank := _rarity_sort_rank(int(b.get("color", CardColor.ColorType.WHITE)))
+			if a_rarity_rank != b_rarity_rank:
+				return a_rarity_rank < b_rarity_rank
+			var a_series_index := _series_sort_index(str(a.get("series_name", "")))
+			var b_series_index := _series_sort_index(str(b.get("series_name", "")))
+			if a_series_index != b_series_index:
+				return a_series_index < b_series_index
+			var a_deck_index := _deck_sort_index(a)
+			var b_deck_index := _deck_sort_index(b)
+			if a_deck_index != b_deck_index:
+				return a_deck_index < b_deck_index
 	var a_series := str(a.get("series_name", ""))
 	var b_series := str(b.get("series_name", ""))
 	if a_series == b_series:
 		return str(a.get("deck_name", "")) < str(b.get("deck_name", ""))
 	return a_series < b_series
 
+func _rarity_sort_rank(color_type: int) -> int:
+	var rank := COLOR_ORDER.find(color_type)
+	return rank if rank >= 0 else COLOR_ORDER.size()
+
+func _series_sort_index(series_name: String) -> int:
+	var all_series := CardDataManager.get_all_series()
+	for i in range(all_series.size()):
+		var series = all_series[i]
+		if series is CardSeries and (series as CardSeries).series_name == series_name:
+			return i
+	return 1000000
+
+func _deck_sort_index(relic: Dictionary) -> int:
+	var series_name := str(relic.get("series_name", ""))
+	var deck_name := str(relic.get("deck_name", ""))
+	var series := CardDataManager.get_series_by_name(series_name)
+	if series != null:
+		var deck_names := series.get_deck_names()
+		for i in range(deck_names.size()):
+			if str(deck_names[i]) == deck_name:
+				return i
+	var deck_def_id := int(relic.get("deck_def_id", 0))
+	return deck_def_id if deck_def_id > 0 else 1000000
+
 func _on_color_filter_pressed(id: int) -> void:
 	var current := bool(_selected_colors.get(id, true))
 	_selected_colors[id] = not current
+	_save_session_filter_state()
 	render_decks()
 
 func _on_sort_selected(index: int) -> void:
 	_sort_mode = str(_sort_option.get_item_metadata(index))
+	_save_session_filter_state()
 	render_decks()
 
 func _on_series_selected(index: int) -> void:
 	_selected_series = str(_series_option.get_item_metadata(index))
+	_save_session_filter_state()
 	render_decks()
 
 func _create_color_header(color_type: int, count: int) -> Control:
@@ -796,6 +849,7 @@ func _reveal_view_cards() -> void:
 		return
 	_view_busy = true
 	_clear_view_cards(false)
+	AudioManager.play_sfx("card_preview", 1.0, 0.0)
 	var viewport_size := get_viewport_rect().size
 	var card_size := Vector2(viewport_size.x * 0.105, viewport_size.x * 0.105 * CardDisplay.CARD_SIZE.y / CardDisplay.CARD_SIZE.x)
 	card_size.y = minf(card_size.y, viewport_size.y * 0.34)
@@ -991,6 +1045,41 @@ func _apply_filter_control_text_style(control) -> void:
 		control.add_theme_color_override(color_name, MUSEUM_TEXT_DARK)
 	control.add_theme_color_override("font_disabled_color", Color(MUSEUM_TEXT_DARK, 0.42))
 	control.add_theme_font_size_override("font_size", FILTER_CONTROL_FONT_SIZE)
+
+func _restore_session_filter_state() -> void:
+	if _session_filter_state.is_empty():
+		_selected_series = TODAY_VISIBLE_SERIES_FILTER
+		_sync_sort_option_to_mode()
+		return
+	var colors = _session_filter_state.get("selected_colors", {})
+	if colors is Dictionary:
+		_selected_colors.clear()
+		for key in (colors as Dictionary).keys():
+			_selected_colors[int(key)] = bool((colors as Dictionary).get(key, true))
+	_selected_series = str(_session_filter_state.get("selected_series", ""))
+	var saved_sort := str(_session_filter_state.get("sort_mode", "standard"))
+	_sort_mode = saved_sort if ["recent", "oldest", "standard"].has(saved_sort) else "standard"
+	_sync_sort_option_to_mode()
+
+func _save_session_filter_state() -> void:
+	_session_filter_state = {
+		"selected_colors": _selected_colors.duplicate(true),
+		"selected_series": _selected_series,
+		"sort_mode": _sort_mode,
+	}
+
+func _sync_sort_option_to_mode() -> void:
+	if _sort_option == null:
+		return
+	for i in range(_sort_option.get_item_count()):
+		if str(_sort_option.get_item_metadata(i)) == _sort_mode:
+			_sort_option.select(i)
+			return
+	_sort_mode = "standard"
+	_sort_option.select(2)
+
+static func reset_session_filter_state() -> void:
+	_session_filter_state.clear()
 
 func _update_collection_progress(filtered_relics: Array[Dictionary]) -> void:
 	if _collection_progress_label == null:

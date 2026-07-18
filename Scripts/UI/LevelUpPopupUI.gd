@@ -3,6 +3,8 @@ class_name LevelUpPopupUI
 
 signal dismissed()
 
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+
 var _level: int = 1
 var _rewards: Array[String] = []
 
@@ -40,52 +42,54 @@ func _ready() -> void:
 
 	var panel := Panel.new()
 	panel.name = "LevelUpPanel"
-	panel.size = Vector2(420, 250)
-	panel.custom_minimum_size = Vector2(420, 250)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.07, 0.075, 0.10, 0.96)
-	style.border_color = Color(1.0, 0.78, 0.28, 1.0)
-	style.set_border_width_all(2)
-	style.corner_radius_top_left = 8
-	style.corner_radius_top_right = 8
-	style.corner_radius_bottom_left = 8
-	style.corner_radius_bottom_right = 8
-	style.shadow_color = Color(0, 0, 0, 0.55)
-	style.shadow_size = 12
-	panel.add_theme_stylebox_override("panel", style)
+	panel.size = CCRVisualStyle.DIALOG_PANEL_SIZE
+	panel.custom_minimum_size = CCRVisualStyle.DIALOG_PANEL_SIZE
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_theme_stylebox_override("panel", CCRVisualStyle.make_dialog_panel_style())
 	center.add_child(panel)
 
 	var box := VBoxContainer.new()
 	box.name = "LevelUpContent"
 	box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	box.offset_left = 28
-	box.offset_right = -28
-	box.offset_top = 22
-	box.offset_bottom = -18
+	box.offset_left = 180
+	box.offset_right = -180
+	box.offset_top = 82
+	box.offset_bottom = -54
 	box.add_theme_constant_override("separation", 12)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(box)
 
 	var title := Label.new()
 	title.name = "LevelUpTitle"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 26)
-	title.add_theme_color_override("font_color", Color(1.0, 0.86, 0.42, 1.0))
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color(1.0, 0.86, 0.50, 1.0))
+	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.88))
+	title.add_theme_constant_override("shadow_offset_x", 0)
+	title.add_theme_constant_override("shadow_offset_y", 2)
 	box.add_child(title)
 
 	var body := Label.new()
 	body.name = "LevelUpBody"
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_theme_font_size_override("font_size", 16)
-	body.add_theme_color_override("font_color", Color(0.90, 0.92, 0.96, 1.0))
+	body.add_theme_font_size_override("font_size", 17)
+	body.add_theme_color_override("font_color", Color(0.92, 0.96, 1.0, 0.96))
+	body.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.82))
+	body.add_theme_constant_override("shadow_offset_x", 0)
+	body.add_theme_constant_override("shadow_offset_y", 1)
 	box.add_child(body)
 
 	var rewards_label := Label.new()
 	rewards_label.name = "LevelUpRewards"
 	rewards_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rewards_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	rewards_label.add_theme_font_size_override("font_size", 15)
-	rewards_label.add_theme_color_override("font_color", Color(0.78, 0.86, 1.0, 1.0))
+	rewards_label.add_theme_font_size_override("font_size", 17)
+	rewards_label.add_theme_color_override("font_color", Color(0.78, 0.91, 1.0, 1.0))
+	rewards_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.82))
+	rewards_label.add_theme_constant_override("shadow_offset_x", 0)
+	rewards_label.add_theme_constant_override("shadow_offset_y", 1)
 	box.add_child(rewards_label)
 
 	var hint := Label.new()

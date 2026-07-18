@@ -84,6 +84,9 @@ func _ready() -> void:
 	if number_label.text != "5":
 		_fail("number label does not show the card number")
 		return
+	if number_label.get_theme_font_size("font_size") != 16:
+		_fail("number label font size was not increased by two points")
+		return
 	if not _rect_close(Rect2(badge.position, badge.size), Rect2(162.2, 2.24, 35.8, 35.84), 0.2):
 		_fail("number badge is not restored to the card top-right corner")
 		return

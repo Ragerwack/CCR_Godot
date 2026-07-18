@@ -8,7 +8,7 @@ const ICON_EXPECTED_SIZES := {
 	"nav_mail": 50, "nav_settings": 50, "nav_exit": 50,
 	"draw_stamina": 50, "draw_gold": 50, "draw_gem": 50,
 	"action_page": 67, "action_synthesize": 67, "action_discard": 67, "action_store_vault": 67,
-	"vault_expand_gold": 50, "vault_expand_gem": 50,
+	"vault_organize": 50, "vault_expand_gold": 50, "vault_expand_gem": 50,
 	"status_stamina": 50, "status_gold": 50, "status_gem": 50,
 	"status_level": 18, "status_combat_power": 18, "status_experience": 14,
 	"status_lock": 42,
@@ -87,7 +87,7 @@ func _ready() -> void:
 	if not _assert_steam_deck_metrics(main):
 		return
 
-	print("BUTTON_THEME_ICON ok assets=33 nav=9 draw=3 card_actions=4 vault=3 status=7")
+	print("BUTTON_THEME_ICON ok assets=34 nav=9 draw=3 card_actions=4 vault=4 status=7")
 	get_tree().quit(0)
 
 func _prepare_player_data() -> void:
@@ -128,6 +128,19 @@ func _assert_source_assets() -> bool:
 		var image := icon.get_image()
 		if image == null or image.get_pixel(0, 0).a > 0.1:
 			return _fail("icon_asset_alpha_missing_%s" % str(icon_id))
+	var dialog_assets := {
+		CCRVisualStyle.DIALOG_PANEL_PATH: CCRVisualStyle.DIALOG_PANEL_SIZE,
+		CCRVisualStyle.DIALOG_CONFIRM_BUTTON_PATH: Vector2(260, 80),
+		CCRVisualStyle.DIALOG_CANCEL_BUTTON_PATH: Vector2(260, 80),
+		CCRVisualStyle.DIALOG_CLOSE_BUTTON_PATH: Vector2(64, 64),
+	}
+	for path in dialog_assets:
+		var texture := load(str(path)) as Texture2D
+		if texture == null or texture.get_size() != dialog_assets[path]:
+			return _fail("exit_dialog_asset_wrong_%s" % str(path))
+		var image := texture.get_image()
+		if image == null or image.get_pixel(0, 0).a > 0.1:
+			return _fail("exit_dialog_asset_alpha_missing_%s" % str(path))
 	return true
 
 func _assert_navigation(main: MainUI) -> bool:
@@ -185,6 +198,7 @@ func _assert_draw_and_hand(main: MainUI) -> bool:
 func _assert_vault(main: MainUI) -> bool:
 	var center := main.get("_center_area") as Control
 	var targets := {
+		"VaultOrganizeButton": "vault_organize",
 		"VaultSynthesizeButton": "action_synthesize",
 		"VaultExpandGoldButton": "vault_expand_gold",
 		"VaultExpandGemButton": "vault_expand_gem",
@@ -273,10 +287,13 @@ func _assert_max_resolution_metrics(main: MainUI) -> bool:
 	vault_ui.call("_layout_right_actions")
 	var synthesize := center.find_child("VaultSynthesizeButton", true, false) as Button
 	var gold_expand := center.find_child("VaultExpandGoldButton", true, false) as Button
+	var organize := center.find_child("VaultOrganizeButton", true, false) as Button
 	if synthesize.get_theme_constant("icon_max_width") != 67:
 		return _fail("max_resolution_action_icon_not_67px")
 	if gold_expand.get_theme_constant("icon_max_width") != 50:
 		return _fail("max_resolution_currency_button_icon_not_50px")
+	if organize == null or organize.position.y >= synthesize.position.y:
+		return _fail("vault_organize_button_not_above_synthesize")
 	return true
 
 func _assert_button(button: Button, icon_id: String, variant: String) -> bool:

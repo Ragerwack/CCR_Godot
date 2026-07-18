@@ -9,6 +9,7 @@ const FADED_ALPHA: float = 0.18
 const TEXT_HORIZONTAL_PADDING: float = 6.0
 const TEXT_VERTICAL_PADDING: float = 2.0
 const CLIP_HORIZONTAL_BLEED: float = 2.0
+const FONT_COLOR: Color = Color.BLACK
 
 var _clip_host: Control
 var _digits_row: HBoxContainer
@@ -239,6 +240,7 @@ func _make_digit_label(label_name: String, text: String) -> Label:
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.add_theme_font_size_override("font_size", _font_size)
+	label.add_theme_color_override("font_color", FONT_COLOR)
 	return label
 
 func _measure_label_width(label: Label) -> float:

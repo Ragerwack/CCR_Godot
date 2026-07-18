@@ -1,11 +1,13 @@
 extends Node
 
 const REQUIRED_EVENTS := [
-	"ui_hover", "ui_press", "ui_back", "nav_transition",
-	"card_select", "card_move", "hand_page",
+	"ui_hover", "ui_press", "card_preview",
 	"draw_white", "draw_green", "draw_blue", "draw_purple", "draw_orange", "draw_black",
-	"forge_start", "forge_success", "vault_store", "discard", "slot_unlock",
-	"currency_gold", "currency_gem", "level_up", "error_soft",
+	"forge_art_flight",
+	"forge_success_white", "forge_success_green", "forge_success_blue", "forge_success_purple",
+	"forge_success_orange", "forge_success_black", "forge_success_red",
+	"slot_unlock", "currency_gold", "currency_gem",
+	"level_up",
 ]
 
 func _ready() -> void:
@@ -18,22 +20,32 @@ func _ready() -> void:
 	for event_name in REQUIRED_EVENTS:
 		if not AudioManager.has_sfx(event_name):
 			return _fail("missing_" + event_name)
-		if AudioManager.get_sfx_variant_count(event_name) < 2:
+		if AudioManager.get_sfx_variant_count(event_name) < 1:
 			return _fail("variation_" + event_name)
-	if AudioManager.is_sfx_playback_enabled():
-		return _fail("procedural_sfx_should_be_disabled")
+	if not AudioManager.is_sfx_playback_enabled():
+		return _fail("official_sfx_should_be_enabled")
+	if AudioManager.get_bgm_track_count("login") != 4:
+		return _fail("login_music_count_%d" % AudioManager.get_bgm_track_count("login"))
+	if AudioManager.get_bgm_track_count("auction") != 2:
+		return _fail("auction_music_count_%d" % AudioManager.get_bgm_track_count("auction"))
+	if AudioManager.get_bgm_track_count("game") != 8:
+		return _fail("game_music_count_%d" % AudioManager.get_bgm_track_count("game"))
+	if absf(AudioManager.get_event_gain("card_preview") - 0.378) > 0.001:
+		return _fail("card_preview_gain_%s" % str(AudioManager.get_event_gain("card_preview")))
+	if absf(AudioManager.get_event_pitch_scale("card_preview") - 0.50) > 0.001:
+		return _fail("card_preview_pitch_%s" % str(AudioManager.get_event_pitch_scale("card_preview")))
 
 	var original_sfx := AudioManager.sfx_volume
 	var original_muted := AudioManager.is_muted
 	AudioManager.set_muted(false)
 	AudioManager.set_sfx_volume(0.5)
 	AudioManager.play_sfx("ui_press", 1.0, 0.0)
-	if AudioManager.get_last_played_sfx_event() != "":
-		return _fail("disabled_direct_play")
+	if AudioManager.get_last_played_sfx_event() != "ui_press":
+		return _fail("direct_play_failed")
 
 	AudioManager.set_muted(true)
-	AudioManager.play_sfx("card_select")
-	if AudioManager.get_last_played_sfx_event() != "":
+	AudioManager.play_sfx("card_preview")
+	if AudioManager.get_last_played_sfx_event() != "ui_press":
 		return _fail("mute_guard")
 	AudioManager.set_muted(false)
 
@@ -43,13 +55,14 @@ func _ready() -> void:
 	add_child(nav_button)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	await get_tree().create_timer(0.05).timeout
 	nav_button.pressed.emit()
-	if AudioManager.get_last_played_sfx_event() != "":
-		return _fail("disabled_dynamic_button_binding")
+	if AudioManager.get_last_played_sfx_event() != "ui_press":
+		return _fail("dynamic_button_binding")
 
 	AudioManager.fade_all_audio_to_silence(0.0)
-	AudioManager.play_sfx("error_soft")
-	if AudioManager.get_last_played_sfx_event() != "":
+	AudioManager.play_sfx("ui_hover")
+	if AudioManager.get_last_played_sfx_event() != "ui_press":
 		return _fail("cinematic_silence_guard")
 	AudioManager.restore_all_audio(0.0)
 	await get_tree().process_frame
@@ -58,7 +71,7 @@ func _ready() -> void:
 
 	AudioManager.set_sfx_volume(original_sfx)
 	AudioManager.set_muted(original_muted)
-	print("AUDIO_MANAGER ok events=%d assets=57 pool=%d playback_enabled=false" % [AudioManager.get_sfx_event_count(), AudioManager.get_sfx_pool_size()])
+	print("AUDIO_MANAGER ok events=%d sfx_assets=21 music=14 pool=%d playback_enabled=true" % [AudioManager.get_sfx_event_count(), AudioManager.get_sfx_pool_size()])
 	get_tree().quit(0)
 
 func _fail(reason: String) -> void:

@@ -82,6 +82,9 @@ func _ready() -> void:
 
 	if _first_current_label(gold_roll).get_theme_font_size("font_size") != 18 or _first_current_label(gem_roll).get_theme_font_size("font_size") != 18:
 		return _fail("font_size_changed")
+	for label in _currency_digit_labels([stamina_roll, gold_roll, gem_roll]):
+		if not _color_close(label.get_theme_color("font_color"), Color.BLACK):
+			return _fail("resource_digit_font_color_not_black")
 	if currency.size.x <= base_width:
 		return _fail("currency_row_did_not_expand")
 	if not is_equal_approx(currency.global_position.x + currency.size.x, right_edge):
@@ -200,3 +203,15 @@ func _join_current_digits(roll: AssetNumberRoll) -> String:
 	for label in roll.get_current_digit_labels():
 		text += label.text
 	return text
+
+func _currency_digit_labels(rolls: Array) -> Array[Label]:
+	var labels: Array[Label] = []
+	for roll in rolls:
+		if not (roll is AssetNumberRoll):
+			continue
+		labels.append_array((roll as AssetNumberRoll).get_current_digit_labels())
+		labels.append_array((roll as AssetNumberRoll).get_outgoing_digit_labels())
+	return labels
+
+func _color_close(a: Color, b: Color, epsilon: float = 0.005) -> bool:
+	return absf(a.r - b.r) <= epsilon and absf(a.g - b.g) <= epsilon and absf(a.b - b.b) <= epsilon and absf(a.a - b.a) <= epsilon

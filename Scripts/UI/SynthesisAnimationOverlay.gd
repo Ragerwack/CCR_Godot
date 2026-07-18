@@ -12,18 +12,26 @@ const SURFACE_DISSOLVE_DURATION: float = 0.30
 const ART_MIN_FLIGHT: float = 0.90
 const ART_MAX_FLIGHT: float = 1.30
 const ART_FLIGHT_INTERVAL: float = 0.10
+const ART_FLIGHT_SFX_LEAD_TIME: float = 0.10
 const RELIC_FORM_DURATION: float = 0.30
 const RELIC_HOLD_DURATION: float = 0.50
 const RELIC_TO_NAV_DURATION: float = 0.50
 const RELIC_SCALE_MULTIPLIER: float = 1.30
 const RELIC_SCREEN_HEIGHT_RATIO: float = (3.0 / 5.0) * RELIC_SCALE_MULTIPLIER
 const SINGLE_CARD_FADE_DURATION: float = 0.50
-const REWARD_REVERSE_DURATION: float = 0.18
-const REWARD_TARGET_DURATION: float = 0.62
+const REWARD_REVERSE_RATIO: float = 0.20
+const REWARD_STAMINA_FLIGHT_DURATION: float = 1.00
+const REWARD_GOLD_FLIGHT_DURATION: float = 1.30
+const REWARD_GEMS_FLIGHT_DURATION: float = 1.60
 const REWARD_STAGGER: float = 0.07
 const REWARD_START_SCALE: float = 3.0
 const REWARD_END_SCALE: float = 0.5
 const REWARD_KEY_TEXTURE_PATH := "res://Resources/UI/Icons/Status/status_slot_key.png"
+const REWARD_KEY_REVERSE_DURATION: float = 0.80
+const REWARD_KEY_TARGET_DURATION: float = 1.20
+const REWARD_KEY_FADE_DURATION: float = 0.08
+const REWARD_KEY_START_SPINS_PER_SECOND: float = 5.0
+const REWARD_KEY_SCALE: float = 2.0
 
 var _sources: Array[Dictionary] = []
 var _cards: Array = []
@@ -52,7 +60,7 @@ func setup(sources: Array[Dictionary], nav_target_rect: Rect2, wait_for_reward_p
 			_color_type = int(card.color)
 
 
-## 只接收服务端已经确认的奖励。confirmed=false 时 relic 会熄灭，不会飞入博物馆。
+## 只接收服务端已经确认的奖励。confirmed=false 且已在动画分支前返回时，relic 会熄灭。
 func set_reward_items(items: Array[Dictionary], confirmed: bool) -> void:
 	_reward_items = items.duplicate(false)
 	_reward_confirmed = confirmed
@@ -66,6 +74,7 @@ static func extract_reward_entries(result: Dictionary) -> Array[Dictionary]:
 	var rewards: Dictionary = result.get("rewards", {}) if result.get("rewards", {}) is Dictionary else {}
 	var gold := int(result.get("gold_reward", rewards.get("gold", 0)))
 	var gems := int(rewards.get("gems", 0))
+	var stamina := _extract_stamina_reward_amount(rewards.get("stamina", 0))
 	var level_slot_entries: Array[Dictionary] = []
 	var exp_result: Dictionary = result.get("exp_result", {}) if result.get("exp_result", {}) is Dictionary else {}
 	for raw_reward in exp_result.get("rewards", []):
@@ -88,6 +97,8 @@ static func extract_reward_entries(result: Dictionary) -> Array[Dictionary]:
 		entries.append({"type": "gold", "amount": gold})
 	if gems > 0:
 		entries.append({"type": "gems", "amount": gems})
+	if stamina > 0:
+		entries.append({"type": "stamina", "amount": stamina})
 
 	var unlocked_vault_slots = rewards.get("unlocked_vault_slots", [])
 	if unlocked_vault_slots is Array:
@@ -99,7 +110,6 @@ static func extract_reward_entries(result: Dictionary) -> Array[Dictionary]:
 
 func play() -> void:
 	_rng.randomize()
-	AudioManager.play_sfx("forge_start", 1.0, 0.012)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	z_index = 3000
@@ -115,23 +125,19 @@ func play() -> void:
 	var art_nodes := await _dissolve_to_art(card_nodes)
 	_relic_rect = _get_centered_relic_rect()
 	await _fly_art_to_relic_slots(art_nodes, _relic_rect)
-	# 服务器仍是合成结果的权威源。结果尚未返回时停在子卡插图阶段，
-	# 不先生成一个会无限停在屏幕中央的 relic。
-	if _wait_for_reward_payload and not _reward_payload_received:
-		await reward_payload_ready
 	var relic := await _form_relic(art_nodes)
-	AudioManager.play_sfx("forge_success", 1.0, 0.0)
 	await _hold_relic_before_nav(relic)
-	if _reward_confirmed:
+	if _reward_payload_received and _reward_confirmed:
 		await _send_relic_and_rewards(relic)
-	else:
+	elif _reward_payload_received and not _reward_confirmed:
 		await _fade_rejected_relic(relic)
+	else:
+		await _send_relic_to_nav(relic)
 	queue_free()
 
 
 func play_store_to_nav() -> void:
 	_rng.randomize()
-	AudioManager.play_sfx("vault_store")
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	z_index = 3000
@@ -147,7 +153,6 @@ func play_store_to_nav() -> void:
 
 func play_discard() -> void:
 	_rng.randomize()
-	AudioManager.play_sfx("discard")
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	z_index = 3000
@@ -228,16 +233,22 @@ func _dissolve_to_art(card_nodes: Array[Control]) -> Array[TextureRect]:
 			continue
 		var display := node as CardDisplay
 		var art_rect := display.get_art_rect()
+		var art_rotation := display.rotation_degrees
+		var art_center_offset := art_rect.position + art_rect.size * 0.5 - display.pivot_offset
+		var art_center := display.position + display.pivot_offset + art_center_offset.rotated(deg_to_rad(art_rotation))
 		var art := TextureRect.new()
 		art.name = "SynthesisArt"
-		art.position = display.position + art_rect.position
+		art.position = art_center - art_rect.size * 0.5
 		art.size = art_rect.size
 		art.texture = display.get_art_texture()
 		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		art.clip_contents = true
 		art.pivot_offset = art.size * 0.5
+		art.rotation_degrees = art_rotation
 		var shadow := CCRVisualStyle.make_texture_shadow(art, "SynthesisArtShadow", Vector2(8, 10), Color(0, 0, 0, 0.34))
+		shadow.pivot_offset = art.pivot_offset
+		shadow.rotation_degrees = art.rotation_degrees
 		add_child(shadow)
 		add_child(art)
 		art.set_meta("shadow", shadow)
@@ -275,8 +286,12 @@ func _fly_art_to_relic_slots(art_nodes: Array[TextureRect], relic_rect: Rect2) -
 		var control_a := start_pos + away * away_distance + side * 42.0
 		var control_b := target_rect.position + away * loop_distance + side * 130.0
 		var delay := float(i) * ART_FLIGHT_INTERVAL
+		var sfx_delay := delay + maxf(duration - ART_FLIGHT_SFX_LEAD_TIME, 0.0)
 		var tween := create_tween()
 		tween.set_parallel(true)
+		tween.tween_callback(func():
+			AudioManager.play_sfx("forge_art_flight", 1.0, 0.0)
+		).set_delay(sfx_delay)
 		tween.tween_method(func(t: float):
 			if is_instance_valid(art):
 				var next_pos := _cubic_bezier(start_pos, control_a, control_b, target_rect.position, t)
@@ -285,11 +300,14 @@ func _fly_art_to_relic_slots(art_nodes: Array[TextureRect], relic_rect: Rect2) -
 				var shadow = art.get_meta("shadow", null)
 				if shadow is TextureRect and is_instance_valid(shadow):
 					shadow.position = next_pos + Vector2(8, 10)
+					shadow.pivot_offset = shadow.size * 0.5
 		, 0.0, 1.0, duration).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		tween.tween_property(art, "size", target_rect.size, duration).set_delay(delay)
+		tween.tween_property(art, "rotation_degrees", 0.0, duration).set_delay(delay).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 		var shadow = art.get_meta("shadow", null)
 		if shadow is TextureRect and is_instance_valid(shadow):
 			tween.tween_property(shadow, "size", target_rect.size, duration).set_delay(delay)
+			tween.tween_property(shadow, "rotation_degrees", 0.0, duration).set_delay(delay).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	await get_tree().create_timer(ART_FLIGHT_INTERVAL * maxf(float(art_nodes.size() - 1), 0.0) + ART_MAX_FLIGHT).timeout
 
 
@@ -307,6 +325,7 @@ func _form_relic(art_nodes: Array[TextureRect]) -> Control:
 	relic.pivot_offset = relic.size * 0.5
 	add_child(relic)
 	relic.set_cards(_cards)
+	_play_relic_formed_sfx()
 
 	var tween := create_tween()
 	tween.set_parallel(true)
@@ -449,7 +468,7 @@ func _send_relic_and_rewards(relic: Control) -> void:
 		if icon == null:
 			continue
 		var delay := float(index) * REWARD_STAGGER
-		reward_duration = maxf(reward_duration, delay + REWARD_REVERSE_DURATION + REWARD_TARGET_DURATION)
+		reward_duration = maxf(reward_duration, delay + _reward_flight_duration(item))
 		_start_reward_flight(icon, item, relic_center, delay)
 
 	await get_tree().create_timer(maxf(RELIC_TO_NAV_DURATION, reward_duration)).timeout
@@ -465,6 +484,8 @@ func _create_reward_icon(item: Dictionary, start_center: Vector2) -> TextureRect
 			texture = CCRVisualStyle.icon("status_gold")
 		"gems":
 			texture = CCRVisualStyle.icon("status_gem")
+		"stamina":
+			texture = CCRVisualStyle.icon("status_stamina")
 		"slot":
 			texture = load(REWARD_KEY_TEXTURE_PATH) as Texture2D
 	if texture == null:
@@ -473,7 +494,7 @@ func _create_reward_icon(item: Dictionary, start_center: Vector2) -> TextureRect
 	var reference_size := maxf(target_rect.size.x, target_rect.size.y)
 	if reference_size <= 1.0:
 		reference_size = 42.0 if reward_type == "slot" else 22.0
-	var edge := reference_size * REWARD_START_SCALE
+	var edge := reference_size * REWARD_KEY_SCALE if reward_type == "slot" else reference_size * REWARD_START_SCALE
 	var icon := TextureRect.new()
 	icon.name = "SynthesisReward_%s" % reward_type
 	icon.texture = texture
@@ -482,12 +503,16 @@ func _create_reward_icon(item: Dictionary, start_center: Vector2) -> TextureRect
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.size = Vector2(edge, edge)
 	icon.position = start_center - icon.size * 0.5
+	icon.pivot_offset = icon.size * 0.5
 	icon.z_index = 1
 	add_child(icon)
 	return icon
 
 
 func _start_reward_flight(icon: TextureRect, item: Dictionary, start_center: Vector2, delay: float) -> void:
+	if str(item.get("type", "")) == "slot":
+		_start_key_reward_flight(icon, item, start_center, delay)
+		return
 	var target_rect: Rect2 = item.get("target_rect", Rect2())
 	var target_center := target_rect.get_center()
 	if target_rect.size.x <= 1.0 or target_rect.size.y <= 1.0:
@@ -503,8 +528,8 @@ func _start_reward_flight(icon: TextureRect, item: Dictionary, start_center: Vec
 	if target_reference <= 1.0:
 		target_reference = 42.0 if str(item.get("type", "")) == "slot" else 22.0
 	var end_size := Vector2.ONE * target_reference * REWARD_END_SCALE
-	var total_duration := REWARD_REVERSE_DURATION + REWARD_TARGET_DURATION
-	var reverse_ratio := REWARD_REVERSE_DURATION / total_duration
+	var total_duration := _reward_flight_duration(item)
+	var reverse_ratio := REWARD_REVERSE_RATIO
 	var tween := create_tween()
 	tween.tween_method(func(progress: float):
 		if not is_instance_valid(icon):
@@ -525,12 +550,93 @@ func _start_reward_flight(icon: TextureRect, item: Dictionary, start_center: Vec
 			icon.modulate.a = 1.0 - (progress - 0.82) / 0.18
 	, 0.0, 1.0, total_duration).set_delay(delay)
 	tween.tween_callback(func():
+		match str(item.get("type", "")):
+			"gold":
+				AudioManager.play_sfx("currency_gold", 1.0, 0.0)
+			"gems":
+				AudioManager.play_sfx("currency_gem", 1.0, 0.0)
 		var target_slot = item.get("target_slot", null)
 		if target_slot is CardSlotUI and is_instance_valid(target_slot):
 			target_slot.consume_reward_key_unlock()
 		if is_instance_valid(icon):
 			icon.queue_free()
 	)
+
+
+func _start_key_reward_flight(icon: TextureRect, item: Dictionary, start_center: Vector2, delay: float) -> void:
+	var target_rect: Rect2 = item.get("target_rect", Rect2())
+	var target_center := target_rect.get_center()
+	if target_rect.size.x <= 1.0 or target_rect.size.y <= 1.0:
+		target_center = Vector2(get_viewport_rect().size.x * 0.5, get_viewport_rect().size.y + 80.0)
+	var away := (start_center - target_center).normalized()
+	if away.length() <= 0.01:
+		away = Vector2.DOWN.rotated(_rng.randf_range(-0.65, 0.65))
+	var side := away.rotated(PI * 0.5) * _rng.randf_range(-70.0, 70.0)
+	var reverse_center := start_center + away * maxf(58.0, icon.size.x * 1.15)
+	var control_center := reverse_center.lerp(target_center, 0.52) + side
+	var reverse_tangent := (control_center - reverse_center).normalized()
+	if reverse_tangent.length() <= 0.01:
+		reverse_tangent = (target_center - reverse_center).normalized()
+	var reverse_end_rotation := _key_rotation_for_direction(reverse_tangent)
+	var spin_sweep := 360.0 * REWARD_KEY_START_SPINS_PER_SECOND * REWARD_KEY_REVERSE_DURATION * 0.5
+	var start_rotation := reverse_end_rotation - spin_sweep
+	var last_target_rotation := reverse_end_rotation
+	icon.rotation_degrees = start_rotation
+
+	var tween := create_tween()
+	tween.tween_interval(delay)
+	tween.tween_method(func(progress: float):
+		if not is_instance_valid(icon):
+			return
+		var eased := 1.0 - pow(1.0 - progress, 3.0)
+		var center := start_center.lerp(reverse_center, eased)
+		var spin_progress := 2.0 * progress - progress * progress
+		icon.position = center - icon.size * 0.5
+		icon.rotation_degrees = start_rotation + spin_sweep * spin_progress
+	, 0.0, 1.0, REWARD_KEY_REVERSE_DURATION).set_trans(Tween.TRANS_LINEAR)
+	tween.tween_method(func(progress: float):
+		if not is_instance_valid(icon):
+			return
+		var accelerated := progress * progress
+		var center := _quadratic_bezier(reverse_center, control_center, target_center, accelerated)
+		var tangent := _quadratic_bezier_tangent(reverse_center, control_center, target_center, accelerated)
+		if tangent.length() <= 0.01:
+			tangent = target_center - center
+		var desired_rotation := _key_rotation_for_direction(tangent)
+		var continuous_rotation := _nearest_equivalent_angle_degrees(desired_rotation, last_target_rotation)
+		last_target_rotation = continuous_rotation
+		icon.position = center - icon.size * 0.5
+		icon.rotation_degrees = continuous_rotation
+	, 0.0, 1.0, REWARD_KEY_TARGET_DURATION).set_trans(Tween.TRANS_LINEAR)
+	tween.tween_callback(func():
+		AudioManager.play_sfx("slot_unlock", 1.0, 0.0)
+		var target_slot = item.get("target_slot", null)
+		if target_slot is CardSlotUI and is_instance_valid(target_slot):
+			target_slot.consume_reward_key_unlock()
+	)
+	tween.tween_property(icon, "modulate:a", 0.0, REWARD_KEY_FADE_DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_callback(func():
+		if is_instance_valid(icon):
+			icon.queue_free()
+	)
+
+
+func _reward_flight_duration(item: Dictionary) -> float:
+	if str(item.get("type", "")) == "slot":
+		return REWARD_KEY_REVERSE_DURATION + REWARD_KEY_TARGET_DURATION + REWARD_KEY_FADE_DURATION
+	match str(item.get("type", "")):
+		"stamina":
+			return REWARD_STAMINA_FLIGHT_DURATION
+		"gold":
+			return REWARD_GOLD_FLIGHT_DURATION
+		"gems":
+			return REWARD_GEMS_FLIGHT_DURATION
+	return REWARD_GOLD_FLIGHT_DURATION
+
+static func _extract_stamina_reward_amount(raw_stamina) -> int:
+	if raw_stamina is Dictionary:
+		return int(raw_stamina.get("amount", raw_stamina.get("current", 0)))
+	return int(raw_stamina)
 
 
 func _fade_rejected_relic(relic: Control) -> void:
@@ -588,10 +694,48 @@ func _quadratic_bezier(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
 	return a * (1.0 - p) * (1.0 - p) + b * 2.0 * (1.0 - p) * p + c * p * p
 
 
+func _quadratic_bezier_tangent(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
+	var p := clampf(t, 0.0, 1.0)
+	return (b - a) * 2.0 * (1.0 - p) + (c - b) * 2.0 * p
+
+
 func _cubic_bezier(a: Vector2, b: Vector2, c: Vector2, d: Vector2, t: float) -> Vector2:
 	var p := clampf(t, 0.0, 1.0)
 	var q := 1.0 - p
 	return a * q * q * q + b * 3.0 * q * q * p + c * 3.0 * q * p * p + d * p * p * p
+
+
+func _key_rotation_for_direction(direction: Vector2) -> float:
+	if direction.length() <= 0.01:
+		return 0.0
+	return rad_to_deg(direction.angle()) - 90.0
+
+
+func _nearest_equivalent_angle_degrees(target_degrees: float, reference_degrees: float) -> float:
+	var result := target_degrees
+	while result - reference_degrees > 180.0:
+		result -= 360.0
+	while result - reference_degrees < -180.0:
+		result += 360.0
+	return result
+
+
+func _play_relic_formed_sfx() -> void:
+	var event_name := "forge_success_white"
+	match _color_type:
+		CardColor.ColorType.GREEN:
+			event_name = "forge_success_green"
+		CardColor.ColorType.BLUE:
+			event_name = "forge_success_blue"
+		CardColor.ColorType.PURPLE:
+			event_name = "forge_success_purple"
+		CardColor.ColorType.ORANGE:
+			event_name = "forge_success_orange"
+		CardColor.ColorType.BLACK:
+			event_name = "forge_success_black"
+		CardColor.ColorType.RED:
+			event_name = "forge_success_red"
+	AudioManager.play_sfx(event_name, 1.0, 0.0)
 
 
 func _color_for_card_color(color_type: int) -> Color:

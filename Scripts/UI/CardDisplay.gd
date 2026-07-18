@@ -91,7 +91,7 @@ const DECK_NAME_FONT_CANVAS: float = 92.0
 const CARD_NAME_FONT_CANVAS: float = 62.0
 const DESCRIPTION_FONT_CANVAS: float = 34.0
 const SERIES_TAG_FONT_CANVAS: float = 32.0
-const NUMBER_BADGE_FONT_CANVAS: float = 70.0
+const NUMBER_BADGE_FONT_CANVAS: float = 80.0
 const CARD_ROUNDED_MASK_SHADER: String = """
 shader_type canvas_item;
 
@@ -374,6 +374,7 @@ func _on_mouse_entered() -> void:
 	if card == null:
 		return
 	card_hover_changed.emit(self, true)
+	AudioManager.play_sfx("card_preview", 1.0, 0.0)
 	if not hover_scale_enabled:
 		return
 	_hovered = true

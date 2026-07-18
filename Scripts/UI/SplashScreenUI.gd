@@ -74,6 +74,7 @@ const PREP_STATUS_FAILED := "failed"
 
 func _ready() -> void:
 	FileLogger.log("SplashScreenUI 启动")
+	AudioManager.play_login_music()
 	_setup_ui()
 	_update_mode()
 	if ApiClient.has_refresh_token():

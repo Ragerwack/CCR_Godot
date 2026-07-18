@@ -54,6 +54,12 @@ func _ready() -> void:
 	if not _has_text(center_area, "Settings") or not _has_text(center_area, "Resolution") or not _has_resolution_option(center_area) or not _has_window_mode_option(center_area):
 		_fail("English basic settings page, language selector, resolution selector, or window mode selector is missing")
 		return
+	if not _has_settings_visuals(center_area):
+		_fail("settings page is missing scheme C control visuals")
+		return
+	if not _settings_panel_matches_target(main, center_area):
+		_fail("settings panel does not match target responsive size")
+		return
 	var profile_tab := center_area.find_child("ProfileSettingsTab", true, false) as Button
 	if profile_tab == null:
 		_fail("player information settings tab is missing")
@@ -76,6 +82,11 @@ func _ready() -> void:
 	var avatar_picker := main.find_child("AvatarPickerPopup", false, false) as PopupPanel
 	if avatar_picker == null or avatar_picker.find_children("AvatarOption_*", "Button", true, false).size() != 12:
 		_fail("avatar picker does not expose all 12 unlocked basic avatars")
+		return
+	var avatar_scrolls := avatar_picker.find_children("*", "ScrollContainer", true, false)
+	var avatar_scroll := avatar_scrolls[0] as ScrollContainer if not avatar_scrolls.is_empty() else null
+	if avatar_scroll == null or not avatar_scroll.has_theme_stylebox_override("panel"):
+		_fail("avatar picker scroll container is missing scheme C visual style")
 		return
 	avatar_picker.hide()
 	avatar_picker.queue_free()
@@ -108,9 +119,32 @@ func _ready() -> void:
 	await get_tree().process_frame
 	nav_buttons.nav_button_clicked.emit("exit_game")
 	await get_tree().process_frame
-	var exit_dialog: ConfirmationDialog = main.get("_exit_confirm_dialog")
-	if exit_dialog == null or exit_dialog.title != "Exit Game" or exit_dialog.dialog_text.find("server connection") < 0:
+	var exit_dialog: Control = main.get("_exit_confirm_dialog")
+	var exit_title := exit_dialog.get_node_or_null("Panel/TitleLabel") as Label if exit_dialog != null else null
+	var exit_message := exit_dialog.get_node_or_null("Panel/MessageLabel") as Label if exit_dialog != null else null
+	var confirm_button := exit_dialog.get_node_or_null("Panel/ConfirmButton") as Button if exit_dialog != null else null
+	var cancel_button := exit_dialog.get_node_or_null("Panel/CancelButton") as Button if exit_dialog != null else null
+	var close_button := exit_dialog.get_node_or_null("Panel/CloseButton") as Button if exit_dialog != null else null
+	if exit_dialog == null or exit_title == null or exit_title.text != "Exit Game" or exit_message == null or exit_message.text != "Exit the game?":
 		_fail("exit game confirmation dialog is missing")
+		return
+	if confirm_button == null or cancel_button == null or close_button == null:
+		_fail("exit game confirmation controls are missing")
+		return
+	if confirm_button.text == "" or cancel_button.text == "" or close_button.text != "":
+		_fail("exit game button runtime text is wrong")
+		return
+	main.call("_apply_game_text_color")
+	if not _color_close(exit_title.get_theme_color("font_color"), Color.WHITE) or not _color_close(confirm_button.get_theme_color("font_color"), Color.WHITE):
+		_fail("exit game dialog text color is not white")
+		return
+	var exit_panel := exit_dialog.get_node_or_null("Panel") as Control
+	if exit_panel == null or not exit_panel.get_global_rect().encloses(close_button.get_global_rect()):
+		_fail("exit game close button is clipped by panel")
+		return
+	var close_icon := close_button.get_node_or_null("CloseButtonIcon") as TextureRect
+	if close_icon == null or close_icon.texture == null or not close_button.get_global_rect().encloses(close_icon.get_global_rect()) or not exit_panel.get_global_rect().encloses(close_icon.get_global_rect()):
+		_fail("exit game close icon is clipped")
 		return
 	exit_dialog.hide()
 
@@ -143,11 +177,42 @@ func _has_window_mode_option(root: Node) -> bool:
 		return false
 	return bool(window_mode_select.get_item_metadata(0)) == true and bool(window_mode_select.get_item_metadata(1)) == false
 
+func _has_settings_visuals(root: Node) -> bool:
+	var panel := root.find_child("SettingsRelicPanel", true, false) as Panel
+	var resolution_select := root.find_child("ResolutionSelect", true, false) as OptionButton
+	var sliders := root.find_children("*", "HSlider", true, false)
+	if panel == null or not panel.has_theme_stylebox_override("panel"):
+		return false
+	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxTexture
+	if panel_style == null or panel_style.texture == null:
+		return false
+	if resolution_select == null or not resolution_select.has_theme_stylebox_override("normal"):
+		return false
+	if resolution_select.get_popup() == null or not resolution_select.get_popup().has_theme_stylebox_override("panel"):
+		return false
+	if sliders.size() < 2:
+		return false
+	for node in sliders:
+		var slider := node as HSlider
+		if slider == null or not slider.has_theme_stylebox_override("slider") or not slider.has_theme_icon_override("grabber"):
+			return false
+	return true
+
+func _settings_panel_matches_target(main: MainUI, root: Node) -> bool:
+	var panel := root.find_child("SettingsRelicPanel", true, false) as Panel
+	if panel == null:
+		return false
+	var expected_rect := main.call("_settings_panel_rect") as Rect2
+	return panel.position.distance_to(expected_rect.position) <= 1.0 and panel.size.distance_to(expected_rect.size) <= 1.0
+
 func _has_region_option(select: OptionButton, code: String, label: String) -> bool:
 	for index in range(select.item_count):
 		if str(select.get_item_metadata(index)) == code and select.get_item_text(index) == label:
 			return true
 	return false
+
+func _color_close(a: Color, b: Color, epsilon: float = 0.01) -> bool:
+	return absf(a.r - b.r) <= epsilon and absf(a.g - b.g) <= epsilon and absf(a.b - b.b) <= epsilon and absf(a.a - b.a) <= epsilon
 
 func _fail(message: String) -> void:
 	push_error("MENU_LOCALIZATION " + message)

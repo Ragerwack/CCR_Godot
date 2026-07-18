@@ -15,6 +15,7 @@ const THUMBNAIL_CACHE = preload("res://Scripts/UI/MuseumRelicThumbnailCache.gd")
 
 func _ready() -> void:
 	Localization.set_locale("zh-CN")
+	DeckCollectionUI.reset_session_filter_state()
 	GameManager.apply_draw_key({
 		"date_key": "2026-07-13",
 		"version": 1,
@@ -62,6 +63,21 @@ func _ready() -> void:
 		if added_deck.deck_def_key != "solar_system__sun":
 			return _fail("server_deck_key_missing_%d" % color_type)
 
+	for color_type in [CardColor.ColorType.WHITE, CardColor.ColorType.GREEN]:
+		DeckSystem.add_synthesized_deck({
+			"id": "museum-earth-test-%d" % color_type,
+			"color": ALL_RELIC_NAMES[color_type],
+			"deck_def": {
+				"id": 36,
+				"name": "earth__asia",
+				"description": "亚洲",
+			},
+			"series": {
+				"id": 3,
+				"name": "地球",
+			},
+		})
+
 	var museum := DeckCollectionUI.new()
 	# 最大正式分辨率下，中间区域 + 右侧区域的最小可用宽度。
 	museum.size = Vector2(2168, 1416)
@@ -73,6 +89,8 @@ func _ready() -> void:
 		return _fail("filter_color_missing")
 	if color_filter.get_popup().get_item_count() != ALL_RELIC_COLORS.size():
 		return _fail("filter_color_count_wrong")
+	if color_filter.text != "稀有度：全部":
+		return _fail("filter_rarity_label_wrong")
 	if color_filter.get_popup().get_item_text(color_filter.get_popup().get_item_index(CardColor.ColorType.WHITE)) != "普通":
 		return _fail("filter_white_name_not_tier")
 	if color_filter.get_popup().get_item_text(color_filter.get_popup().get_item_index(CardColor.ColorType.RED)) != "宇宙":
@@ -85,15 +103,26 @@ func _ready() -> void:
 		return _fail("filter_series_missing")
 	if series_option.get_item_text(1) != "今日可见系列" or str(series_option.get_item_metadata(1)) != DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER:
 		return _fail("today_visible_series_filter_missing")
+	if str(series_option.get_item_metadata(series_option.selected)) != DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER:
+		return _fail("today_visible_series_filter_not_default")
+	var filter_bar := museum.find_child("MuseumFilterBar", true, false) as HBoxContainer
+	if filter_bar == null or filter_bar.get_child_count() != DeckCollectionUI.RELICS_PER_ROW:
+		return _fail("filter_bar_not_aligned_to_relic_columns")
+	if sort_option.get_parent() != filter_bar.get_child(3):
+		return _fail("sort_filter_not_in_fourth_column")
+	if filter_bar.get_child(4).name != "MuseumFilterBarSpacer":
+		return _fail("filter_bar_spacer_missing")
 	var progress_label := museum.find_child("MuseumCollectionProgress", true, false) as Label
 	var total_decks := _total_deck_defs()
-	if progress_label == null or progress_label.text != "已收藏 7/%d" % (ALL_RELIC_COLORS.size() * total_decks):
+	if progress_label == null or progress_label.text != "已收藏 7/7":
 		return _fail("collection_progress_wrong")
 	var relic_grid := museum.find_child("MuseumRelicGrid", true, false) as GridContainer
 	if relic_grid == null or relic_grid.columns != DeckCollectionUI.RELICS_PER_ROW:
 		return _fail("relic_fixed_five_column_grid_missing")
 	if relic_grid.get_child_count() != ALL_RELIC_COLORS.size():
 		return _fail("relic_grid_count_wrong")
+	if relic_grid.get_child(0).name != "RelicCard%d" % CardColor.ColorType.RED:
+		return _fail("standard_sort_does_not_put_rarest_first")
 
 	for color_type in ALL_RELIC_COLORS:
 		var relic_card := museum.find_child("RelicCard%d" % color_type, true, false) as Control
@@ -208,14 +237,23 @@ func _ready() -> void:
 	if filtered_white != null:
 		return _fail("filter_color_white_visible")
 	progress_label = museum.find_child("MuseumCollectionProgress", true, false) as Label
-	if progress_label == null or progress_label.text != "已收藏 6/%d" % ((ALL_RELIC_COLORS.size() - 1) * total_decks):
+	if progress_label == null or progress_label.text != "已收藏 6/6":
 		return _fail("filtered_collection_progress_wrong")
 	museum._selected_colors[CardColor.ColorType.WHITE] = true
 	museum._sort_mode = "standard"
 	var sorted_relics := museum._aggregate_relics(DeckSystem.get_player_decks())
 	museum._sort_relic_list(sorted_relics)
-	if sorted_relics.is_empty() or int(sorted_relics[0].get("deck_def_id", 0)) != 21:
+	if sorted_relics.is_empty() or int(sorted_relics[0].get("color", -1)) != CardColor.ColorType.RED or int(sorted_relics[0].get("deck_def_id", 0)) != 21:
 		return _fail("filter_standard_sort_wrong")
+	var standard_synthetic_relics: Array[Dictionary] = [
+		{"deck_def_id": 36, "series_name": "地球", "deck_name": "亚洲", "color": CardColor.ColorType.WHITE, "first_index": 0, "last_index": 0},
+		{"deck_def_id": 22, "series_name": "太阳系", "deck_name": "水星", "color": CardColor.ColorType.PURPLE, "first_index": 1, "last_index": 1},
+		{"deck_def_id": 21, "series_name": "太阳系", "deck_name": "太阳", "color": CardColor.ColorType.PURPLE, "first_index": 2, "last_index": 2},
+		{"deck_def_id": 1, "series_name": "万象卡域", "deck_name": "AI意识", "color": CardColor.ColorType.BLUE, "first_index": 3, "last_index": 3},
+	]
+	museum._sort_relic_list(standard_synthetic_relics)
+	if int(standard_synthetic_relics[0].get("deck_def_id", 0)) != 21 or int(standard_synthetic_relics[1].get("deck_def_id", 0)) != 22 or int(standard_synthetic_relics[2].get("color", -1)) != CardColor.ColorType.BLUE:
+		return _fail("standard_sort_rarity_series_deck_order_wrong")
 	var synthetic_relics: Array[Dictionary] = [
 		{"deck_def_id": 1, "series_name": "S", "deck_name": "new", "first_index": 0, "last_index": 0},
 		{"deck_def_id": 2, "series_name": "S", "deck_name": "old", "first_index": 3, "last_index": 5},
@@ -239,7 +277,63 @@ func _ready() -> void:
 	if progress_label == null or progress_label.text != "已收藏 7/7":
 		return _fail("today_visible_filter_progress_wrong")
 
-	print("MUSEUM_RELIC ok colors=7 five_columns=true thumbnails=true view=true today_filter=true hover_2x=true")
+	museum._selected_series = "地球"
+	museum.render_decks()
+	await get_tree().process_frame
+	color_filter = museum.find_child("MuseumColorFilter", true, false) as MenuButton
+	if color_filter == null:
+		return _fail("series_rarity_filter_missing")
+	if color_filter.get_popup().get_item_count() != 2:
+		return _fail("series_rarity_filter_count_wrong")
+	if color_filter.get_popup().get_item_index(CardColor.ColorType.WHITE) < 0 or color_filter.get_popup().get_item_index(CardColor.ColorType.GREEN) < 0:
+		return _fail("series_rarity_filter_missing_owned_rarity")
+	if color_filter.get_popup().get_item_index(CardColor.ColorType.BLUE) >= 0:
+		return _fail("series_rarity_filter_kept_unowned_rarity")
+	museum._selected_series = DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER
+	museum.render_decks()
+	await get_tree().process_frame
+
+	museum._on_color_filter_pressed(CardColor.ColorType.WHITE)
+	sort_option = museum.find_child("MuseumSortOption", true, false) as OptionButton
+	if sort_option == null:
+		return _fail("session_sort_option_missing")
+	sort_option.select(0)
+	museum._on_sort_selected(0)
+	series_option = museum.find_child("MuseumSeriesOption", true, false) as OptionButton
+	if series_option == null:
+		return _fail("session_series_option_missing")
+	series_option.select(1)
+	museum._on_series_selected(1)
+	await get_tree().process_frame
+	museum.queue_free()
+	await get_tree().process_frame
+
+	var restored_museum := DeckCollectionUI.new()
+	restored_museum.size = Vector2(2168, 1416)
+	add_child(restored_museum)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if bool(restored_museum._selected_colors.get(CardColor.ColorType.WHITE, true)):
+		return _fail("session_color_filter_not_restored")
+	if restored_museum._selected_series != DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER:
+		return _fail("session_series_filter_not_restored")
+	if restored_museum._sort_mode != "recent":
+		return _fail("session_sort_filter_not_restored")
+	var restored_sort := restored_museum.find_child("MuseumSortOption", true, false) as OptionButton
+	if restored_sort == null or str(restored_sort.get_item_metadata(restored_sort.selected)) != "recent":
+		return _fail("session_sort_ui_not_restored")
+	var restored_series := restored_museum.find_child("MuseumSeriesOption", true, false) as OptionButton
+	if restored_series == null or str(restored_series.get_item_metadata(restored_series.selected)) != DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER:
+		return _fail("session_series_ui_not_restored")
+	var restored_grid := restored_museum.find_child("MuseumRelicGrid", true, false) as GridContainer
+	if restored_grid == null or restored_grid.get_child_count() != ALL_RELIC_COLORS.size() - 1:
+		return _fail("session_filtered_grid_not_restored")
+	progress_label = restored_museum.find_child("MuseumCollectionProgress", true, false) as Label
+	if progress_label == null or progress_label.text != "已收藏 6/6":
+		return _fail("session_progress_not_restored")
+	DeckCollectionUI.reset_session_filter_state()
+
+	print("MUSEUM_RELIC ok colors=7 five_columns=true thumbnails=true view=true today_filter=true session_filter=true hover_2x=true")
 	get_tree().quit(0)
 
 

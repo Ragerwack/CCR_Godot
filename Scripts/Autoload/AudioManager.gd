@@ -4,12 +4,15 @@ signal volume_changed(bgm: float, sfx: float)
 signal sfx_played(event_name: String)
 
 const SFX_ROOT := "res://Resources/Audio/SFX"
-const BGM_ROOT := "res://Resources/Audio/BGM"
+const OFFICIAL_SFX_ROOT := "res://Resources/Audio/SFXOfficial"
+const BGM_ROOT := "res://Resources/Audio/Music"
+const LOGIN_MUSIC_ROOT := "res://Resources/Audio/Music/Login"
+const GAME_MUSIC_ROOT := "res://Resources/Audio/Music/Game"
+const AUCTION_MUSIC_ROOT := "res://Resources/Audio/Music/Auction"
 const SFX_POOL_SIZE := 12
 const DEFAULT_PITCH_VARIATION := 0.025
-## 当前程序化占位音效等待 Nan 用外部制作资产替换，先全局关闭播放。
-## 收到并验收新音效后再改为 true；事件映射、音量与并发逻辑保持可复用。
-const PROCEDURAL_SFX_PLAYBACK_ENABLED := false
+const SFX_PLAYBACK_ENABLED := true
+const AUDIO_EXTENSIONS := ["ogg", "wav", "mp3"]
 
 const EVENT_COOLDOWNS: Dictionary = {
 	"ui_hover": 0.045,
@@ -25,10 +28,18 @@ const EVENT_COOLDOWNS: Dictionary = {
 	"draw_orange": 0.40,
 	"draw_black": 0.80,
 	"forge_start": 0.45,
-	"forge_success": 0.60,
+	"forge_art_flight": 0.02,
+	"forge_success_white": 0.60,
+	"forge_success_green": 0.60,
+	"forge_success_blue": 0.60,
+	"forge_success_purple": 0.60,
+	"forge_success_orange": 0.60,
+	"forge_success_black": 0.60,
+	"forge_success_red": 0.60,
 	"vault_store": 0.18,
 	"discard": 0.18,
 	"level_up": 0.80,
+	"card_preview": 0.12,
 	"error_soft": 0.20,
 }
 
@@ -47,14 +58,26 @@ const EVENT_GAINS: Dictionary = {
 	"draw_orange": 0.72,
 	"draw_black": 0.74,
 	"forge_start": 0.64,
-	"forge_success": 0.74,
+	"forge_art_flight": 0.58,
+	"forge_success_white": 0.76,
+	"forge_success_green": 0.78,
+	"forge_success_blue": 0.80,
+	"forge_success_purple": 0.84,
+	"forge_success_orange": 0.86,
+	"forge_success_black": 0.88,
+	"forge_success_red": 0.90,
 	"vault_store": 0.58,
 	"discard": 0.46,
 	"slot_unlock": 0.62,
 	"currency_gold": 0.52,
 	"currency_gem": 0.56,
 	"level_up": 0.70,
+	"card_preview": 0.378,
 	"error_soft": 0.48,
+}
+
+const EVENT_PITCH_SCALES: Dictionary = {
+	"card_preview": 0.50,
 }
 
 var bgm_volume: float = 0.8
@@ -65,15 +88,21 @@ var _bgm_player: AudioStreamPlayer
 var _sfx_player: AudioStreamPlayer
 var _sfx_players: Array[AudioStreamPlayer] = []
 var _sfx_library: Dictionary = {}
+var _bgm_library: Dictionary = {}
 var _stream_cache: Dictionary = {}
 var _last_event_played_msec: Dictionary = {}
 var _last_variant_index: Dictionary = {}
+var _last_bgm_index: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 var _last_played_sfx_event: String = ""
+var _current_bgm_context: String = ""
+var _current_bgm_path: String = ""
+var _bgm_loop_enabled: bool = false
 var _master_bus_index: int = -1
 var _master_volume_before_cinematic: float = 0.0
 var _cinematic_audio_tween: Tween = null
 var _cinematic_silence_active: bool = false
+var _missing_sfx_warned: Dictionary = {}
 
 func _ready() -> void:
 	_rng.randomize()
@@ -84,6 +113,7 @@ func _ready() -> void:
 	_bgm_player = AudioStreamPlayer.new()
 	_bgm_player.name = "BGMPlayer"
 	_bgm_player.volume_db = _volume_to_db(bgm_volume)
+	_bgm_player.finished.connect(_on_bgm_finished)
 	add_child(_bgm_player)
 
 	for index in range(SFX_POOL_SIZE):
@@ -95,6 +125,7 @@ func _ready() -> void:
 		_sfx_players.append(player)
 	_sfx_player = _sfx_players[0]
 	reload_sfx_library()
+	reload_bgm_library()
 
 	_master_bus_index = AudioServer.get_bus_index("Master")
 	if _master_bus_index >= 0:
@@ -140,32 +171,57 @@ func set_muted(muted: bool) -> void:
 func toggle_mute() -> void:
 	set_muted(not is_muted)
 
-## 重新扫描程序化音效目录。业务层只使用事件名，不拼接具体文件路径。
+## 重新扫描正式音效目录。业务层只使用事件名，不拼接具体文件路径。
 func reload_sfx_library() -> void:
 	_sfx_library.clear()
+	_missing_sfx_warned.clear()
 	_stream_cache.clear()
-	var files := DirAccess.get_files_at(SFX_ROOT)
+	var files := _audio_files_at(OFFICIAL_SFX_ROOT)
 	files.sort()
 	for filename in files:
-		if not filename.ends_with(".ogg"):
-			continue
-		var basename := filename.trim_suffix(".ogg")
+		var basename := filename.get_basename()
 		var marker := basename.rfind("_v")
 		if marker <= 0:
 			continue
 		var event_name := basename.substr(0, marker)
 		if not _sfx_library.has(event_name):
 			_sfx_library[event_name] = []
-		_sfx_library[event_name].append(SFX_ROOT + "/" + filename)
+		_sfx_library[event_name].append(OFFICIAL_SFX_ROOT + "/" + filename)
+
+func reload_bgm_library() -> void:
+	_bgm_library = {
+		"login": _scan_audio_paths(LOGIN_MUSIC_ROOT),
+		"game": _scan_audio_paths(GAME_MUSIC_ROOT),
+		"auction": _scan_audio_paths(AUCTION_MUSIC_ROOT),
+	}
+
+func _audio_files_at(root: String) -> PackedStringArray:
+	if DirAccess.open(root) == null:
+		return PackedStringArray()
+	var result := PackedStringArray()
+	for filename in DirAccess.get_files_at(root):
+		if AUDIO_EXTENSIONS.has(filename.get_extension().to_lower()):
+			result.append(filename)
+	return result
+
+func _scan_audio_paths(root: String) -> Array[String]:
+	var files := _audio_files_at(root)
+	files.sort()
+	var paths: Array[String] = []
+	for filename in files:
+		paths.append(root + "/" + filename)
+	return paths
 
 ## 播放短音效。variation、微随机音高、节流和并发统一在这里处理。
 func play_sfx(sfx_name: String, volume: float = 1.0, pitch_variation: float = DEFAULT_PITCH_VARIATION) -> void:
-	if not PROCEDURAL_SFX_PLAYBACK_ENABLED:
+	if not SFX_PLAYBACK_ENABLED:
 		return
 	if is_muted or sfx_volume <= 0.0 or _cinematic_silence_active:
 		return
 	if not _sfx_library.has(sfx_name):
-		FileLogger.warn("音效事件不存在: " + sfx_name)
+		if not _missing_sfx_warned.has(sfx_name):
+			_missing_sfx_warned[sfx_name] = true
+			FileLogger.warn("音效事件不存在: " + sfx_name)
 		return
 	var now := Time.get_ticks_msec()
 	var cooldown_msec := int(roundf(float(EVENT_COOLDOWNS.get(sfx_name, 0.0)) * 1000.0))
@@ -194,7 +250,8 @@ func play_sfx(sfx_name: String, volume: float = 1.0, pitch_variation: float = DE
 	_last_event_played_msec[sfx_name] = now
 	_last_played_sfx_event = sfx_name
 	player.stream = stream
-	player.pitch_scale = 1.0 + _rng.randf_range(-absf(pitch_variation), absf(pitch_variation))
+	var event_pitch := float(EVENT_PITCH_SCALES.get(sfx_name, 1.0))
+	player.pitch_scale = maxf(0.05, event_pitch * (1.0 + _rng.randf_range(-absf(pitch_variation), absf(pitch_variation))))
 	var event_gain := float(EVENT_GAINS.get(sfx_name, 0.6))
 	var combined_gain := clampf(event_gain * volume, 0.0, 1.0)
 	player.set_meta("ccr_sfx_gain", combined_gain)
@@ -233,14 +290,53 @@ func play_bgm(bgm_name: String) -> void:
 	if not ResourceLoader.exists(path):
 		FileLogger.warn("BGM 资源不存在: " + path)
 		return
+	_play_bgm_path(path, "", false)
+
+func play_login_music(force: bool = false) -> void:
+	_play_random_bgm_from_context("login", force)
+
+func play_game_music_loop(force: bool = false) -> void:
+	_play_random_bgm_from_context("game", force)
+
+func play_auction_music_loop(force: bool = false) -> void:
+	_play_random_bgm_from_context("auction", force)
+
+func _play_random_bgm_from_context(context: String, force: bool = false) -> void:
+	if not force and _current_bgm_context == context and _bgm_player.playing:
+		return
+	var tracks: Array = _bgm_library.get(context, [])
+	if tracks.is_empty():
+		FileLogger.warn("音乐列表为空: " + context)
+		return
+	var index := 0
+	if tracks.size() > 1:
+		index = _rng.randi_range(0, tracks.size() - 1)
+		var last_index := int(_last_bgm_index.get(context, -1))
+		if index == last_index:
+			index = (index + 1 + _rng.randi_range(0, tracks.size() - 2)) % tracks.size()
+	_last_bgm_index[context] = index
+	_play_bgm_path(str(tracks[index]), context, true)
+
+func _play_bgm_path(path: String, context: String, loop_playlist: bool) -> void:
 	var stream := load(path) as AudioStream
 	if stream == null:
+		FileLogger.warn("音乐资源加载失败: " + path)
 		return
+	_current_bgm_context = context
+	_current_bgm_path = path
+	_bgm_loop_enabled = loop_playlist
 	_bgm_player.stream = stream
 	_bgm_player.volume_db = -80.0 if is_muted else _volume_to_db(bgm_volume)
 	_bgm_player.play()
 
+func _on_bgm_finished() -> void:
+	if _bgm_loop_enabled and _current_bgm_context != "":
+		_play_random_bgm_from_context(_current_bgm_context, true)
+
 func stop_bgm() -> void:
+	_bgm_loop_enabled = false
+	_current_bgm_context = ""
+	_current_bgm_path = ""
 	_bgm_player.stop()
 
 ## 黑卡等全屏演出使用 Master 总线衰减，确保所有当前及未来音乐、音效播放器一起静音。
@@ -290,7 +386,19 @@ func get_sfx_pool_size() -> int:
 	return _sfx_players.size()
 
 func is_sfx_playback_enabled() -> bool:
-	return PROCEDURAL_SFX_PLAYBACK_ENABLED
+	return SFX_PLAYBACK_ENABLED
+
+func get_bgm_track_count(context: String) -> int:
+	return (_bgm_library.get(context, []) as Array).size()
+
+func get_current_bgm_context() -> String:
+	return _current_bgm_context
+
+func get_event_gain(event_name: String) -> float:
+	return float(EVENT_GAINS.get(event_name, 0.6))
+
+func get_event_pitch_scale(event_name: String) -> float:
+	return float(EVENT_PITCH_SCALES.get(event_name, 1.0))
 
 func get_last_played_sfx_event() -> String:
 	return _last_played_sfx_event
@@ -324,22 +432,12 @@ func _on_button_pressed(button: BaseButton) -> void:
 	if not is_instance_valid(button) or button.disabled:
 		return
 	var event_name := "ui_press"
-	if str(button.get_meta("ccr_button_variant", "")) == "navigation":
-		event_name = "nav_transition"
-	elif button.name.to_lower().contains("back") or button.name.to_lower().contains("cancel"):
-		event_name = "ui_back"
 	play_sfx(event_name)
 
 func _bind_game_signals() -> void:
 	var drag_system := get_node_or_null("/root/DragSystem")
 	if drag_system != null and drag_system.has_signal("drag_ended") and not drag_system.drag_ended.is_connected(_on_card_drag_ended):
 		drag_system.drag_ended.connect(_on_card_drag_ended)
-	var game_manager := get_node_or_null("/root/GameManager")
-	if game_manager != null and game_manager.has_signal("player_leveled_up") and not game_manager.player_leveled_up.is_connected(_on_player_leveled_up):
-		game_manager.player_leveled_up.connect(_on_player_leveled_up)
 
 func _on_card_drag_ended(_card: Variant, _from: String, to: String) -> void:
 	play_sfx("vault_store" if to == "vault" else "card_move")
-
-func _on_player_leveled_up(_level: int, _rewards: Array[String]) -> void:
-	play_sfx("level_up", 1.0, 0.0)

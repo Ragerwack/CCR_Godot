@@ -9,6 +9,14 @@ const SynthesisAnimationOverlayScript = preload("res://Scripts/UI/SynthesisAnima
 const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
 const AvatarCatalog = preload("res://Scripts/Data/AvatarCatalog.gd")
 const MAIN_BACKGROUND_PATH := "res://Resources/Backgrounds/main_background.png"
+const EXIT_DIALOG_PANEL_PATH := CCRVisualStyle.DIALOG_PANEL_PATH
+const EXIT_DIALOG_CONFIRM_BUTTON_PATH := CCRVisualStyle.DIALOG_CONFIRM_BUTTON_PATH
+const EXIT_DIALOG_CANCEL_BUTTON_PATH := CCRVisualStyle.DIALOG_CANCEL_BUTTON_PATH
+const EXIT_DIALOG_CLOSE_BUTTON_PATH := CCRVisualStyle.DIALOG_CLOSE_BUTTON_PATH
+const EXIT_DIALOG_PANEL_SIZE := CCRVisualStyle.DIALOG_PANEL_SIZE
+const EXIT_DIALOG_CLOSE_BUTTON_HITBOX_SIZE := Vector2(86, 86)
+const EXIT_DIALOG_CLOSE_BUTTON_ICON_SIZE := Vector2(56, 56)
+const EXIT_DIALOG_CLOSE_BUTTON_INSET := Vector2(88, 40)
 
 const LEFT_PANEL_WIDTH: int = 120
 const TOP_BAR_HEIGHT: int = 90
@@ -20,6 +28,10 @@ const CARD_GRID_COLUMNS: int = 8
 const CARD_GRID_SPACING: float = 8.0
 const PLAYER_INFO_FONT_SIZE: int = 18
 const PLAYER_INFO_VERTICAL_PADDING: float = 70.0
+const LEVEL_STAMINA_FLIGHT_DURATION: float = 1.0
+const LEVEL_STAMINA_REVERSE_RATIO: float = 0.20
+const LEVEL_STAMINA_START_SCALE: float = 3.0
+const LEVEL_STAMINA_END_SCALE: float = 0.5
 
 var _player_info: PlayerInfoUI
 var _currency: CurrencyUI
@@ -30,7 +42,7 @@ var _menu_button: Button = null
 var _level_up_popup: Control = null
 var _main_background: TextureRect = null
 var _reconnect_overlay: Control = null
-var _exit_confirm_dialog: ConfirmationDialog = null
+var _exit_confirm_dialog: Control = null
 
 # 子面板
 var _today_decks_ui: Control = null
@@ -97,6 +109,7 @@ func _set_game_ui_visible(visible: bool) -> void:
 func _on_splash_completed() -> void:
 	# 显示游戏UI，进入主界面
 	_set_game_ui_visible(true)
+	AudioManager.play_game_music_loop()
 	SessionManager.start_session()
 	_initialize_card_pool.call_deferred()
 	refresh_current_view.call_deferred()
@@ -195,6 +208,7 @@ func _show_login() -> void:
 
 func _on_login_completed() -> void:
 	_set_game_ui_visible(true)
+	AudioManager.play_game_music_loop()
 	SessionManager.start_session()
 	_initialize_card_pool()
 	refresh_current_view()
@@ -306,13 +320,83 @@ func _on_reconnect_pressed() -> void:
 
 func _on_player_leveled_up(level: int, rewards: Array[String]) -> void:
 	if not _game_ui_active:
+		GameManager.complete_pending_level_stamina_refill()
 		return
 	if is_instance_valid(_level_up_popup):
 		_level_up_popup.queue_free()
 	_level_up_popup = LevelUpPopupUIScript.new()
 	_level_up_popup.setup(level, rewards)
-	_level_up_popup.dismissed.connect(func(): _level_up_popup = null)
+	_level_up_popup.dismissed.connect(func():
+		GameManager.complete_pending_level_stamina_refill()
+		_level_up_popup = null
+	)
 	add_child(_level_up_popup)
+	_play_level_up_stamina_refill_behind_popup.call_deferred(_level_up_popup)
+	AudioManager.play_sfx("level_up", 1.0, 0.0)
+
+func _play_level_up_stamina_refill_behind_popup(popup: Control) -> void:
+	if not is_instance_valid(popup) or not GameManager.has_pending_level_stamina_refill():
+		return
+	var target_rect := _currency.get_resource_icon_global_rect("stamina") if is_instance_valid(_currency) else Rect2()
+	var texture := CCRVisualStyle.icon("status_stamina")
+	if texture == null:
+		GameManager.complete_pending_level_stamina_refill()
+		return
+	var target_reference := maxf(target_rect.size.x, target_rect.size.y)
+	if target_reference <= 1.0:
+		target_reference = 22.0
+	var start_size := Vector2.ONE * target_reference * LEVEL_STAMINA_START_SCALE
+	var end_size := Vector2.ONE * target_reference * LEVEL_STAMINA_END_SCALE
+	var start_center := get_viewport_rect().size * 0.5
+	var target_center := target_rect.get_center()
+	if target_rect.size.x <= 1.0 or target_rect.size.y <= 1.0:
+		target_center = Vector2(get_viewport_rect().size.x - 80.0, 28.0)
+	var icon := TextureRect.new()
+	icon.name = "LevelUpStaminaReward"
+	icon.texture = texture
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.size = start_size
+	icon.position = start_center - start_size * 0.5
+	icon.pivot_offset = start_size * 0.5
+	popup.add_child(icon)
+	popup.move_child(icon, mini(1, popup.get_child_count() - 1))
+
+	var away := (start_center - target_center).normalized()
+	if away.length() <= 0.01:
+		away = Vector2.DOWN
+	var reverse_center := start_center + away * maxf(48.0, start_size.x * 0.42)
+	var control_center := reverse_center.lerp(target_center, 0.52) + away.rotated(PI * 0.5) * 72.0
+	var reverse_ratio := LEVEL_STAMINA_REVERSE_RATIO
+	var tween := create_tween()
+	tween.tween_method(func(progress: float):
+		if not is_instance_valid(icon):
+			return
+		var center := start_center
+		if progress <= reverse_ratio:
+			var local := progress / reverse_ratio
+			var eased := 1.0 - pow(1.0 - local, 3.0)
+			center = start_center.lerp(reverse_center, eased)
+		else:
+			var local := (progress - reverse_ratio) / (1.0 - reverse_ratio)
+			var accelerated := local * local * local
+			center = _level_reward_quadratic_bezier(reverse_center, control_center, target_center, accelerated)
+		var next_size := start_size.lerp(end_size, progress)
+		icon.size = next_size
+		icon.position = center - next_size * 0.5
+		if progress > 0.86:
+			icon.modulate.a = 1.0 - (progress - 0.86) / 0.14
+	, 0.0, 1.0, LEVEL_STAMINA_FLIGHT_DURATION).set_trans(Tween.TRANS_LINEAR)
+	tween.tween_callback(func():
+		GameManager.complete_pending_level_stamina_refill()
+		if is_instance_valid(icon):
+			icon.queue_free()
+	)
+
+func _level_reward_quadratic_bezier(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
+	var p := clampf(t, 0.0, 1.0)
+	return a * (1.0 - p) * (1.0 - p) + b * 2.0 * (1.0 - p) * p + c * p * p
 
 func _on_logout_pressed() -> void:
 	SessionManager.stop_session()
@@ -336,33 +420,191 @@ func _restore_current_nav_selection() -> void:
 func _show_exit_game_dialog() -> void:
 	_restore_current_nav_selection()
 	if not is_instance_valid(_exit_confirm_dialog):
-		_exit_confirm_dialog = ConfirmationDialog.new()
+		_exit_confirm_dialog = _build_exit_game_dialog()
 		_exit_confirm_dialog.name = "ExitGameConfirmDialog"
-		_exit_confirm_dialog.exclusive = true
-		_exit_confirm_dialog.confirmed.connect(_on_exit_game_confirmed)
-		_exit_confirm_dialog.canceled.connect(_restore_current_nav_selection)
 		add_child(_exit_confirm_dialog)
-	_exit_confirm_dialog.title = Localization.t("ui.exit_game.title")
-	_exit_confirm_dialog.dialog_text = Localization.t("ui.exit_game.message")
-	_exit_confirm_dialog.ok_button_text = Localization.t("ui.exit_game.confirm")
-	var cancel_button := _exit_confirm_dialog.get_cancel_button()
+	_update_exit_game_dialog_text()
+	_exit_confirm_dialog.show()
+
+func _build_exit_game_dialog() -> Control:
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.z_index = 2000
+
+	var shade := ColorRect.new()
+	shade.name = "ExitDialogShade"
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.color = Color(0.0, 0.0, 0.0, 0.58)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(shade)
+
+	var panel := Control.new()
+	panel.name = "Panel"
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.size = EXIT_DIALOG_PANEL_SIZE
+	panel.position = -panel.size / 2.0
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(panel)
+
+	var panel_texture := TextureRect.new()
+	panel_texture.name = "PanelTexture"
+	panel_texture.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel_texture.texture = load(EXIT_DIALOG_PANEL_PATH)
+	panel_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	panel_texture.stretch_mode = TextureRect.STRETCH_SCALE
+	panel_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(panel_texture)
+
+	var title := Label.new()
+	title.name = "TitleLabel"
+	title.position = Vector2(220, 86)
+	title.size = Vector2(520, 42)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	panel.add_child(title)
+
+	var message := Label.new()
+	message.name = "MessageLabel"
+	message.position = Vector2(206, 148)
+	message.size = Vector2(548, 72)
+	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(message)
+
+	var cancel_button := _make_exit_dialog_button(
+		"CancelButton",
+		EXIT_DIALOG_CANCEL_BUTTON_PATH,
+		Vector2(205, 272),
+		Localization.t("ui.exit_game.cancel")
+	)
+	cancel_button.pressed.connect(_on_exit_game_cancelled)
+	panel.add_child(cancel_button)
+
+	var confirm_button := _make_exit_dialog_button(
+		"ConfirmButton",
+		EXIT_DIALOG_CONFIRM_BUTTON_PATH,
+		Vector2(495, 272),
+		Localization.t("ui.exit_game.confirm")
+	)
+	confirm_button.pressed.connect(_on_exit_game_confirmed)
+	panel.add_child(confirm_button)
+
+	var close_button := Button.new()
+	close_button.name = "CloseButton"
+	close_button.text = ""
+	close_button.position = Vector2(
+		EXIT_DIALOG_PANEL_SIZE.x - EXIT_DIALOG_CLOSE_BUTTON_HITBOX_SIZE.x - EXIT_DIALOG_CLOSE_BUTTON_INSET.x,
+		EXIT_DIALOG_CLOSE_BUTTON_INSET.y
+	)
+	close_button.size = EXIT_DIALOG_CLOSE_BUTTON_HITBOX_SIZE
+	close_button.focus_mode = Control.FOCUS_NONE
+	close_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	close_button.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
+	close_button.add_theme_stylebox_override("hover", StyleBoxEmpty.new())
+	close_button.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
+	close_button.add_theme_stylebox_override("hover_pressed", StyleBoxEmpty.new())
+	close_button.add_theme_stylebox_override("disabled", StyleBoxEmpty.new())
+	close_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	var close_icon := TextureRect.new()
+	close_icon.name = "CloseButtonIcon"
+	close_icon.texture = load(EXIT_DIALOG_CLOSE_BUTTON_PATH)
+	close_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	close_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	close_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	close_icon.size = EXIT_DIALOG_CLOSE_BUTTON_ICON_SIZE
+	close_icon.position = (EXIT_DIALOG_CLOSE_BUTTON_HITBOX_SIZE - EXIT_DIALOG_CLOSE_BUTTON_ICON_SIZE) * 0.5
+	close_button.add_child(close_icon)
+	close_button.pressed.connect(_on_exit_game_cancelled)
+	panel.add_child(close_button)
+
+	_apply_exit_game_dialog_style(overlay)
+	return overlay
+
+func _make_exit_dialog_button(node_name: String, texture_path: String, button_position: Vector2, text: String) -> Button:
+	var button := Button.new()
+	button.name = node_name
+	button.text = text
+	button.position = button_position
+	button.size = Vector2(260, 80)
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.add_theme_stylebox_override("normal", _make_exit_texture_style(texture_path, Vector2(52, 24), Color.WHITE))
+	button.add_theme_stylebox_override("hover", _make_exit_texture_style(texture_path, Vector2(52, 24), Color(1.12, 1.12, 1.12, 1.0)))
+	button.add_theme_stylebox_override("pressed", _make_exit_texture_style(texture_path, Vector2(52, 24), Color(0.84, 0.90, 0.95, 1.0)))
+	button.add_theme_stylebox_override("hover_pressed", _make_exit_texture_style(texture_path, Vector2(52, 24), Color(0.84, 0.90, 0.95, 1.0)))
+	button.add_theme_stylebox_override("disabled", _make_exit_texture_style(texture_path, Vector2(52, 24), Color(0.55, 0.58, 0.62, 0.78)))
+	button.add_theme_stylebox_override("focus", _make_exit_texture_style(texture_path, Vector2(52, 24), Color(1.12, 1.12, 1.12, 1.0)))
+	return button
+
+func _make_exit_texture_style(texture_path: String, margin: Vector2, modulate_color: Color) -> StyleBoxTexture:
+	return CCRVisualStyle.make_dialog_texture_style(texture_path, margin, modulate_color)
+
+func _update_exit_game_dialog_text() -> void:
+	if not is_instance_valid(_exit_confirm_dialog):
+		return
+	var title := _exit_confirm_dialog.get_node_or_null("Panel/TitleLabel") as Label
+	var message := _exit_confirm_dialog.get_node_or_null("Panel/MessageLabel") as Label
+	var confirm_button := _exit_confirm_dialog.get_node_or_null("Panel/ConfirmButton") as Button
+	var cancel_button := _exit_confirm_dialog.get_node_or_null("Panel/CancelButton") as Button
+	if title != null:
+		title.text = Localization.t("ui.exit_game.title")
+	if message != null:
+		message.text = Localization.t("ui.exit_game.message")
+	if confirm_button != null:
+		confirm_button.text = Localization.t("ui.exit_game.confirm")
+		confirm_button.disabled = false
 	if cancel_button != null:
 		cancel_button.text = Localization.t("ui.exit_game.cancel")
 		cancel_button.disabled = false
-	var ok_button := _exit_confirm_dialog.get_ok_button()
-	if ok_button != null:
-		ok_button.disabled = false
-		ok_button.text = Localization.t("ui.exit_game.confirm")
-	_exit_confirm_dialog.popup_centered(Vector2i(460, 180))
+	_apply_exit_game_dialog_style(_exit_confirm_dialog)
+
+func _apply_exit_game_dialog_style(dialog: Control) -> void:
+	var title := dialog.get_node_or_null("Panel/TitleLabel") as Label
+	if title != null:
+		title.add_theme_font_size_override("font_size", 26)
+		title.add_theme_color_override("font_color", Color.WHITE)
+		title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.88))
+		title.add_theme_constant_override("shadow_offset_x", 0)
+		title.add_theme_constant_override("shadow_offset_y", 2)
+	var message := dialog.get_node_or_null("Panel/MessageLabel") as Label
+	if message != null:
+		message.add_theme_font_size_override("font_size", 20)
+		message.add_theme_color_override("font_color", Color(0.94, 0.98, 1.0, 1.0))
+		message.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.82))
+		message.add_theme_constant_override("shadow_offset_x", 0)
+		message.add_theme_constant_override("shadow_offset_y", 1)
+	for node_name in ["ConfirmButton", "CancelButton"]:
+		var button := dialog.get_node_or_null("Panel/" + node_name) as Button
+		if button == null:
+			continue
+		button.add_theme_font_size_override("font_size", 20)
+		button.add_theme_color_override("font_color", Color.WHITE)
+		button.add_theme_color_override("font_hover_color", Color(0.90, 0.98, 1.0, 1.0))
+		button.add_theme_color_override("font_pressed_color", Color(0.88, 0.96, 1.0, 1.0))
+		button.add_theme_color_override("font_hover_pressed_color", Color(0.88, 0.96, 1.0, 1.0))
+		button.add_theme_color_override("font_focus_color", Color.WHITE)
+		button.add_theme_color_override("font_disabled_color", Color(0.78, 0.84, 0.90, 0.94))
+		button.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.90))
+		button.add_theme_constant_override("outline_size", 2)
+
+func _on_exit_game_cancelled() -> void:
+	if is_instance_valid(_exit_confirm_dialog):
+		_exit_confirm_dialog.hide()
+	_restore_current_nav_selection()
 
 func _on_exit_game_confirmed() -> void:
-	var ok_button := _exit_confirm_dialog.get_ok_button() if is_instance_valid(_exit_confirm_dialog) else null
-	var cancel_button := _exit_confirm_dialog.get_cancel_button() if is_instance_valid(_exit_confirm_dialog) else null
+	var ok_button := _exit_confirm_dialog.get_node_or_null("Panel/ConfirmButton") as Button if is_instance_valid(_exit_confirm_dialog) else null
+	var cancel_button := _exit_confirm_dialog.get_node_or_null("Panel/CancelButton") as Button if is_instance_valid(_exit_confirm_dialog) else null
+	var close_button := _exit_confirm_dialog.get_node_or_null("Panel/CloseButton") as Button if is_instance_valid(_exit_confirm_dialog) else null
 	if ok_button != null:
 		ok_button.disabled = true
 		ok_button.text = Localization.t("ui.exit_game.syncing")
 	if cancel_button != null:
 		cancel_button.disabled = true
+	if close_button != null:
+		close_button.disabled = true
 	await _shutdown_session_before_quit()
 	get_tree().quit()
 
@@ -575,6 +817,10 @@ func _on_nav_button(id: String) -> void:
 	if id == "exit_game":
 		_show_exit_game_dialog()
 		return
+	if id == "auction":
+		AudioManager.play_auction_music_loop()
+	else:
+		AudioManager.play_game_music_loop()
 	var switch_started := Time.get_ticks_msec()
 	FileLogger.perf("scene_switch_start", {"target": id})
 	if id != "card_pool" and (_card_pool_ui != null or _hand_area_ui != null):
@@ -673,7 +919,8 @@ func _show_vault() -> void:
 			_nav_buttons.get_button_global_rect("deck_panel"),
 			_nav_buttons.get_button_global_rect("vault"),
 			_currency.get_resource_icon_global_rect("gold") if is_instance_valid(_currency) else Rect2(),
-			_currency.get_resource_icon_global_rect("gems") if is_instance_valid(_currency) else Rect2()
+			_currency.get_resource_icon_global_rect("gems") if is_instance_valid(_currency) else Rect2(),
+			_currency.get_resource_icon_global_rect("stamina") if is_instance_valid(_currency) else Rect2()
 		)
 	host.add_child(_vault_ui)
 	_apply_game_text_color(_center_area)
@@ -745,22 +992,40 @@ func _show_settings() -> void:
 	var menu_panel = _build_menu_panel()
 	_center_area.add_child(menu_panel)
 	_apply_game_text_color(_center_area)
+	_apply_settings_visuals(menu_panel)
 
 func _build_menu_panel() -> Control:
 	var panel = Control.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 
+	var panel_rect := _settings_panel_rect()
+	var panel_margin := _settings_panel_content_margin(panel_rect.size)
+	var frame := Panel.new()
+	frame.name = "SettingsRelicPanel"
+	frame.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	frame.position = panel_rect.position
+	frame.size = panel_rect.size
+	CCRVisualStyle.apply_settings_panel(frame)
+	panel.add_child(frame)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.offset_left = panel_margin.x
+	margin.offset_top = panel_margin.y
+	margin.offset_right = -panel_margin.x
+	margin.offset_bottom = -panel_margin.y
+	frame.add_child(margin)
+
 	var vbox := VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_CENTER)
-	vbox.size = Vector2(680, 620)
-	vbox.position = -vbox.size / 2.0
-	vbox.add_theme_constant_override("separation", 8)
-	panel.add_child(vbox)
+	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vbox.add_theme_constant_override("separation", 10)
+	margin.add_child(vbox)
 
 	var title = Label.new()
 	title.text = Localization.t("ui.menu.title")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 24)
+	CCRVisualStyle.apply_settings_label(title)
 	vbox.add_child(title)
 
 	var tab_row := HBoxContainer.new()
@@ -777,6 +1042,8 @@ func _build_menu_panel() -> Control:
 		tab_button.toggle_mode = true
 		tab_button.button_pressed = _settings_tab == str(tab_data["id"])
 		tab_button.custom_minimum_size = Vector2(150, 36)
+		tab_button.set_meta("ccr_settings_tab", true)
+		CCRVisualStyle.apply_settings_tab_button(tab_button, tab_button.button_pressed)
 		tab_button.pressed.connect(_select_settings_tab.bind(str(tab_data["id"])))
 		tab_row.add_child(tab_button)
 	vbox.add_child(tab_row)
@@ -784,13 +1051,49 @@ func _build_menu_panel() -> Control:
 	var separator := HSeparator.new()
 	vbox.add_child(separator)
 
+	var page_scroll := ScrollContainer.new()
+	page_scroll.name = "SettingsPageScroll"
+	page_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	CCRVisualStyle.apply_settings_scroll_container(page_scroll)
+	vbox.add_child(page_scroll)
+
+	var page_content := VBoxContainer.new()
+	page_content.name = "SettingsPageContent"
+	page_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page_content.add_theme_constant_override("separation", 10)
+	page_scroll.add_child(page_content)
+
 	match _settings_tab:
-		"controller": _build_controller_settings_page(vbox)
-		"profile": _build_profile_settings_page(vbox)
-		_: _build_basic_settings_page(vbox)
+		"controller": _build_controller_settings_page(page_content)
+		"profile": _build_profile_settings_page(page_content)
+		_: _build_basic_settings_page(page_content)
 
 	_apply_settings_font_delta(panel, 2)
+	_apply_settings_visuals(panel)
 	return panel
+
+func _settings_panel_rect() -> Rect2:
+	var vp_size := get_viewport_rect().size
+	var content_rect := _content_region_rect(vp_size)
+	var panel_size := Vector2(
+		roundf(content_rect.size.x * 0.80),
+		roundf(vp_size.y * 2.0 / 3.0)
+	)
+	panel_size.y = minf(panel_size.y, maxf(320.0, _center_area.size.y - 24.0 if is_instance_valid(_center_area) else panel_size.y))
+	panel_size.x = maxf(640.0, panel_size.x)
+	panel_size.x = minf(panel_size.x, maxf(320.0, content_rect.size.x - 24.0))
+	var panel_position := Vector2(
+		content_rect.position.x + (content_rect.size.x - panel_size.x) * 0.5,
+		maxf(12.0, ((_center_area.size.y if is_instance_valid(_center_area) else vp_size.y) - panel_size.y) * 0.5)
+	)
+	return Rect2(panel_position, panel_size)
+
+func _settings_panel_content_margin(panel_size: Vector2) -> Vector2:
+	return Vector2(
+		clampf(panel_size.x * 0.052, 42.0, 72.0),
+		clampf(panel_size.y * 0.095, 42.0, 68.0)
+	)
 
 func _select_settings_tab(tab_id: String) -> void:
 	if _settings_tab == tab_id:
@@ -810,6 +1113,7 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 	var resolution_label := Label.new()
 	resolution_label.text = Localization.t("ui.menu.resolution")
 	resolution_label.custom_minimum_size = Vector2(120, 30)
+	CCRVisualStyle.apply_settings_label(resolution_label)
 	resolution_row.add_child(resolution_label)
 	var resolution_select := OptionButton.new()
 	resolution_select.name = "ResolutionSelect"
@@ -824,6 +1128,7 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 			selected_resolution_index = resolution_index
 		resolution_index += 1
 	resolution_select.select(selected_resolution_index)
+	CCRVisualStyle.apply_settings_option_button(resolution_select)
 	resolution_select.item_selected.connect(func(index: int):
 		var selected_resolution: Vector2i = resolution_select.get_item_metadata(index)
 		DisplaySettings.apply_resolution(selected_resolution, true)
@@ -835,6 +1140,7 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 	var window_mode_label := Label.new()
 	window_mode_label.text = Localization.t("ui.menu.window_mode")
 	window_mode_label.custom_minimum_size = Vector2(120, 30)
+	CCRVisualStyle.apply_settings_label(window_mode_label)
 	window_mode_row.add_child(window_mode_label)
 	var window_mode_select := OptionButton.new()
 	window_mode_select.name = "WindowModeSelect"
@@ -844,6 +1150,7 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 	window_mode_select.add_item(Localization.t("ui.menu.window_mode.windowed"))
 	window_mode_select.set_item_metadata(1, false)
 	window_mode_select.select(0 if DisplaySettings.is_fullscreen_enabled() else 1)
+	CCRVisualStyle.apply_settings_option_button(window_mode_select)
 	window_mode_select.item_selected.connect(func(index: int):
 		var fullscreen := bool(window_mode_select.get_item_metadata(index))
 		DisplaySettings.apply_window_mode(fullscreen, true)
@@ -855,6 +1162,7 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 	var language_label := Label.new()
 	language_label.text = Localization.t("ui.menu.language")
 	language_label.custom_minimum_size = Vector2(120, 30)
+	CCRVisualStyle.apply_settings_label(language_label)
 	language_row.add_child(language_label)
 	var language_select := OptionButton.new()
 	language_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -863,6 +1171,7 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 	language_select.add_item(Localization.t("ui.language.zh_cn"))
 	language_select.set_item_metadata(1, "zh-CN")
 	language_select.select(1 if Localization.locale == "zh-CN" else 0)
+	CCRVisualStyle.apply_settings_option_button(language_select)
 	language_select.item_selected.connect(func(index: int):
 		var selected_locale := str(language_select.get_item_metadata(index))
 		_apply_language_selection.call_deferred(selected_locale)
@@ -872,6 +1181,8 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 
 	var mute_btn = Button.new()
 	mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
+	mute_btn.custom_minimum_size = Vector2(0, 42)
+	CCRVisualStyle.apply_settings_button(mute_btn)
 	mute_btn.pressed.connect(func():
 		AudioManager.toggle_mute()
 		mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
@@ -883,6 +1194,9 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 
 	var logout_btn = Button.new()
 	logout_btn.text = Localization.t("ui.menu.logout")
+	logout_btn.custom_minimum_size = Vector2(0, 42)
+	logout_btn.set_meta("ccr_settings_destructive", true)
+	CCRVisualStyle.apply_settings_button(logout_btn, false, true)
 	logout_btn.pressed.connect(_on_logout_pressed)
 	vbox.add_child(logout_btn)
 
@@ -891,6 +1205,7 @@ func _build_controller_settings_page(vbox: VBoxContainer) -> void:
 	controller_title.text = Localization.t("ui.controller.title")
 	controller_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	controller_title.add_theme_font_size_override("font_size", 18)
+	CCRVisualStyle.apply_settings_label(controller_title)
 	vbox.add_child(controller_title)
 
 	for action_id in ControllerInput.get_action_ids():
@@ -898,6 +1213,8 @@ func _build_controller_settings_page(vbox: VBoxContainer) -> void:
 
 	var reset_controller_btn := Button.new()
 	reset_controller_btn.text = Localization.t("ui.controller.reset")
+	reset_controller_btn.custom_minimum_size = Vector2(0, 42)
+	CCRVisualStyle.apply_settings_button(reset_controller_btn)
 	reset_controller_btn.pressed.connect(func():
 		ControllerInput.reset_bindings()
 		_show_settings()
@@ -909,6 +1226,7 @@ func _build_profile_settings_page(vbox: VBoxContainer) -> void:
 	profile_title.text = Localization.t("ui.profile.title")
 	profile_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	profile_title.add_theme_font_size_override("font_size", 18)
+	CCRVisualStyle.apply_settings_label(profile_title)
 	vbox.add_child(profile_title)
 
 	var avatar_row := HBoxContainer.new()
@@ -925,10 +1243,13 @@ func _build_profile_settings_page(vbox: VBoxContainer) -> void:
 	var avatar_column := VBoxContainer.new()
 	var avatar_label := Label.new()
 	avatar_label.text = Localization.t("ui.profile.avatar")
+	CCRVisualStyle.apply_settings_label(avatar_label)
 	avatar_column.add_child(avatar_label)
 	var change_avatar_btn := Button.new()
 	change_avatar_btn.name = "AvatarChangeButton"
 	change_avatar_btn.text = Localization.t("ui.profile.avatar.change")
+	change_avatar_btn.custom_minimum_size = Vector2(210, 42)
+	CCRVisualStyle.apply_settings_button(change_avatar_btn)
 	change_avatar_btn.pressed.connect(_show_avatar_picker)
 	avatar_column.add_child(change_avatar_btn)
 	avatar_row.add_child(avatar_column)
@@ -938,6 +1259,7 @@ func _build_profile_settings_page(vbox: VBoxContainer) -> void:
 	var region_label := Label.new()
 	region_label.text = Localization.t("ui.profile.region")
 	region_label.custom_minimum_size = Vector2(150, 32)
+	CCRVisualStyle.apply_settings_label(region_label)
 	region_row.add_child(region_label)
 	var region_select := OptionButton.new()
 	region_select.name = "RegionSelect"
@@ -953,6 +1275,7 @@ func _build_profile_settings_page(vbox: VBoxContainer) -> void:
 			selected_region_index = region_index
 		region_index += 1
 	region_select.select(selected_region_index)
+	CCRVisualStyle.apply_settings_option_button(region_select)
 	_configure_region_popup_bounds(region_select)
 	region_row.add_child(region_select)
 	vbox.add_child(region_row)
@@ -961,6 +1284,7 @@ func _build_profile_settings_page(vbox: VBoxContainer) -> void:
 	status_label.name = "ProfileSaveStatus"
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_label.add_theme_font_size_override("font_size", 14)
+	CCRVisualStyle.apply_settings_label(status_label, true)
 	vbox.add_child(status_label)
 	region_select.item_selected.connect(func(index: int):
 		var region_code := str(region_select.get_item_metadata(index))
@@ -1006,6 +1330,23 @@ func _apply_settings_font_delta(root: Node, delta: int) -> void:
 			control.add_theme_font_size_override("font_size", current + delta)
 		_apply_settings_font_delta(child, delta)
 
+func _apply_settings_visuals(root: Node) -> void:
+	for child in root.get_children():
+		if child is Label:
+			CCRVisualStyle.apply_settings_label(child as Label)
+		elif child is OptionButton:
+			CCRVisualStyle.apply_settings_option_button(child as OptionButton)
+		elif child is HSlider:
+			CCRVisualStyle.apply_settings_slider(child as HSlider)
+		elif child is Button:
+			if child.has_meta("ccr_settings_tab"):
+				CCRVisualStyle.apply_settings_tab_button(child as Button, (child as Button).button_pressed)
+			else:
+				CCRVisualStyle.apply_settings_button(child as Button, false, child.has_meta("ccr_settings_destructive"))
+		elif child is ScrollContainer:
+			CCRVisualStyle.apply_settings_scroll_container(child as ScrollContainer)
+		_apply_settings_visuals(child)
+
 func _show_avatar_picker() -> void:
 	var popup := PopupPanel.new()
 	popup.name = "AvatarPickerPopup"
@@ -1022,9 +1363,11 @@ func _show_avatar_picker() -> void:
 	title.text = Localization.t("ui.profile.avatar.select")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 20)
+	CCRVisualStyle.apply_settings_label(title)
 	root.add_child(title)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	CCRVisualStyle.apply_settings_scroll_container(scroll)
 	root.add_child(scroll)
 	var grid := GridContainer.new()
 	grid.columns = 4
@@ -1038,6 +1381,7 @@ func _show_avatar_picker() -> void:
 		avatar_button.name = "AvatarOption_" + avatar_id.replace(".", "_")
 		avatar_button.custom_minimum_size = Vector2(138, 138)
 		avatar_button.tooltip_text = Localization.t(str(avatar_data["name_key"]))
+		CCRVisualStyle.apply_settings_avatar_button(avatar_button)
 		avatar_button.pressed.connect(_select_avatar.bind(avatar_id, popup))
 		var texture := TextureRect.new()
 		texture.texture = AvatarCatalog.get_texture(avatar_id)
@@ -1176,6 +1520,9 @@ func _apply_game_text_color(root: Node = null) -> void:
 		(target as CardDisplay).refresh_title_text_color()
 		return
 	for child in target.get_children():
+		if child.name == "ExitGameConfirmDialog":
+			_apply_exit_game_dialog_style(child as Control)
+			continue
 		if child is Label:
 			if child.name != "ExpValueLabel":
 				CCRVisualStyle.apply_dark_label(child as Label)
@@ -1269,7 +1616,7 @@ func _on_hand_synthesize() -> void:
 		true
 	)
 	get_tree().root.add_child(overlay)
-	var completion := {"success": false, "result": {}, "error": ""}
+	var completion := {"done": false, "success": false, "result": {}, "error": ""}
 	_confirm_hand_synthesis_for_animation.call_deferred(
 		selected_indices.duplicate(),
 		old_pool_cards,
@@ -1278,6 +1625,7 @@ func _on_hand_synthesize() -> void:
 		completion
 	)
 	await overlay.play()
+	await _wait_for_synthesis_completion(completion)
 	_synthesis_animation_running = false
 
 	if completion.get("success", false):
@@ -1298,6 +1646,10 @@ func _wait_for_prior_asset_operations() -> void:
 		CardPoolSystem.has_pending_confirm()
 		or ApiClient.has_pending_asset_requests()
 	):
+		await get_tree().process_frame
+
+func _wait_for_synthesis_completion(completion: Dictionary) -> void:
+	while is_inside_tree() and not bool(completion.get("done", false)):
 		await get_tree().process_frame
 
 func _play_hand_synthesis_animation(animation_sources: Array[Dictionary]) -> void:
@@ -1340,6 +1692,7 @@ func _confirm_hand_synthesis_for_animation(
 	var sync_resp := await ApiClient.sync_pool_hand_layout(old_pool_cards, old_hand_cards)
 	if not sync_resp.get("success", false):
 		completion["error"] = "合成前同步失败: " + str(sync_resp.get("error", ""))
+		completion["done"] = true
 		if is_instance_valid(overlay):
 			overlay.set_reward_items([], false)
 		return
@@ -1349,10 +1702,12 @@ func _confirm_hand_synthesis_for_animation(
 		var result: Dictionary = resp.get("data", {})
 		completion["success"] = true
 		completion["result"] = result
+		completion["done"] = true
 		if is_instance_valid(overlay):
 			overlay.set_reward_items(_resolve_synthesis_reward_targets(result), true)
 	else:
 		completion["error"] = str(resp.get("error", "未知错误"))
+		completion["done"] = true
 		if is_instance_valid(overlay):
 			overlay.set_reward_items([], false)
 
@@ -1365,6 +1720,8 @@ func _resolve_synthesis_reward_targets(result: Dictionary) -> Array[Dictionary]:
 				entry["target_rect"] = _currency.get_resource_icon_global_rect("gold") if is_instance_valid(_currency) else Rect2()
 			"gems":
 				entry["target_rect"] = _currency.get_resource_icon_global_rect("gems") if is_instance_valid(_currency) else Rect2()
+			"stamina":
+				entry["target_rect"] = _currency.get_resource_icon_global_rect("stamina") if is_instance_valid(_currency) else Rect2()
 			"slot":
 				var target := _resolve_slot_reward_target(str(entry.get("slot_type", "")), int(entry.get("slot_index", -1)))
 				entry.merge(target, true)
@@ -1404,7 +1761,7 @@ func _apply_synthesis_confirmed_result(result: Dictionary) -> void:
 
 	var exp_result: Dictionary = result.get("exp_result", {})
 	if not exp_result.is_empty():
-		GameManager.apply_exp_result(exp_result)
+		GameManager.apply_exp_result(exp_result, true)
 
 	var deck_data: Dictionary = result.get("deck", {})
 	if not deck_data.is_empty():

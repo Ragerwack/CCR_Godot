@@ -200,7 +200,7 @@ func _apply_refresh_column_layout() -> void:
 			typed_label.custom_minimum_size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
 			typed_label.size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
 	if _free_countdown_label != null:
-		_free_countdown_label.custom_minimum_size = Vector2(_side_button_width, maxf(26.0, _side_button_height * 0.70))
+		_free_countdown_label.custom_minimum_size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
 		_free_countdown_label.size = _free_countdown_label.custom_minimum_size
 	# 三种抽卡按钮分别对齐第一行中心、两行中线和第二行中心。
 	# 这样体力/宝石抽卡会直接对应玩家正在查看的两排卡牌。
@@ -215,15 +215,32 @@ func _apply_refresh_column_layout() -> void:
 		var cost_label := cost_labels[index] as Label
 		if button != null:
 			button.position = Vector2.ZERO + Vector2(0.0, float(button_centers[index]) - _side_button_height * 0.5)
-		if cost_label != null and button != null:
+		if cost_label != null and button != null and cost_label != _free_cost_label:
 			cost_label.position = Vector2(0.0, button.position.y + _side_button_height)
-	if _free_countdown_label != null:
-		_free_countdown_label.position = Vector2(0.0, _btn_gem.position.y + _side_button_height + BUTTON_LABEL_HEIGHT)
+	_layout_stamina_info_between_primary_buttons()
 	var content_height := size.y
 	if _free_countdown_label != null:
 		content_height = maxf(content_height, _free_countdown_label.position.y + _free_countdown_label.size.y)
+	if _free_cost_label != null:
+		content_height = maxf(content_height, _free_cost_label.position.y + _free_cost_label.size.y)
+	if _gold_cost_label != null:
+		content_height = maxf(content_height, _gold_cost_label.position.y + _gold_cost_label.size.y)
+	if _gem_cost_label != null:
+		content_height = maxf(content_height, _gem_cost_label.position.y + _gem_cost_label.size.y)
 	_refresh_column.size = Vector2(_side_button_width, content_height)
 	_refresh_column.position = Vector2(_right_region_center_x() - _side_button_width * 0.5, 0.0)
+
+func _layout_stamina_info_between_primary_buttons() -> void:
+	if _btn_free == null or _btn_gold == null or _free_cost_label == null:
+		return
+	var gap_top := _btn_free.position.y + _side_button_height
+	var gap_bottom := _btn_gold.position.y
+	var gap_height := maxf(BUTTON_LABEL_HEIGHT * 2.0, gap_bottom - gap_top)
+	var countdown_height := _free_countdown_label.size.y if _free_countdown_label != null else BUTTON_LABEL_HEIGHT
+	var cost_height := _free_cost_label.size.y
+	if _free_countdown_label != null:
+		_free_countdown_label.position = Vector2(0.0, gap_top + gap_height / 3.0 - countdown_height * 0.5)
+	_free_cost_label.position = Vector2(0.0, gap_top + gap_height * 2.0 / 3.0 - cost_height * 0.5)
 
 func _action_font_size() -> int:
 	if _side_button_width < 120.0:

@@ -310,8 +310,6 @@ func controller_activate() -> void:
 	if not _unlocked:
 		slot_unlock_requested.emit(slot_index)
 	else:
-		if is_occupied:
-			AudioManager.play_sfx("card_select")
 		slot_clicked.emit(slot_index)
 
 func set_card(card: CardInfo, idx: int = -1) -> void:
@@ -374,7 +372,6 @@ func play_draw_drop_in(delay: float = 0.0) -> void:
 		return
 	_stop_drop_in_animation()
 	set_slot_hovered(false)
-	_play_draw_sfx(card_display.card.color)
 	if card_display.card.color == CardColor.ColorType.PURPLE:
 		_play_purple_draw_presentation(delay)
 		return
@@ -541,6 +538,8 @@ func _finish_drop_in_animation() -> void:
 	card_display.z_index = 0
 	card_display.mouse_filter = Control.MOUSE_FILTER_STOP
 	card_display.refresh_title_text_color()
+	if card_display.card != null:
+		_play_draw_sfx(card_display.card.color)
 
 
 func _play_draw_confirm_flash() -> void:
@@ -633,6 +632,7 @@ func _show_hover_preview() -> void:
 	get_tree().root.add_child(_hover_preview)
 	_hover_preview.set_card(card_display.card, slot_data_index)
 	_hover_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	AudioManager.play_sfx("card_preview", 1.0, 0.0)
 
 func _hover_preview_center(viewport_size: Vector2, preview_size: Vector2) -> Vector2:
 	if area_type == "pool" or area_type == "hand":
@@ -760,7 +760,6 @@ func _on_gui_input(event: InputEvent) -> void:
 func _on_card_clicked(card: CardInfo, index: int) -> void:
 	if card_display != null:
 		last_click_button_index = card_display.last_click_button_index
-	AudioManager.play_sfx("card_select")
 	release_focus.call_deferred()
 	slot_clicked.emit(slot_index)
 

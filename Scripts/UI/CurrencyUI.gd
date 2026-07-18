@@ -91,7 +91,14 @@ func refresh() -> void:
 	_fit_status_row_width()
 
 func get_resource_icon_global_rect(resource_type: String) -> Rect2:
-	var node_name := "GoldIcon" if resource_type == "gold" else "GemIcon"
+	var node_name := "GemIcon"
+	match resource_type:
+		"stamina":
+			node_name = "StaminaIcon"
+		"gold":
+			node_name = "GoldIcon"
+		"gems", "gem":
+			node_name = "GemIcon"
 	var icon := find_child(node_name, true, false) as TextureRect
 	if icon == null or not icon.is_inside_tree():
 		return Rect2()

@@ -45,6 +45,10 @@ var _optional_login_sync_in_flight: bool = false
 var _pool_hand_layout_dirty: bool = false
 var _pool_hand_layout_revision: int = 0
 var _last_announced_level: int = 1
+var _pending_level_stamina_refill: Dictionary = {}
+var _stamina_display_override_active: bool = false
+var _stamina_display_override_current: int = 0
+var _stamina_display_override_max: int = 1
 var profile_cache_version: int = 0
 var relic_inventory_cache_version: int = 0
 var _player_state_cache = PlayerStateCacheScript.new()
@@ -231,24 +235,28 @@ func _emit_level_up(old_level: int, new_level: int) -> void:
 	_last_announced_level = new_level
 	player_leveled_up.emit(new_level, _build_level_rewards(old_level, new_level))
 
-func apply_exp_result(exp_result: Dictionary) -> void:
+func apply_exp_result(exp_result: Dictionary, defer_stamina_refill: bool = false) -> void:
 	if exp_result.is_empty():
 		return
 	var old_level := int(exp_result.get("old_level", player_data.level))
 	var new_level := int(exp_result.get("new_level", old_level))
+	var rewards: Array = exp_result.get("rewards", [])
+	var should_defer_stamina := defer_stamina_refill and bool(exp_result.get("leveled_up", false)) and _find_stamina_reward(rewards).size() > 0
+	if should_defer_stamina:
+		_begin_deferred_stamina_display()
 	player_data.level = new_level
 	player_data.exp = int(exp_result.get("new_exp", player_data.exp))
 	player_data.exp_in_level = int(exp_result.get("exp_in_level", player_data.exp_in_level))
 	player_data.exp_for_next = int(exp_result.get("exp_for_next", player_data.exp_for_next))
 	exp_in_level = player_data.exp_in_level
 	exp_for_next = player_data.exp_for_next
-	_apply_level_rewards_to_local_state(exp_result.get("rewards", []))
+	_apply_level_rewards_to_local_state(rewards, should_defer_stamina)
 	_update_free_refresh_max()
 	_update_free_refresh_cooldown_from_state()
 	player_data.changed.emit()
 	if bool(exp_result.get("leveled_up", false)) and new_level > old_level and new_level > _last_announced_level:
 		_last_announced_level = new_level
-		player_leveled_up.emit(new_level, _build_level_rewards(old_level, new_level, exp_result.get("rewards", [])))
+		player_leveled_up.emit(new_level, _build_level_rewards(old_level, new_level, rewards))
 
 func _build_level_rewards(old_level: int, new_level: int, server_rewards: Array = []) -> Array[String]:
 	var rewards: Array[String] = []
@@ -257,7 +265,7 @@ func _build_level_rewards(old_level: int, new_level: int, server_rewards: Array 
 	if rewards.is_empty():
 		rewards.append_array(_build_fallback_level_rewards(old_level, new_level))
 	var gained_stamina := maxi(0, new_level - old_level)
-	if gained_stamina > 0:
+	if gained_stamina > 0 and _find_stamina_reward(server_rewards).is_empty():
 		rewards.append(Localization.t("ui.level_up.reward.stamina_cap", [gained_stamina]))
 	rewards.append(Localization.t("ui.level_up.reward.deck_visibility"))
 	return rewards
@@ -266,6 +274,8 @@ func _format_server_level_rewards(server_rewards: Array) -> Array[String]:
 	var lines: Array[String] = []
 	var gold := 0
 	var gems := 0
+	var stamina_current := -1
+	var stamina_max := -1
 	var slot_counts := {"hand": 0, "pool": 0, "vault": 0}
 	for raw in server_rewards:
 		if not (raw is Dictionary):
@@ -280,17 +290,22 @@ func _format_server_level_rewards(server_rewards: Array) -> Array[String]:
 				var slot_type := str(reward.get("slot_type", reward.get("slotType", "")))
 				if slot_counts.has(slot_type):
 					slot_counts[slot_type] = int(slot_counts[slot_type]) + 1
+			"stamina":
+				stamina_current = int(reward.get("current", reward.get("amount", stamina_current)))
+				stamina_max = int(reward.get("max", stamina_current))
 	if gold > 0:
 		lines.append(Localization.t("ui.level_up.reward.gold", [gold]))
 	if gems > 0:
 		lines.append(Localization.t("ui.level_up.reward.gems", [gems]))
+	if stamina_current > 0 and stamina_max > 0:
+		lines.append(Localization.t("ui.level_up.reward.stamina_full", [stamina_current, stamina_max]))
 	for slot_type in ["hand", "pool", "vault"]:
 		var count := int(slot_counts[slot_type])
 		if count > 0:
 			lines.append(Localization.t("ui.level_up.reward.slot_" + slot_type, [count]))
 	return lines
 
-func _apply_level_rewards_to_local_state(server_rewards: Array) -> void:
+func _apply_level_rewards_to_local_state(server_rewards: Array, defer_stamina_refill: bool = false) -> void:
 	for raw in server_rewards:
 		if not (raw is Dictionary):
 			continue
@@ -314,6 +329,16 @@ func _apply_level_rewards_to_local_state(server_rewards: Array) -> void:
 						player_data.pool_slots = maxi(player_data.pool_slots, slot_index + 1)
 					"vault":
 						player_data.vault_slots = maxi(player_data.vault_slots, slot_index + 1)
+			"stamina":
+				var current := int(reward.get("current", reward.get("amount", free_refresh_max_count)))
+				var max_count := int(reward.get("max", maxi(current, free_refresh_max_count)))
+				if defer_stamina_refill:
+					_pending_level_stamina_refill = {"current": current, "max": max_count}
+				else:
+					free_refresh_max_count = maxi(max_count, 1)
+					free_refresh_count = clampi(current, 0, free_refresh_max_count)
+					last_free_refresh_time_unix = Time.get_unix_time_from_system()
+					_clear_deferred_stamina_display()
 
 func _build_fallback_level_rewards(old_level: int, new_level: int) -> Array[String]:
 	var lines: Array[String] = []
@@ -630,6 +655,10 @@ func sync_vault_from_server() -> void:
 	FileLogger.perf("new_data_request_done", {"page": "vault", "success": vault_resp.get("success", false), "total_ms": Time.get_ticks_msec() - started})
 	data_synced.emit()
 
+func apply_vault_slots_from_server(slots: Array) -> void:
+	_apply_card_slots("vault", slots)
+	data_synced.emit()
+
 func sync_vault_slot_quote_from_server() -> Dictionary:
 	if not ApiClient.is_logged_in():
 		return {"success": false, "error": "未登录"}
@@ -787,9 +816,13 @@ func get_free_refresh_remaining() -> int:
 	return newbie_free_refresh_count if newbie_free_refresh_count > 0 else free_refresh_count
 
 func get_stamina_display_current() -> int:
+	if _stamina_display_override_active:
+		return _stamina_display_override_current
 	return get_free_refresh_remaining()
 
 func get_stamina_display_max() -> int:
+	if _stamina_display_override_active:
+		return _stamina_display_override_max
 	return maxi(player_data.level, 1)
 
 func is_using_newbie_free_refreshes() -> bool:
@@ -802,11 +835,22 @@ func _update_free_refresh_cooldown_from_state() -> void:
 	if newbie_free_refresh_count > 0 or free_refresh_count >= free_refresh_max_count:
 		free_refresh_cooldown = 0.0
 		return
+	var recovery_seconds := _stamina_recovery_seconds()
+	var now := Time.get_unix_time_from_system()
 	if last_free_refresh_time_unix <= 0.0:
-		free_refresh_cooldown = 0.0
+		last_free_refresh_time_unix = now
+		free_refresh_cooldown = recovery_seconds
 		return
-	var next_refresh_unix := last_free_refresh_time_unix + _stamina_recovery_seconds()
-	free_refresh_cooldown = maxf(0.0, next_refresh_unix - Time.get_unix_time_from_system())
+	var elapsed := now - last_free_refresh_time_unix
+	if elapsed >= recovery_seconds:
+		var recovered_count := maxi(1, int(floor(elapsed / recovery_seconds)))
+		free_refresh_count = mini(free_refresh_count + recovered_count, free_refresh_max_count)
+		last_free_refresh_time_unix += float(recovered_count) * recovery_seconds
+		if free_refresh_count >= free_refresh_max_count:
+			free_refresh_cooldown = 0.0
+			return
+	var next_refresh_unix := last_free_refresh_time_unix + recovery_seconds
+	free_refresh_cooldown = maxf(0.0, next_refresh_unix - now)
 
 func _recover_one_free_refresh_local() -> void:
 	if newbie_free_refresh_count > 0 or free_refresh_count >= free_refresh_max_count:
@@ -819,6 +863,42 @@ func _recover_one_free_refresh_local() -> void:
 
 func _stamina_recovery_seconds() -> float:
 	return float(maxi(1, ceili(float(maxi(player_data.level, 1)) / 5.0)) * 60)
+
+func has_pending_level_stamina_refill() -> bool:
+	return not _pending_level_stamina_refill.is_empty()
+
+func peek_pending_level_stamina_refill() -> Dictionary:
+	return _pending_level_stamina_refill.duplicate()
+
+func complete_pending_level_stamina_refill() -> void:
+	if _pending_level_stamina_refill.is_empty():
+		_clear_deferred_stamina_display()
+		return
+	var current := int(_pending_level_stamina_refill.get("current", free_refresh_max_count))
+	var max_count := int(_pending_level_stamina_refill.get("max", maxi(current, free_refresh_max_count)))
+	free_refresh_max_count = maxi(max_count, 1)
+	free_refresh_count = clampi(current, 0, free_refresh_max_count)
+	last_free_refresh_time_unix = Time.get_unix_time_from_system()
+	_pending_level_stamina_refill.clear()
+	_clear_deferred_stamina_display()
+	_update_free_refresh_cooldown_from_state()
+	player_data.changed.emit()
+	free_refresh_ready.emit()
+	free_refresh_cooldown_updated.emit(free_refresh_cooldown)
+
+func _find_stamina_reward(server_rewards: Array) -> Dictionary:
+	for raw in server_rewards:
+		if raw is Dictionary and str(raw.get("type", "")) == "stamina":
+			return raw
+	return {}
+
+func _begin_deferred_stamina_display() -> void:
+	_stamina_display_override_current = get_stamina_display_current()
+	_stamina_display_override_max = get_stamina_display_max()
+	_stamina_display_override_active = true
+
+func _clear_deferred_stamina_display() -> void:
+	_stamina_display_override_active = false
 
 func _parse_server_time_unix(value: String) -> float:
 	var normalized := value.strip_edges()

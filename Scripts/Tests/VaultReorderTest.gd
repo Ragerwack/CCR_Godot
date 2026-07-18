@@ -17,6 +17,24 @@ func _ready() -> void:
 	var vault_ui := VaultUI.new()
 	add_child(vault_ui)
 	await get_tree().process_frame
+	if not _assert_action_buttons_evenly_spaced(vault_ui):
+		return
+
+	await vault_ui._prepare_unlock_animation_target(3)
+	var locked_rect_before := vault_ui.slots[3].get_lock_icon_global_rect()
+	var expected_lock_size := clampf(CardSlotUI.SLOT_SIZE.x * 0.45, 39.0, 63.0)
+	if locked_rect_before.size != Vector2(expected_lock_size, expected_lock_size):
+		return _fail("unlock_animation_target_lock_size_wrong")
+	await vault_ui._play_unlock_key_animation("gold", 3)
+	await get_tree().process_frame
+	if get_tree().root.find_child("VaultUnlockKeyIcon", true, false) != null:
+		return _fail("unlock_key_icon_not_cleaned")
+	if vault_ui.slots[3].get_lock_icon_global_rect().size.x > 1.0:
+		return _fail("unlock_animation_lock_still_visible")
+	if vault_ui.slots[3].is_unlocked():
+		return _fail("unlock_animation_changed_authority_state")
+	if not await _assert_synthesis_slot_reward_key_animation():
+		return
 
 	if not await vault_ui._handle_vault_to_vault(card_a, 0, 1):
 		return _fail("swap_returned_false")
@@ -134,6 +152,68 @@ func _slot_title_color_matches(slot: CardSlotUI, expected: Color) -> bool:
 		var label := display.get(label_name) as Label
 		if label == null or not _color_close(label.get_theme_color("font_color"), expected):
 			return false
+	return true
+
+func _assert_action_buttons_evenly_spaced(vault_ui: VaultUI) -> bool:
+	var buttons := [
+		vault_ui.get("_organize_btn") as Button,
+		vault_ui.get("_synthesize_btn") as Button,
+		vault_ui.get("_gold_unlock_btn") as Button,
+		vault_ui.get("_gem_unlock_btn") as Button,
+	]
+	for button in buttons:
+		if button == null:
+			_fail("vault_action_button_missing")
+			return false
+	var gap_a: float = buttons[1].position.y - buttons[0].position.y
+	var gap_b: float = buttons[2].position.y - buttons[1].position.y
+	var gap_c: float = buttons[3].position.y - buttons[2].position.y
+	if absf(gap_a - gap_b) > 0.1 or absf(gap_b - gap_c) > 0.1:
+		_fail("vault_action_buttons_not_even")
+		return false
+	if buttons[0].text != Localization.t("ui.vault.organize"):
+		_fail("vault_organize_button_text_wrong")
+		return false
+	return true
+
+func _assert_synthesis_slot_reward_key_animation() -> bool:
+	var overlay := SynthesisAnimationOverlay.new()
+	overlay.name = "RewardKeyAnimationProbe"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	await get_tree().process_frame
+
+	if absf(overlay._key_rotation_for_direction(Vector2.DOWN)) > 0.1:
+		overlay.queue_free()
+		_fail("reward_key_down_rotation_wrong")
+		return false
+	if absf(overlay._key_rotation_for_direction(Vector2.RIGHT) + 90.0) > 0.1:
+		overlay.queue_free()
+		_fail("reward_key_right_rotation_wrong")
+		return false
+	if absf(overlay._reward_flight_duration({"type": "slot"}) - 2.08) > 0.01:
+		overlay.queue_free()
+		_fail("reward_key_duration_wrong")
+		return false
+
+	var item := {"type": "slot", "target_rect": Rect2(Vector2(220, 120), Vector2(48, 48))}
+	var icon := overlay._create_reward_icon(item, Vector2(420, 360))
+	if icon == null:
+		overlay.queue_free()
+		_fail("reward_key_icon_missing")
+		return false
+	if icon.size != Vector2(96, 96):
+		overlay.queue_free()
+		_fail("reward_key_icon_size_wrong")
+		return false
+	overlay._start_reward_flight(icon, item, Vector2(420, 360), 0.0)
+	await get_tree().create_timer(2.20).timeout
+	await get_tree().process_frame
+	if is_instance_valid(icon):
+		overlay.queue_free()
+		_fail("reward_key_icon_not_cleaned")
+		return false
+	overlay.queue_free()
 	return true
 
 func _color_close(a: Color, b: Color, epsilon: float = 0.005) -> bool:
