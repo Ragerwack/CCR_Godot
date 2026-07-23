@@ -40,12 +40,39 @@ const LOADING_TUTORIAL_TIPS: Array[Dictionary] = [
 ]
 
 const LOADING_TUTORIAL_TIPS_EN: Array[Dictionary] = [
-	{"id": "loading_tip_basic_en", "min_level": 1, "max_level": 999, "title": "Card Pool and Hand", "body": "Drawn cards appear in the card pool. Move cards you want to keep into your hand before drawing again, crafting a relic, or organizing your collection.", "short_tip": "Moving cards from the pool to your hand is the basic collection action."},
-	{"id": "loading_tip_craft_en", "min_level": 1, "max_level": 999, "title": "Crafting Relics", "body": "A relic requires five cards from the same series, deck, and color, with one card for each number from 1 to 5. Those five cards are consumed when the relic is crafted.", "short_tip": "Same deck, same color, five different numbers: one relic."},
-	{"id": "loading_tip_vault_en", "min_level": 5, "max_level": 999, "title": "The Vault", "body": "The vault is long-term storage. Cards placed there cannot return to your hand, but complete groups of five can still be crafted inside the vault.", "short_tip": "Use your vault slots carefully; storing a card is a one-way action."},
+	{"id": "loading_tip_basic_en", "min_level": 1, "max_level": 999, "title": "Card Pool and Hand", "body": "Drawn cards appear in the card pool. Move cards you want to keep into your hand before drawing again, forging a relic, or organizing your collection.", "short_tip": "Moving cards from the pool to your hand is the basic collection action."},
+	{"id": "loading_tip_craft_en", "min_level": 1, "max_level": 999, "title": "Forging Relics", "body": "A relic requires five cards from the same series, deck, and color, with one card for each number from 1 to 5. Those five cards are consumed when the relic is forged.", "short_tip": "Same deck, same color, five different numbers: one relic."},
+	{"id": "loading_tip_vault_en", "min_level": 5, "max_level": 999, "title": "The Vault", "body": "The vault is long-term storage. Cards placed there cannot return to your hand, but complete groups of five can still be forged inside the vault.", "short_tip": "Use your vault slots carefully; storing a card is a one-way action."},
 	{"id": "loading_tip_rarity_en", "min_level": 10, "max_level": 999, "title": "Card Rarity", "body": "Card colors range from white through green, blue, purple, orange, and black. Each draw is independent, and exact rates follow the current server configuration.", "short_tip": "Rarer colors are harder to complete, but every collection choice is yours."},
 	{"id": "loading_tip_caps_en", "min_level": 20, "max_level": 999, "title": "Relic Supply Limits", "body": "Higher-rarity relics have global supply limits. The server validates supply and assigns collectible serial numbers when eligible relics are created.", "short_tip": "Advanced relics are long-term collectibles, not routine consumables."},
 	{"id": "loading_tip_history_en", "min_level": 30, "max_level": 999, "title": "A Persistent Collection", "body": "CCR records when a relic was created and who created it. A relic is part of the world's history, even if its owner changes in future systems.", "short_tip": "Relics preserve history as well as rarity."},
+]
+
+const LOADING_TUTORIAL_TIPS_ZH_TW: Array[Dictionary] = [
+	{"id": "loading_tip_basic_zh_tw", "min_level": 1, "max_level": 999, "category": "basic", "title": "卡池與手牌", "body": "卡池中會出現目前可抽取的卡牌。你可以先把想留下的卡牌移到手牌，再決定是否繼續抽取、鍛造聖物或整理收藏。", "short_tip": "先把卡池裡的卡移到手牌，這是 CCR 最基礎的收藏動作。"},
+	{"id": "loading_tip_forge_zh_tw", "min_level": 1, "max_level": 999, "category": "forge", "title": "鍛造聖物", "body": "鍛造聖物需要同系列、同卡組、同顏色，並湊齊 1 到 5 號五張子卡。鍛造完成後，這五張子卡會被消耗。", "short_tip": "同卡組、同顏色、五個不同編號，才能形成一枚聖物。"},
+	{"id": "loading_tip_vault_zh_tw", "min_level": 5, "max_level": 999, "category": "vault", "title": "保險箱", "body": "保險箱是長期保存卡牌的地方。放入後不能回到手牌，但湊齊五張時仍然可以在保險箱中鍛造聖物。", "short_tip": "謹慎使用保險箱槽位；存入卡牌是單向動作。"},
+	{"id": "loading_tip_rarity_zh_tw", "min_level": 10, "max_level": 999, "category": "rarity", "title": "卡牌稀有度", "body": "卡牌顏色從白、綠、藍、紫、橙到黑逐步稀有。每次抽卡都是獨立隨機，具體概率以目前伺服器配置為準。", "short_tip": "稀有顏色更難集齊，但收藏取捨由你決定。"},
+	{"id": "loading_tip_caps_zh_tw", "min_level": 20, "max_level": 999, "category": "cap", "title": "聖物數量上限", "body": "高稀有度聖物有全域數量上限。伺服器會驗證上限，並在符合條件時分配可收藏的公開編號。", "short_tip": "高階聖物是長期收藏品，不是日常消耗品。"},
+	{"id": "loading_tip_history_zh_tw", "min_level": 30, "max_level": 999, "category": "history", "title": "持續存在的收藏", "body": "CCR 會記錄聖物何時被創造，以及誰創造了它。即使未來擁有者改變，聖物仍然是世界歷史的一部分。", "short_tip": "聖物保存的不只是稀有度，也保存歷史。"},
+]
+
+const LOADING_TUTORIAL_TIPS_JA: Array[Dictionary] = [
+	{"id": "loading_tip_basic_ja", "min_level": 1, "max_level": 999, "category": "basic", "title": "カードプールと手札", "body": "引いたカードはカードプールに表示されます。残したいカードを手札に移してから、次のドロー、レリックの鍛造、コレクション整理を判断できます。", "short_tip": "プールから手札へ移すことが、CCR の基本的な収集操作です。"},
+	{"id": "loading_tip_forge_ja", "min_level": 1, "max_level": 999, "category": "forge", "title": "レリックの鍛造", "body": "レリックには、同じシリーズ、デッキ、色で、1 から 5 までの番号がそろった 5 枚のカードが必要です。鍛造時にその 5 枚は消費されます。", "short_tip": "同じデッキ、同じ色、5 つの異なる番号で 1 つのレリックになります。"},
+	{"id": "loading_tip_vault_ja", "min_level": 5, "max_level": 999, "category": "vault", "title": "保管庫", "body": "保管庫は長期保存用の場所です。入れたカードは手札へ戻せませんが、5 枚の組み合わせがそろえば保管庫内でも鍛造できます。", "short_tip": "保管庫スロットは慎重に使ってください。保存は一方通行です。"},
+	{"id": "loading_tip_rarity_ja", "min_level": 10, "max_level": 999, "category": "rarity", "title": "カードのレアリティ", "body": "カードの色は白、緑、青、紫、橙、黒の順に希少になります。各ドローは独立しており、正確な確率は現在のサーバー設定に従います。", "short_tip": "希少な色ほど完成は難しくなりますが、何を集めるかはあなた次第です。"},
+	{"id": "loading_tip_caps_ja", "min_level": 20, "max_level": 999, "category": "cap", "title": "レリック供給上限", "body": "高レアリティのレリックには全体の供給上限があります。サーバーが上限を検証し、対象となるレリックには収集番号を割り当てます。", "short_tip": "高位レリックは長期収集品であり、日常消耗品ではありません。"},
+	{"id": "loading_tip_history_ja", "min_level": 30, "max_level": 999, "category": "history", "title": "残り続けるコレクション", "body": "CCR はレリックがいつ、誰によって作られたかを記録します。将来所有者が変わっても、そのレリックは世界の歴史の一部です。", "short_tip": "レリックは希少性だけでなく、歴史も保存します。"},
+]
+
+const LOADING_TUTORIAL_TIPS_KO: Array[Dictionary] = [
+	{"id": "loading_tip_basic_ko", "min_level": 1, "max_level": 999, "category": "basic", "title": "카드 풀과 손패", "body": "뽑은 카드는 카드 풀에 표시됩니다. 남기고 싶은 카드를 손패로 옮긴 뒤 다음 뽑기, 렐릭 제작, 컬렉션 정리를 결정할 수 있습니다.", "short_tip": "풀에서 손패로 카드를 옮기는 것이 CCR의 기본 수집 행동입니다."},
+	{"id": "loading_tip_forge_ko", "min_level": 1, "max_level": 999, "category": "forge", "title": "렐릭 제작", "body": "렐릭을 만들려면 같은 시리즈, 같은 덱, 같은 색의 1번부터 5번까지 카드 다섯 장이 필요합니다. 제작 시 그 다섯 장은 소비됩니다.", "short_tip": "같은 덱, 같은 색, 서로 다른 다섯 번호가 하나의 렐릭이 됩니다."},
+	{"id": "loading_tip_vault_ko", "min_level": 5, "max_level": 999, "category": "vault", "title": "보관함", "body": "보관함은 장기 보관 공간입니다. 넣은 카드는 손패로 되돌릴 수 없지만, 다섯 장 조합이 완성되면 보관함 안에서도 렐릭을 제작할 수 있습니다.", "short_tip": "보관함 슬롯은 신중하게 사용하세요. 저장은 되돌릴 수 없는 행동입니다."},
+	{"id": "loading_tip_rarity_ko", "min_level": 10, "max_level": 999, "category": "rarity", "title": "카드 희귀도", "body": "카드 색은 흰색, 초록, 파랑, 보라, 주황, 검정 순으로 희귀해집니다. 각 뽑기는 독립적이며 정확한 확률은 현재 서버 설정을 따릅니다.", "short_tip": "희귀한 색일수록 완성은 어렵지만, 무엇을 수집할지는 당신의 선택입니다."},
+	{"id": "loading_tip_caps_ko", "min_level": 20, "max_level": 999, "category": "cap", "title": "렐릭 공급 한도", "body": "높은 희귀도의 렐릭에는 전체 공급 한도가 있습니다. 서버가 한도를 검증하고, 조건에 맞는 렐릭에는 수집 번호를 부여합니다.", "short_tip": "상위 렐릭은 장기 수집품이지 일상 소모품이 아닙니다."},
+	{"id": "loading_tip_history_ko", "min_level": 30, "max_level": 999, "category": "history", "title": "지속되는 컬렉션", "body": "CCR은 렐릭이 언제, 누가 만들었는지 기록합니다. 미래에 소유자가 바뀌더라도 그 렐릭은 세계의 역사 일부입니다.", "short_tip": "렐릭은 희귀도뿐 아니라 역사도 보존합니다."},
 ]
 
 const LOADING_BACKGROUND_PATHS: Array[String] = [
@@ -65,8 +92,8 @@ func setup_for_level(level: int) -> void:
 		var background_path := LOADING_BACKGROUND_PATHS[randi() % LOADING_BACKGROUND_PATHS.size()]
 		set_background(load(background_path))
 	var tip := _pick_tip(level)
-	var category := str(tip.get("category", "tip" if Localization.locale == "en" else "收藏提示"))
-	set_tip(category, str(tip.get("title", "Collection Tip" if Localization.locale == "en" else "收藏提示")), str(tip.get("body", "")), str(tip.get("short_tip", "")))
+	var category := str(tip.get("category", Localization.t("ui.loading_tip.default_category")))
+	set_tip(category, str(tip.get("title", Localization.t("ui.loading_tip.default_title"))), str(tip.get("body", "")), str(tip.get("short_tip", "")))
 	set_progress(0.0, Localization.t("ui.login.loading.entering"))
 	set_server_status(Localization.t("ui.login.loading.online"))
 	set_version(_project_version_text())
@@ -82,7 +109,7 @@ func _pick_tip(level: int) -> Dictionary:
 	return pick_tip_for_locale(level, Localization.locale)
 
 static func pick_tip_for_locale(level: int, target_locale: String) -> Dictionary:
-	var source: Array[Dictionary] = LOADING_TUTORIAL_TIPS_EN if target_locale == "en" else LOADING_TUTORIAL_TIPS
+	var source := _tip_source_for_locale(target_locale)
 	var available: Array[Dictionary] = []
 	for tip in source:
 		if level >= int(tip.get("min_level", 1)) and level <= int(tip.get("max_level", 999)):
@@ -90,6 +117,19 @@ static func pick_tip_for_locale(level: int, target_locale: String) -> Dictionary
 	if available.is_empty():
 		return source[0]
 	return available[randi() % available.size()]
+
+static func _tip_source_for_locale(target_locale: String) -> Array[Dictionary]:
+	match target_locale:
+		"zh-CN":
+			return LOADING_TUTORIAL_TIPS
+		"zh-TW":
+			return LOADING_TUTORIAL_TIPS_ZH_TW
+		"ja":
+			return LOADING_TUTORIAL_TIPS_JA
+		"ko":
+			return LOADING_TUTORIAL_TIPS_KO
+		_:
+			return LOADING_TUTORIAL_TIPS_EN
 
 func _project_version_text() -> String:
 	var version := str(ProjectSettings.get_setting("application/config/version", "dev"))

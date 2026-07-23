@@ -51,8 +51,14 @@ var _drag_anchor_ratio: Vector2 = Vector2(0.5, 0.5)
 var _has_drag_anchor: bool = false
 var _scale_tween: Tween = null
 var _rarity_shine_tween: Tween = null
+var _blue_draw_flip_progress: float = 0.0
+var _blue_draw_flip_sfx_90_played: bool = false
+var _blue_draw_flip_sfx_270_played: bool = false
 var hover_uses_slot_bounds: bool = true
 var hover_scale_enabled: bool = true
+var normal_visual_scale: float = 1.0
+var hover_visual_scale: float = HOVER_SCALE
+var drop_target_visual_scale: float = DROP_TARGET_SCALE
 
 static var CARD_SIZE: Vector2 = Vector2(107, 149)
 static var _shared_color_image_map: Dictionary = {}
@@ -60,6 +66,7 @@ static var _texture_cache: Dictionary = {}
 static var _art_texture_cache: Dictionary = {}
 static var _rounded_mask_shader: Shader = null
 static var _green_draw_shine_shader: Shader = null
+static var _hover_z_sequence: int = 0
 const HOVER_SCALE: float = 2.0
 const DROP_TARGET_SCALE: float = 1.08
 const HOVER_TRANSITION_DURATION: float = 0.3
@@ -142,28 +149,39 @@ void fragment() {
 static func configure_card_size(card_size: Vector2) -> void:
 	CARD_SIZE = card_size
 
+func configure_visual_scales(resting_scale: float, hover_scale: float, drop_scale: float = -1.0) -> void:
+	normal_visual_scale = maxf(0.01, resting_scale)
+	hover_visual_scale = maxf(normal_visual_scale, hover_scale)
+	drop_target_visual_scale = maxf(0.01, drop_scale if drop_scale > 0.0 else normal_visual_scale * DROP_TARGET_SCALE)
+	if not _hovered and not _drop_targeted:
+		scale = Vector2(normal_visual_scale, normal_visual_scale)
+
 func _ready() -> void:
-	custom_minimum_size = CARD_SIZE
+	if custom_minimum_size == Vector2.ZERO:
+		custom_minimum_size = CARD_SIZE
+	if size.x <= 0.0 or size.y <= 0.0:
+		size = custom_minimum_size
 	setup_ui()
 
 func setup_ui() -> void:
 	clip_contents = false
-	_card_shadow = CCRVisualStyle.make_shadow_panel("CardShadow", int(roundf(CARD_SIZE.x * 0.08)), 14, Vector2(5, 8), CCRVisualStyle.CARD_SHADOW)
+	var current_size := _current_card_size()
+	_card_shadow = CCRVisualStyle.make_shadow_panel("CardShadow", int(roundf(current_size.x * 0.08)), 14, Vector2(5, 8), CCRVisualStyle.CARD_SHADOW)
 	_card_shadow.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_card_shadow.position = Vector2.ZERO
-	_card_shadow.size = CARD_SIZE
+	_card_shadow.size = current_size
 	add_child(_card_shadow)
 
 	_card_bg = ColorRect.new()
 	_card_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_card_bg.color = Color(0.2, 0.2, 0.25, 1.0)
-	_card_bg.material = _new_rounded_mask_material(CARD_SIZE)
+	_card_bg.material = _new_rounded_mask_material(current_size)
 	add_child(_card_bg)
 
 	_fallback_color_rect = ColorRect.new()
 	_fallback_color_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_fallback_color_rect.color = Color(1, 1, 1, 0.1)
-	_fallback_color_rect.material = _new_rounded_mask_material(CARD_SIZE)
+	_fallback_color_rect.material = _new_rounded_mask_material(current_size)
 	_fallback_color_rect.visible = false
 	add_child(_fallback_color_rect)
 
@@ -173,7 +191,7 @@ func setup_ui() -> void:
 	_color_border.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_color_border.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	_color_border.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	_color_border.material = _new_rounded_mask_material(CARD_SIZE)
+	_color_border.material = _new_rounded_mask_material(current_size)
 	_color_border.visible = show_color_border
 	add_child(_color_border)
 
@@ -182,13 +200,13 @@ func setup_ui() -> void:
 	_blue_draw_back.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_blue_draw_back.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	_blue_draw_back.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	_blue_draw_back.material = _new_rounded_mask_material(CARD_SIZE)
+	_blue_draw_back.material = _new_rounded_mask_material(current_size)
 	_blue_draw_back.texture = _color_image_map.get(CardColor.ColorType.BLUE)
 	_blue_draw_back.visible = false
 	_blue_draw_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_blue_draw_back)
 
-	_art_shadow = CCRVisualStyle.make_shadow_panel("ArtCenteredShadow", int(roundf(CARD_SIZE.x * ART_RECT_RATIO.size.x * ART_CORNER_RADIUS_RATIO)), 8, Vector2.ZERO, Color(0, 0, 0, 0.34))
+	_art_shadow = CCRVisualStyle.make_shadow_panel("ArtCenteredShadow", int(roundf(current_size.x * ART_RECT_RATIO.size.x * ART_CORNER_RADIUS_RATIO)), 8, Vector2.ZERO, Color(0, 0, 0, 0.34))
 	_art_shadow.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	add_child(_art_shadow)
 
@@ -306,7 +324,7 @@ func setup_ui() -> void:
 	_rarity_shine_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_rarity_shine_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_rarity_shine_overlay.color = Color.WHITE
-	_rarity_shine_material = _new_green_draw_shine_material(size if size.x > 0.0 and size.y > 0.0 else CARD_SIZE)
+	_rarity_shine_material = _new_green_draw_shine_material(_current_card_size())
 	_rarity_shine_overlay.material = _rarity_shine_material
 	_rarity_shine_overlay.visible = false
 	add_child(_rarity_shine_overlay)
@@ -344,9 +362,24 @@ static func _new_green_draw_shine_material(card_size: Vector2) -> ShaderMaterial
 	material.set_shader_parameter("radius_ratio", CARD_CORNER_RADIUS_RATIO)
 	return material
 
+func _current_card_size() -> Vector2:
+	if size.x > 0.0 and size.y > 0.0:
+		return size
+	if custom_minimum_size.x > 0.0 and custom_minimum_size.y > 0.0:
+		return custom_minimum_size
+	return CARD_SIZE
+
+func _refresh_size_dependent_materials() -> void:
+	var current_size := _current_card_size()
+	for node in [_card_bg, _fallback_color_rect, _color_border, _blue_draw_back]:
+		if node != null:
+			node.material = _new_rounded_mask_material(current_size)
+	_update_green_draw_shine_mask()
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		pivot_offset = size * 0.5
+		_refresh_size_dependent_materials()
 		_apply_card_layout()
 		_update_green_draw_shine_mask()
 		refresh_title_text_color()
@@ -395,12 +428,13 @@ func _apply_hover_transform() -> void:
 	var global_dragging := DragSystem != null and DragSystem.is_dragging()
 	if _hovered and not _dragging_preview and not global_dragging and card != null:
 		pivot_offset = size * 0.5
-		_tween_visual_scale(Vector2(HOVER_SCALE, HOVER_SCALE), 100)
+		_hover_z_sequence += 1
+		_tween_visual_scale(Vector2(hover_visual_scale, hover_visual_scale), 100 + _hover_z_sequence)
 	elif _drop_targeted and not _dragging_preview and card != null:
 		pivot_offset = size * 0.5
-		_tween_visual_scale(Vector2(DROP_TARGET_SCALE, DROP_TARGET_SCALE), 90)
+		_tween_visual_scale(Vector2(drop_target_visual_scale, drop_target_visual_scale), 90)
 	else:
-		_tween_visual_scale(Vector2.ONE, 0)
+		_tween_visual_scale(Vector2(normal_visual_scale, normal_visual_scale), 0)
 
 
 func _tween_visual_scale(target_scale: Vector2, target_z_index: int) -> void:
@@ -515,18 +549,22 @@ func _fit_text_font_size(label: Label, base_size: int, minimum: int, fitting_siz
 	var max_width := fitting_size.x * 0.98
 	var max_height := fitting_size.y * 0.98
 	for font_size in range(base_size, minimum - 1, -1):
-		var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
-		var line_height := font.get_height(font_size)
-		if text_size.x <= max_width and line_height <= max_height:
+		var text_size := _measure_label_text(label, font, text, font_size, max_width)
+		if text_size.x <= max_width and text_size.y <= max_height:
 			return font_size
 	return minimum
 
+func _measure_label_text(label: Label, font: Font, text: String, font_size: int, max_width: float) -> Vector2:
+	if label.autowrap_mode != TextServer.AUTOWRAP_OFF:
+		return font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, max_width, font_size)
+	return font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
+
 func _refresh_label_font_sizes(deck_size: Vector2 = Vector2.ZERO, card_name_size: Vector2 = Vector2.ZERO, series_size: Vector2 = Vector2.ZERO) -> void:
-	_fit_label_font_size_to_region_max(_deck_name_label, 6, deck_size)
+	_fit_label_font_size_to_region_max(_deck_name_label, 1, deck_size)
 	_number_label.add_theme_font_size_override("font_size", _font_size(NUMBER_BADGE_FONT_CANVAS, 8))
-	_fit_label_font_size(_card_name_label, CARD_NAME_FONT_CANVAS, 6, card_name_size)
-	_description_label.add_theme_font_size_override("font_size", _font_size(DESCRIPTION_FONT_CANVAS, 6))
-	_fit_label_font_size(_series_tag_label, SERIES_TAG_FONT_CANVAS, 5, series_size)
+	_fit_label_font_size(_card_name_label, CARD_NAME_FONT_CANVAS, 1, card_name_size)
+	_fit_label_font_size(_description_label, DESCRIPTION_FONT_CANVAS, 1)
+	_fit_label_font_size(_series_tag_label, SERIES_TAG_FONT_CANVAS, 1, series_size)
 
 func _apply_card_layout() -> void:
 	if _art_image == null or _art_shadow == null or _deck_name_region == null or _deck_name_label == null or _number_badge == null or _card_name_region == null or _card_name_label == null or _description_panel == null or _description_label == null or _series_tag_region == null or _series_tag_label == null:
@@ -665,13 +703,16 @@ func _set_green_draw_shine_progress(value: float) -> void:
 func _update_green_draw_shine_mask() -> void:
 	if _rarity_shine_material == null:
 		return
-	var current_size := size if size.x > 0.0 and size.y > 0.0 else CARD_SIZE
+	var current_size := _current_card_size()
 	_rarity_shine_material.set_shader_parameter("aspect_ratio", current_size.x / maxf(current_size.y, 1.0))
 
 ## 蓝卡浮空翻转：背面只显示蓝色卡牌背景图，不显示插图或文字。
 func begin_blue_draw_flip() -> void:
 	if card == null or card.color != CardColor.ColorType.BLUE:
 		return
+	_blue_draw_flip_progress = 0.0
+	_blue_draw_flip_sfx_90_played = false
+	_blue_draw_flip_sfx_270_played = false
 	_set_blue_draw_back_visible(false)
 	set_blue_draw_flip_progress(0.0)
 
@@ -680,18 +721,35 @@ func set_blue_draw_flip_progress(progress: float) -> void:
 		return
 	var clamped_progress := clampf(progress, 0.0, 1.0)
 	_set_blue_draw_back_visible(clamped_progress >= 0.25 and clamped_progress < 0.75)
+	_play_blue_draw_flip_sfx_if_crossed(_blue_draw_flip_progress, clamped_progress)
+	_blue_draw_flip_progress = clamped_progress
 	var horizontal_scale := maxf(0.025, absf(cos(clamped_progress * TAU)))
 	scale = Vector2(horizontal_scale, 1.0)
 
 func finish_blue_draw_flip() -> void:
 	_set_blue_draw_back_visible(false)
-	scale = Vector2.ONE
+	scale = Vector2(normal_visual_scale, normal_visual_scale)
 
 func stop_blue_draw_flip() -> void:
 	finish_blue_draw_flip()
 
 func is_blue_draw_back_visible() -> bool:
 	return _blue_draw_back != null and _blue_draw_back.visible
+
+func _play_blue_draw_flip_sfx_if_crossed(previous_progress: float, current_progress: float) -> void:
+	if current_progress <= previous_progress:
+		return
+	if not _blue_draw_flip_sfx_90_played and previous_progress < 0.25 and current_progress >= 0.25:
+		_blue_draw_flip_sfx_90_played = true
+		_play_blue_draw_whoosh()
+	if not _blue_draw_flip_sfx_270_played and previous_progress < 0.75 and current_progress >= 0.75:
+		_blue_draw_flip_sfx_270_played = true
+		_play_blue_draw_whoosh()
+
+func _play_blue_draw_whoosh() -> void:
+	if card == null or card.color != CardColor.ColorType.BLUE:
+		return
+	AudioManager.play_sfx("draw_blue_flip", 1.0, 0.0)
 
 func _set_blue_draw_back_visible(visible: bool) -> void:
 	if _blue_draw_back == null:

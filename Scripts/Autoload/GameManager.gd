@@ -855,9 +855,12 @@ func _update_free_refresh_cooldown_from_state() -> void:
 func _recover_one_free_refresh_local() -> void:
 	if newbie_free_refresh_count > 0 or free_refresh_count >= free_refresh_max_count:
 		return
+	var was_below_full := free_refresh_count < free_refresh_max_count
 	free_refresh_count = mini(free_refresh_count + 1, free_refresh_max_count)
 	last_free_refresh_time_unix = Time.get_unix_time_from_system()
 	_update_free_refresh_cooldown_from_state()
+	if was_below_full and free_refresh_count >= free_refresh_max_count:
+		AudioManager.play_sfx("stamina_full", 1.0, 0.0)
 	free_refresh_ready.emit()
 	free_refresh_cooldown_updated.emit(free_refresh_cooldown)
 

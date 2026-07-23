@@ -4,10 +4,17 @@ class_name CurrencyUI
 const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
 const AssetNumberRollScript = preload("res://Scripts/UI/AssetNumberRoll.gd")
 const ROW_HORIZONTAL_SAFE_MARGIN: float = 6.0
+const ROLL_PREFETCH_ICON_IDS := {
+	"ready": "status_roll_green",
+	"waiting": "status_roll_yellow",
+	"error": "status_roll_red",
+}
+const ROLL_PREFETCH_ICON_SCALE: float = 0.8
 
 var _gold_number
 var _gems_number
 var _stamina_number
+var _roll_prefetch_icon: TextureRect
 var _status_icons: Array[TextureRect] = []
 var _icon_size: float = 22.0
 var _status_row: HBoxContainer
@@ -19,6 +26,7 @@ func configure_icon_size(icon_size: float) -> void:
 	for icon in _status_icons:
 		icon.custom_minimum_size = Vector2(_icon_size, _icon_size)
 		icon.size = Vector2(_icon_size, _icon_size)
+	_configure_roll_prefetch_icon_size()
 	_fit_status_row_width()
 
 # 保持右边界不动；资源数字变长时，图标和数字作为同一项向左扩展。
@@ -37,10 +45,13 @@ func _ready() -> void:
 	GameManager.player_data.changed.connect(_on_player_data_changed)
 	GameManager.free_refresh_cooldown_updated.connect(_on_free_refresh_cooldown_updated)
 	GameManager.free_refresh_ready.connect(_on_free_refresh_ready)
+	if not CardPoolSystem.roll_prefetch_status_changed.is_connected(_on_roll_prefetch_status_changed):
+		CardPoolSystem.roll_prefetch_status_changed.connect(_on_roll_prefetch_status_changed)
+	_on_roll_prefetch_status_changed(CardPoolSystem.get_roll_prefetch_status())
 	refresh()
 
 func setup_ui() -> void:
-	# 水平并排：体力 → 金币 → 宝石
+	# 水平并排：体力 → 金币 → 宝石 → 下一次 Roll 状态灯
 	_status_row = HBoxContainer.new()
 	_status_row.name = "CurrencyStatusRow"
 	_status_row.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -55,6 +66,7 @@ func setup_ui() -> void:
 	_stamina_number = _create_status_item(_status_row, "status_stamina", "StaminaIcon", "StaminaLabel")
 	_gold_number = _create_status_item(_status_row, "status_gold", "GoldIcon", "GoldLabel")
 	_gems_number = _create_status_item(_status_row, "status_gem", "GemIcon", "GemsLabel")
+	_roll_prefetch_icon = _create_roll_prefetch_status_item(_status_row)
 
 func _create_status_item(parent: HBoxContainer, icon_id: String, icon_name: String, label_name: String) -> Control:
 	var item := HBoxContainer.new()
@@ -72,6 +84,27 @@ func _create_status_item(parent: HBoxContainer, icon_id: String, icon_name: Stri
 	parent.add_child(item)
 	return number
 
+func _create_roll_prefetch_status_item(parent: HBoxContainer) -> TextureRect:
+	var item := HBoxContainer.new()
+	item.name = "RollPrefetchStatus"
+	item.alignment = BoxContainer.ALIGNMENT_CENTER
+	item.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var icon := CCRVisualStyle.make_status_icon("status_roll_yellow", "RollPrefetchIcon", _icon_size)
+	var roll_icon_size := maxf(1.0, roundf(_icon_size * ROLL_PREFETCH_ICON_SCALE))
+	icon.custom_minimum_size = Vector2(roll_icon_size, roll_icon_size)
+	icon.size = Vector2(roll_icon_size, roll_icon_size)
+	_status_icons.append(icon)
+	item.add_child(icon)
+	parent.add_child(item)
+	return icon
+
+func _configure_roll_prefetch_icon_size() -> void:
+	if _roll_prefetch_icon == null:
+		return
+	var roll_icon_size := maxf(1.0, roundf(_icon_size * ROLL_PREFETCH_ICON_SCALE))
+	_roll_prefetch_icon.custom_minimum_size = Vector2(roll_icon_size, roll_icon_size)
+	_roll_prefetch_icon.size = Vector2(roll_icon_size, roll_icon_size)
+
 func _on_player_data_changed() -> void:
 	refresh()
 
@@ -80,6 +113,13 @@ func _on_free_refresh_cooldown_updated(_remaining: float) -> void:
 
 func _on_free_refresh_ready() -> void:
 	refresh()
+
+func _on_roll_prefetch_status_changed(status: String) -> void:
+	if _roll_prefetch_icon == null:
+		return
+	var icon_id := str(ROLL_PREFETCH_ICON_IDS.get(status, "status_roll_yellow"))
+	_roll_prefetch_icon.texture = CCRVisualStyle.icon(icon_id)
+	_fit_status_row_width()
 
 func refresh() -> void:
 	var pd = GameManager.player_data

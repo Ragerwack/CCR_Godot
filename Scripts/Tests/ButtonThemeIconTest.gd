@@ -10,6 +10,7 @@ const ICON_EXPECTED_SIZES := {
 	"action_page": 67, "action_synthesize": 67, "action_discard": 67, "action_store_vault": 67,
 	"vault_organize": 50, "vault_expand_gold": 50, "vault_expand_gem": 50,
 	"status_stamina": 50, "status_gold": 50, "status_gem": 50,
+	"status_roll_green": 50, "status_roll_yellow": 50, "status_roll_red": 50,
 	"status_level": 18, "status_combat_power": 18, "status_experience": 14,
 	"status_lock": 42,
 }
@@ -87,10 +88,11 @@ func _ready() -> void:
 	if not _assert_steam_deck_metrics(main):
 		return
 
-	print("BUTTON_THEME_ICON ok assets=34 nav=9 draw=3 card_actions=4 vault=4 status=7")
+	print("BUTTON_THEME_ICON ok assets=37 nav=9 draw=3 card_actions=4 vault=4 status=10")
 	get_tree().quit(0)
 
 func _prepare_player_data() -> void:
+	GameManager.player_data.user_id = 0
 	GameManager.player_data.level = 8
 	GameManager.player_data.combat_power = 125
 	GameManager.player_data.gold = 1000
@@ -132,7 +134,6 @@ func _assert_source_assets() -> bool:
 		CCRVisualStyle.DIALOG_PANEL_PATH: CCRVisualStyle.DIALOG_PANEL_SIZE,
 		CCRVisualStyle.DIALOG_CONFIRM_BUTTON_PATH: Vector2(260, 80),
 		CCRVisualStyle.DIALOG_CANCEL_BUTTON_PATH: Vector2(260, 80),
-		CCRVisualStyle.DIALOG_CLOSE_BUTTON_PATH: Vector2(64, 64),
 	}
 	for path in dialog_assets:
 		var texture := load(str(path)) as Texture2D
@@ -158,6 +159,8 @@ func _assert_navigation(main: MainUI) -> bool:
 		return false
 	if nav_buttons.buttons[0].get_theme_font_size("font_size") < 13:
 		return _fail("navigation_button_font_not_increased")
+	if not _assert_button_text_shifted(nav_buttons.buttons[0]):
+		return false
 	nav_buttons.select_by_id("vault")
 	var selected := nav_buttons.find_child("NavButton_vault", false, false) as Button
 	if selected == null or not (selected.get_theme_stylebox("normal") is StyleBoxTexture):
@@ -185,14 +188,18 @@ func _assert_draw_and_hand(main: MainUI) -> bool:
 				return _fail("hand_page_button_must_not_have_cooldown")
 		elif not _assert_action_cooldown(button):
 			return false
+		if node_name == "HandSynthesizeButton" and button.text != "锻造":
+			return _fail("hand_synthesize_text_not_forge")
 	var action_buttons: Array[Button] = []
 	for node_name in targets:
 		action_buttons.append(center.find_child(str(node_name), true, false) as Button)
 	if not _assert_icon_column_aligned(action_buttons, "action"):
 		return false
 	for button in action_buttons:
-		if button.get_theme_font_size("font_size") < 15:
+		if button.get_theme_font_size("font_size") < 16:
 			return _fail("action_button_font_not_increased_%s" % button.name)
+		if not _assert_button_text_shifted(button):
+			return false
 	return true
 
 func _assert_vault(main: MainUI) -> bool:
@@ -209,6 +216,10 @@ func _assert_vault(main: MainUI) -> bool:
 			return _fail("vault_button_missing_%s" % str(node_name))
 		if not _assert_action_cooldown(button):
 			return false
+		if button.get_theme_font_size("font_size") < 15:
+			return _fail("vault_action_button_font_not_increased_%s" % button.name)
+		if not _assert_button_text_shifted(button):
+			return false
 	var locked_slot_icon := center.find_child("LockedSlotIcon", true, false) as TextureRect
 	if locked_slot_icon == null or locked_slot_icon.texture == null:
 		return _fail("locked_slot_icon_missing")
@@ -220,7 +231,7 @@ func _assert_vault(main: MainUI) -> bool:
 	return true
 
 func _assert_status_icons(main: MainUI) -> bool:
-	for node_name in ["StaminaIcon", "GoldIcon", "GemIcon", "LevelIcon", "CombatPowerIcon", "ExperienceIcon"]:
+	for node_name in ["StaminaIcon", "GoldIcon", "GemIcon", "RollPrefetchIcon", "LevelIcon", "CombatPowerIcon", "ExperienceIcon"]:
 		var icon := main.find_child(node_name, true, false) as TextureRect
 		if icon == null or icon.texture == null:
 			return _fail("status_icon_missing_%s" % node_name)
@@ -233,6 +244,11 @@ func _assert_status_icons(main: MainUI) -> bool:
 		return _fail("gold_label_still_uses_emoji")
 	if gem_label == null or gem_label.text.find("💎") >= 0:
 		return _fail("gem_label_still_uses_emoji")
+	var currency := main.get("_currency") as CurrencyUI
+	var roll_icon := main.find_child("RollPrefetchIcon", true, false) as TextureRect
+	var gem_size := currency.get_resource_icon_global_rect("gem").size if currency != null else Vector2.ZERO
+	if roll_icon == null or currency == null or roll_icon.custom_minimum_size != Vector2(roundf(gem_size.x * CurrencyUI.ROLL_PREFETCH_ICON_SCALE), roundf(gem_size.y * CurrencyUI.ROLL_PREFETCH_ICON_SCALE)):
+		return _fail("roll_prefetch_icon_size_wrong")
 	var level_icon := main.find_child("LevelIcon", true, false) as TextureRect
 	var combat_icon := main.find_child("CombatPowerIcon", true, false) as TextureRect
 	if level_icon.custom_minimum_size != Vector2(36, 36) or combat_icon.custom_minimum_size != Vector2(36, 36):
@@ -311,6 +327,15 @@ func _assert_button(button: Button, icon_id: String, variant: String) -> bool:
 	for emoji in TARGET_EMOJI:
 		if button.text.find(emoji) >= 0:
 			return _fail("button_text_still_contains_emoji_%s" % button.name)
+	return true
+
+func _assert_button_text_shifted(button: Button) -> bool:
+	if button.alignment != HORIZONTAL_ALIGNMENT_CENTER:
+		return _fail("button_text_not_center_aligned_%s" % button.name)
+	var style := button.get_theme_stylebox("normal") as StyleBoxTexture
+	var icon_width := float(button.get_theme_constant("icon_max_width"))
+	if style == null or absf((style.content_margin_left - style.content_margin_right) - icon_width) > 0.1:
+		return _fail("button_text_margin_not_shifted_%s" % button.name)
 	return true
 
 func _assert_action_cooldown(button: Button) -> bool:

@@ -14,7 +14,7 @@ func _ready() -> void:
 		"card_number": 5,
 		"color": "白",
 		"card_name": "测试子卡超长名称用于检查缩小字体",
-		"description": "测试描述",
+		"description": "An unusually long localized description should shrink automatically until every wrapped line fits inside the card text panel.",
 	}), 0)
 	await get_tree().process_frame
 
@@ -26,11 +26,12 @@ func _ready() -> void:
 	var card_name_region: Control = card_display.get("_card_name_region")
 	var card_name_label: Label = card_display.get("_card_name_label")
 	var desc_panel: Panel = card_display.get("_description_panel")
+	var desc_label: Label = card_display.get("_description_label")
 	var series_region: Control = card_display.get("_series_tag_region")
 	var series_label: Label = card_display.get("_series_tag_label")
 	var badge: Control = card_display.get("_number_badge")
 	var number_label: Label = card_display.get("_number_label")
-	if art == null or art_shadow == null or color_border == null or deck_region == null or deck_label == null or card_name_region == null or card_name_label == null or desc_panel == null or series_region == null or series_label == null or badge == null or number_label == null:
+	if art == null or art_shadow == null or color_border == null or deck_region == null or deck_label == null or card_name_region == null or card_name_label == null or desc_panel == null or desc_label == null or series_region == null or series_label == null or badge == null or number_label == null:
 		_fail("card layout nodes are missing")
 		return
 	if art.texture == null:
@@ -77,6 +78,9 @@ func _ready() -> void:
 		return
 	if not _font_fits(card_name_label, card_name_region.size):
 		_fail("card name label font was not shrunk to fit")
+		return
+	if not _font_fits(desc_label, desc_label.size):
+		_fail("description label font was not shrunk to fit")
 		return
 	if series_label.get_theme_font_size("font_size") > deck_label.get_theme_font_size("font_size"):
 		_fail("series label font should be smaller than deck label font")
@@ -142,8 +146,10 @@ func _font_fits_at_size(label: Label, target_size: Vector2, font_size: int) -> b
 	var font := label.get_theme_font("font")
 	if font == null:
 		return true
-	var text_size := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
-	return text_size.x <= target_size.x * 0.99 and font.get_height(font_size) <= target_size.y * 0.99
+	var max_width := target_size.x * 0.99
+	var max_height := target_size.y * 0.99
+	var text_size := font.get_multiline_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, max_width, font_size) if label.autowrap_mode != TextServer.AUTOWRAP_OFF else font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
+	return text_size.x <= max_width and text_size.y <= max_height
 
 func _art_has_rounded_alpha(texture: Texture2D) -> bool:
 	var image := texture.get_image()
@@ -375,6 +381,25 @@ func _blue_draw_flip_then_shine_runs_in_order() -> bool:
 	slot.area_type = "pool"
 	add_child(slot)
 	await get_tree().process_frame
+	var original_sfx := AudioManager.sfx_volume
+	var original_muted := AudioManager.is_muted
+	AudioManager.reload_sfx_library()
+	AudioManager.set_muted(false)
+	AudioManager.set_sfx_volume(1.0)
+	var blue_whoosh_events: Array[Dictionary] = []
+	var blue_landing_events: Array[Dictionary] = []
+	var blue_whoosh_recorder := func(event_name: String) -> void:
+		if event_name == "draw_blue_flip":
+			blue_whoosh_events.append({
+				"gain": AudioManager.get_last_played_sfx_gain(),
+				"pitch": AudioManager.get_last_played_sfx_pitch_scale(),
+			})
+		elif event_name == "draw_white":
+			blue_landing_events.append({
+				"gain": AudioManager.get_last_played_sfx_gain(),
+				"pitch": AudioManager.get_last_played_sfx_pitch_scale(),
+			})
+	AudioManager.sfx_played.connect(blue_whoosh_recorder)
 	slot.set_card(_test_card("blue", 6), 0)
 	slot.play_draw_drop_in(0.0)
 	if not is_equal_approx(CardSlotUI.BLUE_DRAW_FLIP_DURATION, 0.60):
@@ -383,6 +408,9 @@ func _blue_draw_flip_then_shine_runs_in_order() -> bool:
 	await get_tree().create_timer(CardSlotUI.BLUE_DRAW_FLIP_DURATION * 0.5).timeout
 	if not slot.card_display.is_blue_draw_back_visible():
 		_fail("blue card back was not shown during the floating flip")
+		return false
+	if blue_whoosh_events.size() < 1:
+		_fail("blue flip did not play the 90 degree flip sound during rotation")
 		return false
 	var art: TextureRect = slot.card_display.get("_art_image")
 	var deck_region: Control = slot.card_display.get("_deck_name_region")
@@ -413,6 +441,22 @@ func _blue_draw_flip_then_shine_runs_in_order() -> bool:
 	if slot.card_display.is_green_draw_shine_playing():
 		_fail("blue shine exceeded its 0.5 second duration")
 		return false
+	if blue_whoosh_events.size() != 2:
+		_fail("blue flip should play exactly two flip sounds at 90 and 270 degrees")
+		return false
+	if blue_landing_events.size() != 1:
+		_fail("blue draw should keep one white-card landing sound")
+		return false
+	for event in blue_whoosh_events:
+		var gain := float(event.get("gain", 0.0))
+		var pitch := float(event.get("pitch", 0.0))
+		if absf(gain - 1.0) > 0.001 or absf(pitch - 1.0) > 0.001:
+			_fail("blue flip sound was not full gain and original pitch")
+			return false
+	if AudioManager.sfx_played.is_connected(blue_whoosh_recorder):
+		AudioManager.sfx_played.disconnect(blue_whoosh_recorder)
+	AudioManager.set_sfx_volume(original_sfx)
+	AudioManager.set_muted(original_muted)
 	slot.queue_free()
 	return true
 
@@ -508,45 +552,84 @@ func _purple_draw_lightning_teleport_runs_in_order() -> bool:
 	slot.position = Vector2(260, 280)
 	add_child(slot)
 	await get_tree().process_frame
+	var original_sfx := AudioManager.sfx_volume
+	var original_muted := AudioManager.is_muted
+	AudioManager.reload_sfx_library()
+	AudioManager.set_muted(false)
+	AudioManager.set_sfx_volume(1.0)
+	var lightning_events: Array[Dictionary] = []
+	var lightning_recorder := func(event_name: String) -> void:
+		if event_name == PurpleCardDrawOverlayScript.LIGHTNING_SFX_EVENT:
+			lightning_events.append({
+				"gain": AudioManager.get_last_played_sfx_gain(),
+				"pitch": AudioManager.get_last_played_sfx_pitch_scale(),
+			})
+	AudioManager.sfx_played.connect(lightning_recorder)
 	slot.set_card(_test_card("purple", 9), 0)
 	slot.play_draw_drop_in(0.0)
 	var overlay: Control = slot.get("_purple_draw_overlay")
 	if overlay == null or slot.card_display.visible:
+		_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
 		_fail("purple draw did not hide the slot card and create its local effect overlay")
 		return false
 	if overlay.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
 		_fail("purple local effect incorrectly blocks the whole screen")
 		return false
 	var reveal_card: CardDisplay = overlay.get("_card_display")
 	var electric_ring: ColorRect = overlay.get("_electric_ring")
 	var bolt_core: Line2D = overlay.get("_bolt_core")
 	if reveal_card == null or electric_ring == null or bolt_core == null:
+		_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
 		_fail("purple draw overlay is missing the card, electric ring, or lightning bolt")
 		return false
 	await get_tree().create_timer(PurpleCardDrawOverlayScript.CHARGE_DURATION * 0.72).timeout
 	if reveal_card.modulate.a <= 0.70 or reveal_card.position.y >= slot.global_position.y:
+		_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
 		_fail("purple card did not charge above its target slot")
 		return false
 	if electric_ring.modulate.a <= 0.25:
+		_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
 		_fail("purple target slot did not accumulate local electricity")
 		return false
 	await get_tree().create_timer(PurpleCardDrawOverlayScript.CHARGE_DURATION * 0.40).timeout
 	if bolt_core.modulate.a <= 0.10 or bolt_core.default_color.b <= bolt_core.default_color.r:
+		_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
 		_fail("purple lightning did not strike with a purple color")
+		return false
+	if lightning_events.size() != 1:
+		_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
+		_fail("purple lightning should play exactly one lightning sound when the bolt appears")
+		return false
+	var lightning_gain := float(lightning_events[0].get("gain", 0.0))
+	var lightning_pitch := float(lightning_events[0].get("pitch", 0.0))
+	if absf(lightning_gain - 0.90) > 0.001 or absf(lightning_pitch - 1.0) > 0.001:
+		_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
+		_fail("purple lightning sound was not configured with target gain and original pitch")
 		return false
 	await get_tree().create_timer(PurpleCardDrawOverlayScript.TELEPORT_DURATION + PurpleCardDrawOverlayScript.REMATERIALIZE_DURATION * 0.55).timeout
 	if reveal_card.position.distance_to(slot.global_position) > 1.0 or reveal_card.modulate.a <= 0.45:
+		_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
 		_fail("purple card did not rematerialize directly inside its target slot")
 		return false
 	await get_tree().create_timer(PurpleCardDrawOverlayScript.REMATERIALIZE_DURATION * 0.55 + PurpleCardDrawOverlayScript.SETTLE_DURATION + 0.10).timeout
 	if is_instance_valid(overlay):
+		_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
 		_fail("purple draw overlay was not cleaned after the 1.5 second sequence")
 		return false
 	if not slot.card_display.visible:
+		_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
 		_fail("purple draw did not reveal the target slot card after teleporting")
 		return false
+	_restore_purple_sfx_probe(lightning_recorder, original_sfx, original_muted)
 	slot.queue_free()
 	return true
+
+func _restore_purple_sfx_probe(recorder: Callable, original_sfx: float, original_muted: bool) -> void:
+	if AudioManager.sfx_played.is_connected(recorder):
+		AudioManager.sfx_played.disconnect(recorder)
+	AudioManager.set_sfx_volume(original_sfx)
+	AudioManager.set_muted(original_muted)
 
 func _purple_draw_presentation_delays_the_next_card() -> bool:
 	var pool_ui := CardPoolUI.new()
@@ -574,10 +657,24 @@ func _orange_draw_sun_magic_circle_and_flight_run_in_order() -> bool:
 	slot.position = Vector2(250, 190)
 	add_child(slot)
 	await get_tree().process_frame
+	var original_sfx := AudioManager.sfx_volume
+	var original_muted := AudioManager.is_muted
+	AudioManager.reload_sfx_library()
+	AudioManager.set_muted(false)
+	AudioManager.set_sfx_volume(1.0)
+	var fire_ring_events: Array[Dictionary] = []
+	var fire_ring_recorder := func(event_name: String) -> void:
+		if event_name == OrangeCardDrawOverlayScript.FIRE_RING_SFX_EVENT:
+			fire_ring_events.append({
+				"gain": AudioManager.get_last_played_sfx_gain(),
+				"pitch": AudioManager.get_last_played_sfx_pitch_scale(),
+			})
+	AudioManager.sfx_played.connect(fire_ring_recorder)
 	slot.set_card(_test_card("orange", 8), 0)
 	slot.play_draw_drop_in(0.0)
 	var overlay: Control = slot.get("_orange_draw_overlay")
 	if overlay == null or slot.card_display.visible:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange draw did not hide the slot card and create a fullscreen overlay")
 		return false
 	var sun: ColorRect = overlay.get("_sun")
@@ -585,47 +682,75 @@ func _orange_draw_sun_magic_circle_and_flight_run_in_order() -> bool:
 	var magic_circle: TextureRect = overlay.get("_magic_circle")
 	var reveal_card: CardDisplay = overlay.get("_card_display")
 	if sun == null or halo == null or magic_circle == null or reveal_card == null or magic_circle.texture == null:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange draw overlay is missing the sun, halo, magic circle, or card")
 		return false
 	var expected_sun_diameter: float = overlay.get_viewport_rect().size.y * 0.75
 	if not is_equal_approx(sun.size.y, expected_sun_diameter):
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange sun diameter is not three quarters of the screen height")
 		return false
 	await get_tree().create_timer(OrangeCardDrawOverlayScript.SUN_GROW_DURATION * 0.52).timeout
 	if sun.scale.x <= 0.05 or sun.scale.x >= 0.98 or sun.modulate.a <= 0.8:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange sun did not grow from the center point during the first second")
 		return false
 	if halo.modulate.a > 0.05 or magic_circle.modulate.a > 0.05 or reveal_card.modulate.a > 0.05:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange halo or magic circle appeared before the sun finished growing")
 		return false
 	await get_tree().create_timer(OrangeCardDrawOverlayScript.SUN_GROW_DURATION * 0.58).timeout
 	if halo.modulate.a <= 0.05 or halo.scale.x <= 0.25:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange sun did not release the expanding golden halo")
+		return false
+	if fire_ring_events.size() != 1:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
+		_fail("orange fire ring should play exactly once when the halo appears")
+		return false
+	var fire_ring_gain := float(fire_ring_events[0].get("gain", 0.0))
+	var fire_ring_pitch := float(fire_ring_events[0].get("pitch", 0.0))
+	if absf(fire_ring_gain - 0.92) > 0.001 or absf(fire_ring_pitch - 1.0) > 0.001:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
+		_fail("orange fire ring sound was not configured with target gain and original pitch")
 		return false
 	await get_tree().create_timer(OrangeCardDrawOverlayScript.MAGIC_REVEAL_DURATION * 0.55).timeout
 	if magic_circle.modulate.a <= 0.35 or reveal_card.modulate.a <= 0.35:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange magic circle and card did not replace the sun during the second phase")
 		return false
 	var center_position: Vector2 = (overlay.get_viewport_rect().size - reveal_card.size) * 0.5
 	if reveal_card.position.distance_to(center_position) > 1.0:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange card is not centered inside the magic circle")
 		return false
 	await get_tree().create_timer(OrangeCardDrawOverlayScript.MAGIC_REVEAL_DURATION * 0.43 + OrangeCardDrawOverlayScript.CARD_FLY_DURATION * 0.52).timeout
 	if magic_circle.modulate.a >= 0.75:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange magic circle did not begin disappearing during the card flight")
 		return false
 	if reveal_card.position.distance_to(center_position) <= 2.0:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange card did not begin flying toward its target slot")
 		return false
 	await get_tree().create_timer(OrangeCardDrawOverlayScript.CARD_FLY_DURATION * 0.58 + 0.08).timeout
 	if is_instance_valid(overlay):
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange draw overlay was not cleaned after the 2.5 second sequence")
 		return false
 	if not slot.card_display.visible:
+		_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 		_fail("orange draw did not reveal the target slot card after the flight")
 		return false
+	_restore_orange_sfx_probe(fire_ring_recorder, original_sfx, original_muted)
 	slot.queue_free()
 	return true
+
+func _restore_orange_sfx_probe(recorder: Callable, original_sfx: float, original_muted: bool) -> void:
+	if AudioManager.sfx_played.is_connected(recorder):
+		AudioManager.sfx_played.disconnect(recorder)
+	AudioManager.set_sfx_volume(original_sfx)
+	AudioManager.set_muted(original_muted)
 
 func _orange_draw_presentation_delays_the_next_card() -> bool:
 	var pool_ui := CardPoolUI.new()
@@ -653,49 +778,90 @@ func _black_draw_fullscreen_sequence_runs_in_order() -> bool:
 	slot.position = Vector2(240, 180)
 	add_child(slot)
 	await get_tree().process_frame
+	var original_sfx := AudioManager.sfx_volume
+	var original_muted := AudioManager.is_muted
+	AudioManager.reload_sfx_library()
+	AudioManager.set_muted(false)
+	AudioManager.set_sfx_volume(0.8)
+	var black_hole_events: Array[Dictionary] = []
+	var black_hole_recorder := func(event_name: String) -> void:
+		if event_name == "draw_black_hole":
+			black_hole_events.append({
+				"gain": AudioManager.get_last_played_sfx_gain(),
+				"pitch": AudioManager.get_last_played_sfx_pitch_scale(),
+			})
+	if not AudioManager.sfx_played.is_connected(black_hole_recorder):
+		AudioManager.sfx_played.connect(black_hole_recorder)
 	slot.set_card(_test_card("black", 7), 0)
 	slot.play_draw_drop_in(0.0)
 	var overlay: BlackCardDrawOverlay = slot.get("_black_draw_overlay")
 	if overlay == null or slot.card_display.visible:
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
 		_fail("black draw did not hide the slot card and create a fullscreen overlay")
 		return false
 	var background: ColorRect = overlay.get("_background")
 	var black_hole: ColorRect = overlay.get("_black_hole")
 	var reveal_card: CardDisplay = overlay.get("_card_display")
 	if background == null or black_hole == null or reveal_card == null:
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
 		_fail("black draw overlay is missing a required visual layer")
 		return false
 	await get_tree().create_timer(BlackCardDrawOverlay.FADE_TO_BLACK_DURATION * 0.6).timeout
 	if background.color.a <= 0.05 or background.color.a >= 0.98:
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
 		_fail("black draw background did not gradually fade to black")
 		return false
 	if not AudioManager.is_cinematic_silence_active():
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
 		_fail("black draw did not start the global audio fade")
 		return false
 	await get_tree().create_timer(BlackCardDrawOverlay.FADE_TO_BLACK_DURATION * 0.55).timeout
 	if black_hole.modulate.a <= 0.05 or black_hole.scale.x <= 0.35:
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
 		_fail("black hole did not appear after the blackout")
 		return false
+	if black_hole_events.size() != 1:
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
+		_fail("black hole sound should play exactly once when the black hole appears")
+		return false
+	var black_hole_gain := float(black_hole_events[0].get("gain", 0.0))
+	var black_hole_pitch := float(black_hole_events[0].get("pitch", 0.0))
+	if absf(black_hole_gain - 0.92) > 0.001 or absf(black_hole_pitch - 1.0) > 0.001:
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
+		_fail("black hole sound was not configured with target gain and original pitch")
+		return false
 	if reveal_card.modulate.a > 0.05:
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
 		_fail("black card appeared before the black-hole reveal finished")
 		return false
 	await get_tree().create_timer(BlackCardDrawOverlay.BLACK_HOLE_REVEAL_DURATION).timeout
 	if reveal_card.modulate.a <= 0.05 or reveal_card.scale.x <= 0.025 or reveal_card.scale.x >= 1.0:
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
 		_fail("black card did not grow from the black-hole center")
 		return false
 	await get_tree().create_timer(BlackCardDrawOverlay.CARD_REVEAL_DURATION).timeout
 	if background.color.a >= 0.98:
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
 		_fail("black background did not begin disappearing during the slot flight")
 		return false
 	await get_tree().create_timer(BlackCardDrawOverlay.CARD_FLY_DURATION + 0.12).timeout
 	if is_instance_valid(overlay):
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
 		_fail("black draw overlay was not cleaned after the two-second sequence")
 		return false
 	if not slot.card_display.visible or AudioManager.is_cinematic_silence_active():
+		_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
 		_fail("black draw did not reveal the target slot card and restore audio")
 		return false
+	_restore_black_sfx_probe(black_hole_recorder, original_sfx, original_muted)
 	slot.queue_free()
 	return true
+
+func _restore_black_sfx_probe(recorder: Callable, original_sfx: float, original_muted: bool) -> void:
+	if AudioManager.sfx_played.is_connected(recorder):
+		AudioManager.sfx_played.disconnect(recorder)
+	AudioManager.set_sfx_volume(original_sfx)
+	AudioManager.set_muted(original_muted)
 
 func _black_draw_presentation_delays_the_next_card() -> bool:
 	var pool_ui := CardPoolUI.new()

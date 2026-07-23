@@ -34,6 +34,19 @@ const RELIC_CONFIGS := {
 	},
 }
 const CARD_ART_PREFIX := "res://Resources/Cards/"
+const DISPLAY_SCALE_CONFIG_PATH := "res://Resources/Relics/final/relic_display_scales.json"
+const RELIC_VISIBLE_BOUNDS := {
+	CardColor.ColorType.WHITE: {"height": 1983.0, "bottom": 1765.0},
+	CardColor.ColorType.GREEN: {"height": 1983.0, "bottom": 1690.0},
+	CardColor.ColorType.BLUE: {"height": 2170.0, "bottom": 2058.0},
+	CardColor.ColorType.PURPLE: {"height": 1672.0, "bottom": 1437.0},
+	CardColor.ColorType.ORANGE: {"height": 1672.0, "bottom": 1540.0},
+	CardColor.ColorType.BLACK: {"height": 1672.0, "bottom": 1488.0},
+	CardColor.ColorType.RED: {"height": 1672.0, "bottom": 1467.0},
+}
+
+static var _display_scale_cache: Dictionary = {}
+static var _display_scale_loaded: bool = false
 
 var _layout: Dictionary = {}
 var _shadow_texture: TextureRect = null
@@ -111,6 +124,23 @@ static func get_layout_path(color_type: int) -> String:
 static func get_frame_path(color_type: int) -> String:
 	var config: Dictionary = RELIC_CONFIGS.get(color_type, {})
 	return str(config.get("frame", ""))
+
+
+static func get_display_scale(color_type: int) -> float:
+	_ensure_display_scale_cache()
+	var color_key := _color_key(color_type)
+	return maxf(0.05, float(_display_scale_cache.get(color_key, 1.0)))
+
+
+static func get_display_scales() -> Dictionary:
+	_ensure_display_scale_cache()
+	return _display_scale_cache.duplicate(true)
+
+
+static func get_visible_bottom_ratio(color_type: int) -> float:
+	var bounds: Dictionary = RELIC_VISIBLE_BOUNDS.get(color_type, {})
+	var height := maxf(float(bounds.get("height", 1.0)), 1.0)
+	return clampf((float(bounds.get("bottom", height - 1.0)) + 1.0) / height, 0.0, 1.0)
 
 
 func clear_cards() -> void:
@@ -225,3 +255,52 @@ func _normalize_art_path(raw_path: String) -> String:
 	if path.begins_with("res://"):
 		return path
 	return CARD_ART_PREFIX + path.get_file()
+
+
+static func _ensure_display_scale_cache() -> void:
+	if _display_scale_loaded:
+		return
+	_display_scale_loaded = true
+	_display_scale_cache = {
+		"white": 1.0,
+		"green": 1.0,
+		"blue": 1.0,
+		"purple": 1.0,
+		"orange": 1.0,
+		"black": 1.0,
+		"red": 1.0,
+	}
+	var file := FileAccess.open(DISPLAY_SCALE_CONFIG_PATH, FileAccess.READ)
+	if file == null:
+		push_warning("[RelicView] 未找到圣物展示倍率配置，使用默认 1.0: " + DISPLAY_SCALE_CONFIG_PATH)
+		return
+	var parsed = JSON.parse_string(file.get_as_text())
+	if not parsed is Dictionary:
+		push_warning("[RelicView] 圣物展示倍率配置 JSON 无效，使用默认 1.0: " + DISPLAY_SCALE_CONFIG_PATH)
+		return
+	var scales = parsed.get("scales", {})
+	if not scales is Dictionary:
+		return
+	for key in _display_scale_cache.keys():
+		if scales.has(key):
+			_display_scale_cache[key] = maxf(0.05, float(scales.get(key, 1.0)))
+
+
+static func _color_key(color_type: int) -> String:
+	match color_type:
+		CardColor.ColorType.WHITE:
+			return "white"
+		CardColor.ColorType.GREEN:
+			return "green"
+		CardColor.ColorType.BLUE:
+			return "blue"
+		CardColor.ColorType.PURPLE:
+			return "purple"
+		CardColor.ColorType.ORANGE:
+			return "orange"
+		CardColor.ColorType.BLACK:
+			return "black"
+		CardColor.ColorType.RED:
+			return "red"
+		_:
+			return "white"

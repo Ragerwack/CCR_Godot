@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "description": "Museum relic display scale multipliers. Edit these values from tools/relic-scale-calibrator/index.html after visual calibration.",
+  "scales": {
+    "white": 1.0,
+    "green": 1.12,
+    "blue": 1.26,
+    "purple": 1.05,
+    "orange": 0.92,
+    "black": 0.92,
+    "red": 1.08
+  }
+}

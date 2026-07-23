@@ -43,6 +43,7 @@ const EXTRA_LOCKED_ROWS: int = 1
 const VAULT_GRID_LEFT_MARGIN: float = 40.0
 const SLOT_SPACING: float = 8.0
 const VAULT_GRID_SHADOW_SAFE_PADDING: Vector2 = Vector2(24.0, 24.0)
+const VAULT_GRID_MIN_TOP_Y: float = 58.0
 const UNLOCK_PANEL_WIDTH: float = 130.0
 const UNLOCK_PANEL_RIGHT_MARGIN: float = 10.0
 const BUTTON_LABEL_HEIGHT: float = 24.0
@@ -119,7 +120,7 @@ func setup_ui() -> void:
 	# ── 合成按钮（初始隐藏） ──
 	_synthesize_btn = Button.new()
 	_synthesize_btn.name = "VaultSynthesizeButton"
-	_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
+	_synthesize_btn.text = Localization.t("ui.synthesis.vault.count")
 	_synthesize_btn.visible = true
 	_synthesize_btn.disabled = true
 	CCRVisualStyle.apply_relic_button(_synthesize_btn, "action_synthesize")
@@ -243,8 +244,8 @@ func _layout_right_actions() -> void:
 
 func _action_font_size() -> int:
 	if _side_button_width < 120.0:
-		return 11 if Localization.locale == "en" else 12
-	return 14 if Localization.locale == "en" else 15
+		return 12 if Localization.locale == "en" else 13
+	return 15 if Localization.locale == "en" else 16
 
 func _create_slot_grid() -> void:
 	var slot_size = CardSlotUI.SLOT_SIZE
@@ -255,6 +256,8 @@ func _create_slot_grid() -> void:
 	var viewport_height = visible_rows * slot_size.y + (visible_rows - 1) * SLOT_SPACING
 	var viewport_width_with_shadow = total_width + VAULT_GRID_SHADOW_SAFE_PADDING.x * 2.0
 	var viewport_height_with_shadow = viewport_height + VAULT_GRID_SHADOW_SAFE_PADDING.y * 2.0
+	var available_height = size.y if size.y > 0.0 else get_viewport_rect().size.y
+	viewport_height_with_shadow = minf(viewport_height_with_shadow, _max_slot_viewport_height(available_height))
 	var canvas_width_with_shadow = total_width + VAULT_GRID_SHADOW_SAFE_PADDING.x * 2.0
 	var canvas_height_with_shadow = content_height + VAULT_GRID_SHADOW_SAFE_PADDING.y * 2.0
 	var available_width = size.x if size.x > 0.0 else get_viewport_rect().size.x
@@ -262,10 +265,10 @@ func _create_slot_grid() -> void:
 	var start_x = _centered_grid_start_x(total_width)
 	if start_x + total_width + right_reserved > available_width:
 		start_x = maxf(VAULT_GRID_LEFT_MARGIN, available_width - total_width - right_reserved)
-	var start_y = 56.0
+	var viewport_y := _centered_slot_viewport_y(available_height, viewport_height_with_shadow)
 
 	if _slot_viewport != null:
-		_slot_viewport.position = Vector2(start_x - VAULT_GRID_SHADOW_SAFE_PADDING.x, start_y - VAULT_GRID_SHADOW_SAFE_PADDING.y)
+		_slot_viewport.position = Vector2(start_x - VAULT_GRID_SHADOW_SAFE_PADDING.x, viewport_y)
 		_slot_viewport.size = Vector2(viewport_width_with_shadow, viewport_height_with_shadow)
 		_slot_viewport.custom_minimum_size = _slot_viewport.size
 	if _slot_canvas != null:
@@ -280,7 +283,7 @@ func _create_slot_grid() -> void:
 		slot.can_drag_from = true
 		slot.slot_clicked.connect(_on_slot_clicked)
 		slot.card_dropped.connect(_on_card_dropped)
-		slot.slot_unlock_requested.connect(func(idx: int): GameManager.handle_unlock_slot("vault", idx))
+		slot.slot_unlock_requested.connect(func(_idx: int): _on_unlock_slot_pressed("gem"))
 		slots.append(slot)
 		if _slot_canvas != null:
 			_slot_canvas.add_child(slot)
@@ -295,6 +298,14 @@ func _create_slot_grid() -> void:
 		slots[i].position = Vector2(x, y)
 		slots[i].visible = i < slot_count
 
+
+func _centered_slot_viewport_y(available_height: float, viewport_height: float) -> float:
+	var centered_y := (available_height - viewport_height) * 0.5
+	return maxf(VAULT_GRID_MIN_TOP_Y, centered_y)
+
+func _max_slot_viewport_height(available_height: float) -> float:
+	var max_height := available_height - VAULT_GRID_MIN_TOP_Y * 2.0
+	return maxf(1.0, max_height)
 
 func _centered_grid_start_x(total_width: float) -> float:
 	var viewport_width := get_viewport_rect().size.x
@@ -492,9 +503,9 @@ func _update_unlock_buttons() -> void:
 	var has_quote := not quote.is_empty()
 
 	if _gold_unlock_btn != null:
-		_gold_unlock_btn.disabled = _unlock_buttons_busy or _is_unlock_cooling_down(_gold_unlock_cooldown)
+		_gold_unlock_btn.disabled = (not has_quote) or _unlock_buttons_busy or _is_unlock_cooling_down(_gold_unlock_cooldown) or GameManager.player_data.gold < gold_cost
 	if _gem_unlock_btn != null:
-		_gem_unlock_btn.disabled = _unlock_buttons_busy or _is_unlock_cooling_down(_gem_unlock_cooldown)
+		_gem_unlock_btn.disabled = (not has_quote) or _unlock_buttons_busy or _is_unlock_cooling_down(_gem_unlock_cooldown) or GameManager.player_data.gems < gem_cost
 	if _gold_unlock_cost_label != null:
 		_gold_unlock_cost_label.text = Localization.t("ui.vault.unlock_gold_cost", [gold_cost]) if has_quote else Localization.t("ui.vault.unlock_cost_loading")
 	if _gem_unlock_cost_label != null:
@@ -543,38 +554,66 @@ func _is_organize_cooling_down() -> bool:
 func _on_unlock_slot_pressed(currency: String) -> void:
 	if _unlock_buttons_busy:
 		return
-	var cooldown := _gold_unlock_cooldown if currency == "gold" else _gem_unlock_cooldown
-	if not _try_start_unlock_cooldown(cooldown):
-		return
-	_unlock_buttons_busy = true
-	_update_unlock_buttons()
-
 	var quote: Dictionary = GameManager.vault_slot_quote
 	if quote.is_empty():
 		var quote_resp := await GameManager.sync_vault_slot_quote_from_server()
 		if not quote_resp.get("success", false):
 			print("[VaultUI] 获取保险箱解锁报价失败: ", quote_resp.get("error", ""))
-			_unlock_buttons_busy = false
 			_update_unlock_buttons()
 			return
 		quote = GameManager.vault_slot_quote
+	var costs: Dictionary = quote.get("costs", {})
+	var required := int(costs.get(currency, 20 if currency == "gold" else 10))
+	var available := GameManager.player_data.gold if currency == "gold" else GameManager.player_data.gems
+	if available < required:
+		AudioManager.play_sfx("error_soft")
+		_update_unlock_buttons()
+		return
+	var cooldown := _gold_unlock_cooldown if currency == "gold" else _gem_unlock_cooldown
+	if not _try_start_unlock_cooldown(cooldown):
+		return
+	_unlock_buttons_busy = true
+	_update_unlock_buttons()
 	var slot_index := int(quote.get("next_slot_index", _count_unlocked_slots()))
 	await _prepare_unlock_animation_target(slot_index)
-	var resp := await ApiClient.unlock_slot("vault", slot_index, currency)
-	if not resp.get("success", false):
-		print("[VaultUI] 保险箱槽位购买失败: ", resp.get("error", "未知错误"))
-		AudioManager.play_sfx("error_soft")
-		await GameManager.sync_vault_from_server()
-		await GameManager.sync_vault_slot_quote_from_server()
+
+	var completion := {"done": false, "success": false, "result": {}, "error": ""}
+	_confirm_unlock_slot_for_animation.call_deferred(currency, slot_index, completion)
+	await _play_unlock_key_animation(currency, slot_index)
+	if not is_inside_tree():
 		_unlock_buttons_busy = false
-		if is_inside_tree():
-			refresh_display()
 		return
 
-	await _play_unlock_key_animation(currency, slot_index)
-	var profile_resp := await ApiClient.get_profile()
-	if profile_resp.get("success", false):
-		GameManager.apply_profile(profile_resp["data"])
+	await _wait_for_unlock_slot_completion(completion)
+	await _finalize_unlock_slot_after_animation(completion)
+
+func _confirm_unlock_slot_for_animation(currency: String, slot_index: int, completion: Dictionary) -> void:
+	var resp := await ApiClient.unlock_slot("vault", slot_index, currency)
+	completion["done"] = true
+	if resp.get("success", false):
+		completion["success"] = true
+		completion["result"] = resp.get("data", {})
+	else:
+		completion["error"] = str(resp.get("error", "未知错误"))
+
+func _wait_for_unlock_slot_completion(completion: Dictionary) -> void:
+	while is_inside_tree() and not bool(completion.get("done", false)):
+		await get_tree().process_frame
+
+func _finalize_unlock_slot_after_animation(completion: Dictionary) -> void:
+	if not bool(completion.get("done", false)):
+		_unlock_buttons_busy = false
+		_update_unlock_buttons()
+		return
+
+	if completion.get("success", false):
+		var profile_resp := await ApiClient.get_profile()
+		if profile_resp.get("success", false):
+			GameManager.apply_profile(profile_resp["data"])
+	else:
+		print("[VaultUI] 保险箱槽位购买失败: ", completion.get("error", "未知错误"))
+		AudioManager.play_sfx("error_soft")
+
 	await GameManager.sync_vault_from_server()
 	await GameManager.sync_vault_slot_quote_from_server()
 
@@ -767,7 +806,7 @@ func _update_synthesize_button() -> void:
 	var count = _selected_slots.size()
 	if count <= 0:
 		_synthesize_btn.visible = true
-		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
+		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count")
 		_synthesize_btn.disabled = true
 		return
 
@@ -775,7 +814,7 @@ func _update_synthesize_button() -> void:
 	var selected_idx := int(_selected_slots[0])
 	if _vault_synthesis_animation_running or _is_synthesis_hidden(selected_idx) or selected_idx < 0 or selected_idx >= vault.size() or vault[selected_idx] == null:
 		_synthesize_btn.visible = true
-		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
+		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count")
 		_synthesize_btn.disabled = true
 		return
 
@@ -785,7 +824,7 @@ func _update_synthesize_button() -> void:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.valid")
 		_synthesize_btn.disabled = _is_synthesize_cooling_down()
 	else:
-		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [1])
+		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count")
 		_synthesize_btn.disabled = true
 
 func controller_synthesize() -> void:
@@ -1040,7 +1079,7 @@ func _apply_vault_synthesis_pending_removal(selected_slots: Array) -> void:
 	refresh_display()
 
 	if _synthesize_btn != null:
-		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count", [0])
+		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count")
 		_synthesize_btn.visible = true
 		_synthesize_btn.disabled = true
 

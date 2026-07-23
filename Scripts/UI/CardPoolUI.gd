@@ -35,7 +35,7 @@ const RAPID_DRAW_DROP_STAGGER_PER_CARD: float = 0.0125
 const WHITE_DRAW_REVEAL_INTERVAL: float = 0.15
 const ROLL_ENSURE_INTERVAL_SECONDS: float = 10.0
 const SLOT_SPACING: float = 8.0
-const BUTTON_LABEL_HEIGHT: float = 18.0
+const BUTTON_LABEL_HEIGHT: float = 24.0
 const ACTION_LABEL_GAP: float = 6.0
 const AssetActionCooldownScript = preload("res://Scripts/UI/AssetActionCooldown.gd")
 const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
@@ -163,8 +163,8 @@ func _create_refresh_column() -> void:
 
 	_free_countdown_label = Label.new()
 	_free_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_free_countdown_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_free_countdown_label.add_theme_font_size_override("font_size", 11)
+	_free_countdown_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_free_countdown_label.add_theme_font_size_override("font_size", _resource_hint_font_size())
 	_free_countdown_label.add_theme_color_override("font_color", Color(0.75, 0.85, 1.0, 0.9))
 	_refresh_column.add_child(_free_countdown_label)
 	_apply_refresh_column_layout()
@@ -173,8 +173,8 @@ func _create_refresh_column() -> void:
 func _create_refresh_cost_label() -> Label:
 	var label := Label.new()
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.add_theme_font_size_override("font_size", 11)
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	label.add_theme_font_size_override("font_size", _resource_hint_font_size())
 	label.add_theme_color_override("font_color", Color(0.88, 0.92, 1.0, 0.92))
 	return label
 
@@ -197,10 +197,12 @@ func _apply_refresh_column_layout() -> void:
 	for label in [_free_cost_label, _gold_cost_label, _gem_cost_label]:
 		var typed_label := label as Label
 		if typed_label != null:
-			typed_label.custom_minimum_size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
-			typed_label.size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
+			typed_label.add_theme_font_size_override("font_size", _resource_hint_font_size())
+			typed_label.custom_minimum_size = Vector2(_resource_hint_width(), BUTTON_LABEL_HEIGHT)
+			typed_label.size = typed_label.custom_minimum_size
 	if _free_countdown_label != null:
-		_free_countdown_label.custom_minimum_size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
+		_free_countdown_label.add_theme_font_size_override("font_size", _resource_hint_font_size())
+		_free_countdown_label.custom_minimum_size = Vector2(_resource_hint_width(), BUTTON_LABEL_HEIGHT)
 		_free_countdown_label.size = _free_countdown_label.custom_minimum_size
 	# 三种抽卡按钮分别对齐第一行中心、两行中线和第二行中心。
 	# 这样体力/宝石抽卡会直接对应玩家正在查看的两排卡牌。
@@ -209,15 +211,11 @@ func _apply_refresh_column_layout() -> void:
 	var gold_center_y := (first_row_center_y + second_row_center_y) * 0.5
 	var button_centers := [first_row_center_y, gold_center_y, second_row_center_y]
 	var buttons := [_btn_free, _btn_gold, _btn_gem]
-	var cost_labels := [_free_cost_label, _gold_cost_label, _gem_cost_label]
 	for index in range(buttons.size()):
 		var button := buttons[index] as Button
-		var cost_label := cost_labels[index] as Label
 		if button != null:
 			button.position = Vector2.ZERO + Vector2(0.0, float(button_centers[index]) - _side_button_height * 0.5)
-		if cost_label != null and button != null and cost_label != _free_cost_label:
-			cost_label.position = Vector2(0.0, button.position.y + _side_button_height)
-	_layout_stamina_info_between_primary_buttons()
+	_layout_refresh_hint_labels()
 	var content_height := size.y
 	if _free_countdown_label != null:
 		content_height = maxf(content_height, _free_countdown_label.position.y + _free_countdown_label.size.y)
@@ -230,22 +228,37 @@ func _apply_refresh_column_layout() -> void:
 	_refresh_column.size = Vector2(_side_button_width, content_height)
 	_refresh_column.position = Vector2(_right_region_center_x() - _side_button_width * 0.5, 0.0)
 
-func _layout_stamina_info_between_primary_buttons() -> void:
-	if _btn_free == null or _btn_gold == null or _free_cost_label == null:
+func _layout_refresh_hint_labels() -> void:
+	if _btn_free == null or _btn_gold == null or _btn_gem == null:
 		return
-	var gap_top := _btn_free.position.y + _side_button_height
-	var gap_bottom := _btn_gold.position.y
-	var gap_height := maxf(BUTTON_LABEL_HEIGHT * 2.0, gap_bottom - gap_top)
+	if _free_cost_label == null or _gold_cost_label == null or _gem_cost_label == null:
+		return
+	var gap_after_free := _btn_gold.position.y - (_btn_free.position.y + _side_button_height)
+	var gap_after_gold := _btn_gem.position.y - (_btn_gold.position.y + _side_button_height)
+	var adjacent_button_gap := minf(gap_after_free, gap_after_gold)
+	var cost_height := maxf(1.0, _free_cost_label.size.y)
+	var button_text_gap := maxf(ACTION_LABEL_GAP, (adjacent_button_gap - cost_height) * 0.5)
+	var label_x := _resource_hint_x()
 	var countdown_height := _free_countdown_label.size.y if _free_countdown_label != null else BUTTON_LABEL_HEIGHT
-	var cost_height := _free_cost_label.size.y
 	if _free_countdown_label != null:
-		_free_countdown_label.position = Vector2(0.0, gap_top + gap_height / 3.0 - countdown_height * 0.5)
-	_free_cost_label.position = Vector2(0.0, gap_top + gap_height * 2.0 / 3.0 - cost_height * 0.5)
+		_free_countdown_label.position = Vector2(label_x, _btn_free.position.y - button_text_gap - countdown_height)
+	_free_cost_label.position = Vector2(label_x, _btn_free.position.y + _side_button_height + button_text_gap)
+	_gold_cost_label.position = Vector2(label_x, _btn_gold.position.y + _side_button_height + button_text_gap)
+	_gem_cost_label.position = Vector2(label_x, _btn_gem.position.y + _side_button_height + button_text_gap)
 
 func _action_font_size() -> int:
 	if _side_button_width < 120.0:
-		return 12 if Localization.locale == "en" else 13
-	return 15 if Localization.locale == "en" else 16
+		return 13 if Localization.locale == "en" else 14
+	return 16 if Localization.locale == "en" else 17
+
+func _resource_hint_font_size() -> int:
+	return 18
+
+func _resource_hint_width() -> float:
+	return maxf(_side_button_width, 190.0 if Localization.locale == "zh-CN" else 210.0)
+
+func _resource_hint_x() -> float:
+	return (_side_button_width - _resource_hint_width()) * 0.5
 
 func _right_region_center_x() -> float:
 	var viewport_width := get_viewport_rect().size.x
@@ -292,7 +305,7 @@ func _on_gold_refresh() -> void:
 	var total_started := step_started
 	var gold_before := GameManager.player_data.gold
 	var cost := maxi(1, int(gold_before * 0.01))
-	var buffered := CardPoolSystem.has_pending_confirm() or ApiClient.has_pending_asset_requests()
+	var buffered: bool = CardPoolSystem.has_pending_confirm() or ApiClient.has_pending_asset_requests()
 	CardPoolSystem.gold_draw_debug_click_started_msec = total_started
 	if CardPoolSystem.request_refresh("gold"):
 		_print_gold_draw_step(
@@ -605,10 +618,7 @@ func _update_refresh_buttons() -> void:
 	if _btn_free == null:
 		return
 	var free_remaining := GameManager.get_free_refresh_remaining()
-	if GameManager.is_using_newbie_free_refreshes():
-		_btn_free.text = Localization.t("ui.card_pool.refresh.free_newbie", [free_remaining])
-	else:
-		_btn_free.text = Localization.t("ui.card_pool.refresh.free_regular", [free_remaining])
+	_btn_free.text = Localization.t("ui.card_pool.refresh.free")
 
 	_btn_free.disabled = _is_refreshing or free_remaining <= 0 or _is_refresh_cooling_down(_free_cooldown)
 	if _btn_gold != null:

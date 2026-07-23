@@ -12,11 +12,9 @@ const MAIN_BACKGROUND_PATH := "res://Resources/Backgrounds/main_background.png"
 const EXIT_DIALOG_PANEL_PATH := CCRVisualStyle.DIALOG_PANEL_PATH
 const EXIT_DIALOG_CONFIRM_BUTTON_PATH := CCRVisualStyle.DIALOG_CONFIRM_BUTTON_PATH
 const EXIT_DIALOG_CANCEL_BUTTON_PATH := CCRVisualStyle.DIALOG_CANCEL_BUTTON_PATH
-const EXIT_DIALOG_CLOSE_BUTTON_PATH := CCRVisualStyle.DIALOG_CLOSE_BUTTON_PATH
 const EXIT_DIALOG_PANEL_SIZE := CCRVisualStyle.DIALOG_PANEL_SIZE
-const EXIT_DIALOG_CLOSE_BUTTON_HITBOX_SIZE := Vector2(86, 86)
-const EXIT_DIALOG_CLOSE_BUTTON_ICON_SIZE := Vector2(56, 56)
-const EXIT_DIALOG_CLOSE_BUTTON_INSET := Vector2(88, 40)
+const SETTINGS_PAGE_FRAME_WIDTH_RATIO := 0.90
+const SETTINGS_PAGE_CONTENT_WIDTH_RATIO := 0.80
 
 const LEFT_PANEL_WIDTH: int = 120
 const TOP_BAR_HEIGHT: int = 90
@@ -389,6 +387,8 @@ func _play_level_up_stamina_refill_behind_popup(popup: Control) -> void:
 			icon.modulate.a = 1.0 - (progress - 0.86) / 0.14
 	, 0.0, 1.0, LEVEL_STAMINA_FLIGHT_DURATION).set_trans(Tween.TRANS_LINEAR)
 	tween.tween_callback(func():
+		if is_instance_valid(icon):
+			AudioManager.play_sfx("stamina_full", 1.0, 0.0)
 		GameManager.complete_pending_level_stamina_refill()
 		if is_instance_valid(icon):
 			icon.queue_free()
@@ -491,34 +491,6 @@ func _build_exit_game_dialog() -> Control:
 	confirm_button.pressed.connect(_on_exit_game_confirmed)
 	panel.add_child(confirm_button)
 
-	var close_button := Button.new()
-	close_button.name = "CloseButton"
-	close_button.text = ""
-	close_button.position = Vector2(
-		EXIT_DIALOG_PANEL_SIZE.x - EXIT_DIALOG_CLOSE_BUTTON_HITBOX_SIZE.x - EXIT_DIALOG_CLOSE_BUTTON_INSET.x,
-		EXIT_DIALOG_CLOSE_BUTTON_INSET.y
-	)
-	close_button.size = EXIT_DIALOG_CLOSE_BUTTON_HITBOX_SIZE
-	close_button.focus_mode = Control.FOCUS_NONE
-	close_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	close_button.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
-	close_button.add_theme_stylebox_override("hover", StyleBoxEmpty.new())
-	close_button.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
-	close_button.add_theme_stylebox_override("hover_pressed", StyleBoxEmpty.new())
-	close_button.add_theme_stylebox_override("disabled", StyleBoxEmpty.new())
-	close_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	var close_icon := TextureRect.new()
-	close_icon.name = "CloseButtonIcon"
-	close_icon.texture = load(EXIT_DIALOG_CLOSE_BUTTON_PATH)
-	close_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	close_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	close_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	close_icon.size = EXIT_DIALOG_CLOSE_BUTTON_ICON_SIZE
-	close_icon.position = (EXIT_DIALOG_CLOSE_BUTTON_HITBOX_SIZE - EXIT_DIALOG_CLOSE_BUTTON_ICON_SIZE) * 0.5
-	close_button.add_child(close_icon)
-	close_button.pressed.connect(_on_exit_game_cancelled)
-	panel.add_child(close_button)
-
 	_apply_exit_game_dialog_style(overlay)
 	return overlay
 
@@ -529,7 +501,7 @@ func _make_exit_dialog_button(node_name: String, texture_path: String, button_po
 	button.position = button_position
 	button.size = Vector2(260, 80)
 	button.focus_mode = Control.FOCUS_NONE
-	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.mouse_default_cursor_shape = Control.CURSOR_ARROW
 	button.add_theme_stylebox_override("normal", _make_exit_texture_style(texture_path, Vector2(52, 24), Color.WHITE))
 	button.add_theme_stylebox_override("hover", _make_exit_texture_style(texture_path, Vector2(52, 24), Color(1.12, 1.12, 1.12, 1.0)))
 	button.add_theme_stylebox_override("pressed", _make_exit_texture_style(texture_path, Vector2(52, 24), Color(0.84, 0.90, 0.95, 1.0)))
@@ -597,14 +569,11 @@ func _on_exit_game_cancelled() -> void:
 func _on_exit_game_confirmed() -> void:
 	var ok_button := _exit_confirm_dialog.get_node_or_null("Panel/ConfirmButton") as Button if is_instance_valid(_exit_confirm_dialog) else null
 	var cancel_button := _exit_confirm_dialog.get_node_or_null("Panel/CancelButton") as Button if is_instance_valid(_exit_confirm_dialog) else null
-	var close_button := _exit_confirm_dialog.get_node_or_null("Panel/CloseButton") as Button if is_instance_valid(_exit_confirm_dialog) else null
 	if ok_button != null:
 		ok_button.disabled = true
 		ok_button.text = Localization.t("ui.exit_game.syncing")
 	if cancel_button != null:
 		cancel_button.disabled = true
-	if close_button != null:
-		close_button.disabled = true
 	await _shutdown_session_before_quit()
 	get_tree().quit()
 
@@ -646,7 +615,7 @@ func setup_ui() -> void:
 
 	_currency = CurrencyUI.new()
 	_currency.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	# 体力、金币、宝石按导航按钮高度响应式缩放，文字仍由客户端实时绘制。
+	# 体力、金币、宝石和 Roll 状态灯按导航按钮高度响应式缩放，文字仍由客户端实时绘制。
 	_currency.configure_icon_size(_currency_icon_size(vp_size))
 	add_child(_currency)
 	_apply_currency_layout(vp_size)
@@ -778,7 +747,7 @@ func _apply_currency_layout(vp_size: Vector2 = Vector2.ZERO) -> void:
 	if not is_instance_valid(_currency):
 		return
 	var icon_size := _currency_icon_size(vp_size)
-	var row_width := maxf(230.0, icon_size * 3.0 + 170.0)
+	var row_width := maxf(260.0, icon_size * 4.0 + 170.0)
 	_currency.configure_icon_size(icon_size)
 	# 18px 字体在不同 Godot/系统字体环境下的实际最小高度可能超过 36px。
 	# 高度也按内容计算，避免只修复横向扩展后仍切掉数字上下边缘。
@@ -1053,16 +1022,31 @@ func _build_menu_panel() -> Control:
 
 	var page_scroll := ScrollContainer.new()
 	page_scroll.name = "SettingsPageScroll"
+	page_scroll.custom_minimum_size.x = _settings_page_frame_width(panel_rect.size, panel_margin)
+	page_scroll.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	page_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	page_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	CCRVisualStyle.apply_settings_scroll_container(page_scroll)
 	vbox.add_child(page_scroll)
 
+	var page_content_host := MarginContainer.new()
+	page_content_host.name = "SettingsPageContentHost"
+	var page_frame_width := _settings_page_frame_width(panel_rect.size, panel_margin)
+	var page_content_width := _settings_page_content_width(panel_rect.size, panel_margin)
+	var page_side_margin := maxf(0.0, (page_frame_width - page_content_width) * 0.5)
+	page_content_host.custom_minimum_size.x = page_frame_width
+	page_content_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page_content_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page_content_host.add_theme_constant_override("margin_left", int(roundf(page_side_margin)))
+	page_content_host.add_theme_constant_override("margin_right", int(roundf(page_side_margin)))
+	page_scroll.add_child(page_content_host)
+
 	var page_content := VBoxContainer.new()
 	page_content.name = "SettingsPageContent"
+	page_content.custom_minimum_size.x = page_content_width
 	page_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	page_content.add_theme_constant_override("separation", 10)
-	page_scroll.add_child(page_content)
+	page_content_host.add_child(page_content)
 
 	match _settings_tab:
 		"controller": _build_controller_settings_page(page_content)
@@ -1094,6 +1078,14 @@ func _settings_panel_content_margin(panel_size: Vector2) -> Vector2:
 		clampf(panel_size.x * 0.052, 42.0, 72.0),
 		clampf(panel_size.y * 0.095, 42.0, 68.0)
 	)
+
+func _settings_page_frame_width(panel_size: Vector2, panel_margin: Vector2) -> float:
+	var original_width := maxf(1.0, panel_size.x - panel_margin.x * 2.0)
+	return roundf(original_width * SETTINGS_PAGE_FRAME_WIDTH_RATIO)
+
+func _settings_page_content_width(panel_size: Vector2, panel_margin: Vector2) -> float:
+	var original_width := maxf(1.0, panel_size.x - panel_margin.x * 2.0)
+	return roundf(original_width * SETTINGS_PAGE_CONTENT_WIDTH_RATIO)
 
 func _select_settings_tab(tab_id: String) -> void:
 	if _settings_tab == tab_id:
@@ -1166,11 +1158,15 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 	language_row.add_child(language_label)
 	var language_select := OptionButton.new()
 	language_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	language_select.add_item(Localization.t("ui.language.en"))
-	language_select.set_item_metadata(0, "en")
-	language_select.add_item(Localization.t("ui.language.zh_cn"))
-	language_select.set_item_metadata(1, "zh-CN")
-	language_select.select(1 if Localization.locale == "zh-CN" else 0)
+	var selected_language_index := 0
+	var supported_locales := Localization.get_supported_locales()
+	for i in range(supported_locales.size()):
+		var locale_code := str(supported_locales[i])
+		language_select.add_item(Localization.language_label(locale_code))
+		language_select.set_item_metadata(i, locale_code)
+		if locale_code == Localization.locale:
+			selected_language_index = i
+	language_select.select(selected_language_index)
 	CCRVisualStyle.apply_settings_option_button(language_select)
 	language_select.item_selected.connect(func(index: int):
 		var selected_locale := str(language_select.get_item_metadata(index))
@@ -1478,7 +1474,10 @@ func _make_slider_row(label_text: String, default_val: float, callback: Callable
 	var slider = HSlider.new()
 	slider.min_value = 0
 	slider.max_value = 1
+	slider.step = 0.01
+	slider.rounded = false
 	slider.value = default_val
+	slider.mouse_filter = Control.MOUSE_FILTER_STOP
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slider.value_changed.connect(callback)
 	row.add_child(slider)
@@ -1800,6 +1799,7 @@ func _on_hand_discard() -> void:
 	var old_hand_cards: Array = hand_cards.duplicate(true)
 	var animation_source := _hand_area_ui.get_synthesis_animation_sources([idx])[0]
 
+	_hand_area_ui.hide_card_action_slots_for_animation([idx])
 	_hand_action_animation_running = true
 	await _play_hand_card_discard_animation(animation_source)
 	_hand_action_animation_running = false
@@ -1808,6 +1808,7 @@ func _on_hand_discard() -> void:
 		hand_cards[idx] = null
 		GameManager.player_data.changed.emit()
 		if is_instance_valid(_hand_area_ui):
+			_hand_area_ui.clear_card_action_animation_hidden_slots()
 			_hand_area_ui.clear_selection()
 			_hand_area_ui.refresh_display()
 		return
@@ -1815,6 +1816,7 @@ func _on_hand_discard() -> void:
 	hand_cards[idx] = null
 	GameManager.player_data.changed.emit()
 	if is_instance_valid(_hand_area_ui):
+		_hand_area_ui.clear_card_action_animation_hidden_slots()
 		_hand_area_ui.clear_selection()
 		_hand_area_ui.refresh_display()
 
@@ -1850,6 +1852,11 @@ func _on_hand_save_to_vault() -> void:
 
 	var vault_cards = GameManager.player_data.vault_cards
 	var vault_idx := _find_first_local_vault_space()
+	var old_pool_cards: Array = CardPoolSystem.current_pool.duplicate(true)
+	if old_pool_cards.is_empty() and not GameManager.player_data.pool_cards.is_empty():
+		old_pool_cards = GameManager.player_data.pool_cards.duplicate(true)
+	var old_hand_cards: Array = hand_cards.duplicate(true)
+	var old_vault_cards: Array = vault_cards.duplicate(true)
 
 	if not ApiClient.is_logged_in():
 		# 找第一个空保险箱槽
@@ -1857,6 +1864,7 @@ func _on_hand_save_to_vault() -> void:
 			print("保险箱已满")
 			return
 
+		_hand_area_ui.hide_card_action_slots_for_animation([source_idx])
 		_hand_action_animation_running = true
 		await _play_hand_card_store_animation(animation_source)
 		_hand_action_animation_running = false
@@ -1868,6 +1876,7 @@ func _on_hand_save_to_vault() -> void:
 		vault_cards[vault_idx] = card
 		GameManager.player_data.changed.emit()
 		if is_instance_valid(_hand_area_ui):
+			_hand_area_ui.clear_card_action_animation_hidden_slots()
 			_hand_area_ui.clear_selection()
 			_hand_area_ui.refresh_display()
 		return
@@ -1876,15 +1885,10 @@ func _on_hand_save_to_vault() -> void:
 		print("保险箱已满，请先购买保险箱槽位")
 		return
 
+	_hand_area_ui.hide_card_action_slots_for_animation([source_idx])
 	_hand_action_animation_running = true
 	await _play_hand_card_store_animation(animation_source)
 	_hand_action_animation_running = false
-
-	var old_pool_cards: Array = CardPoolSystem.current_pool.duplicate(true)
-	if old_pool_cards.is_empty() and not GameManager.player_data.pool_cards.is_empty():
-		old_pool_cards = GameManager.player_data.pool_cards.duplicate(true)
-	var old_hand_cards: Array = hand_cards.duplicate(true)
-	var old_vault_cards: Array = vault_cards.duplicate(true)
 
 	hand_cards[source_idx] = null
 	while vault_cards.size() <= vault_idx:
@@ -1892,6 +1896,7 @@ func _on_hand_save_to_vault() -> void:
 	vault_cards[vault_idx] = card
 	GameManager.player_data.changed.emit()
 	if is_instance_valid(_hand_area_ui):
+		_hand_area_ui.clear_card_action_animation_hidden_slots()
 		_hand_area_ui.clear_selection()
 		_hand_area_ui.refresh_display()
 
@@ -1931,6 +1936,7 @@ func _recover_after_hand_action_failure(reason: String = "") -> void:
 	await GameManager.sync_initial_card_pool_from_server()
 	await GameManager.sync_vault_from_server()
 	if is_instance_valid(_hand_area_ui):
+		_hand_area_ui.clear_card_action_animation_hidden_slots()
 		_hand_area_ui.clear_selection()
 		_hand_area_ui.refresh_display()
 

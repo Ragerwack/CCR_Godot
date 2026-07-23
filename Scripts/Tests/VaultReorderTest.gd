@@ -1,7 +1,14 @@
 extends Node
 
 func _ready() -> void:
+	Localization.set_locale("zh-CN")
 	ApiClient._auth_token = ""
+	GameManager.player_data.gold = 10
+	GameManager.player_data.gems = 5
+	GameManager.vault_slot_quote = {
+		"next_slot_index": 3,
+		"costs": {"gold": 20, "gem": 10},
+	}
 	GameManager.player_data.vault_slots = 4
 	GameManager.vault_raw_slot_data = [
 		{"slot_index": 0, "unlocked": true},
@@ -18,6 +25,8 @@ func _ready() -> void:
 	add_child(vault_ui)
 	await get_tree().process_frame
 	if not _assert_action_buttons_evenly_spaced(vault_ui):
+		return
+	if not _assert_unlock_buttons_disabled_when_insufficient(vault_ui):
 		return
 
 	await vault_ui._prepare_unlock_animation_target(3)
@@ -90,6 +99,8 @@ func _ready() -> void:
 		return _fail("vault_auto_synthesis_indices_missing")
 	if vault_ui._synthesize_btn == null or vault_ui._synthesize_btn.disabled:
 		return _fail("vault_synthesis_button_disabled")
+	if vault_ui._synthesize_btn.text != "锻造":
+		return _fail("vault_synthesis_button_text_not_forge")
 	if vault_ui._relic_preview != null and vault_ui._relic_preview.visible:
 		return _fail("relic_preview_visible_before_synthesis")
 	var animation_sources := vault_ui.get_synthesis_animation_sources(indices)
@@ -176,6 +187,29 @@ func _assert_action_buttons_evenly_spaced(vault_ui: VaultUI) -> bool:
 		return false
 	return true
 
+func _assert_unlock_buttons_disabled_when_insufficient(vault_ui: VaultUI) -> bool:
+	var gold_button := vault_ui.get("_gold_unlock_btn") as Button
+	var gem_button := vault_ui.get("_gem_unlock_btn") as Button
+	if gold_button == null or gem_button == null:
+		_fail("vault_unlock_button_missing")
+		return false
+	if not gold_button.disabled:
+		_fail("vault_gold_unlock_not_disabled_when_insufficient")
+		return false
+	if not gem_button.disabled:
+		_fail("vault_gem_unlock_not_disabled_when_insufficient")
+		return false
+	GameManager.player_data.gold = 100
+	GameManager.player_data.gems = 50
+	vault_ui.call("_update_unlock_buttons")
+	if gold_button.disabled:
+		_fail("vault_gold_unlock_still_disabled_when_sufficient")
+		return false
+	if gem_button.disabled:
+		_fail("vault_gem_unlock_still_disabled_when_sufficient")
+		return false
+	return true
+
 func _assert_synthesis_slot_reward_key_animation() -> bool:
 	var overlay := SynthesisAnimationOverlay.new()
 	overlay.name = "RewardKeyAnimationProbe"
@@ -206,7 +240,20 @@ func _assert_synthesis_slot_reward_key_animation() -> bool:
 		overlay.queue_free()
 		_fail("reward_key_icon_size_wrong")
 		return false
-	overlay._start_reward_flight(icon, item, Vector2(420, 360), 0.0)
+	icon.queue_free()
+
+	var expected_vault_key_size := clampf(CardSlotUI.SLOT_SIZE.x * 0.45, 39.0, 63.0) * VaultUI.UNLOCK_KEY_SCALE
+	var wide_target_item := {"type": "slot", "target_rect": Rect2(Vector2(20, 120), Vector2(130, 36))}
+	icon = overlay._create_reward_icon(wide_target_item, Vector2(420, 360))
+	if icon == null:
+		overlay.queue_free()
+		_fail("reward_key_wide_target_icon_missing")
+		return false
+	if absf(icon.size.x - expected_vault_key_size) > 0.01 or absf(icon.size.y - expected_vault_key_size) > 0.01:
+		overlay.queue_free()
+		_fail("reward_key_wide_target_icon_size_wrong")
+		return false
+	overlay._start_reward_flight(icon, wide_target_item, Vector2(420, 360), 0.0)
 	await get_tree().create_timer(2.20).timeout
 	await get_tree().process_frame
 	if is_instance_valid(icon):

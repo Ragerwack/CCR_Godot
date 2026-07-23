@@ -23,6 +23,26 @@ const ACTION_HAND_PAGE := "ccr_hand_page"
 const ACTION_POINTER_PRIMARY := "ccr_pointer_primary"
 const ACTION_POINTER_SECONDARY := "ccr_pointer_secondary"
 
+const CUSTOM_CURSOR_SHAPES := [
+	Input.CURSOR_ARROW,
+	Input.CURSOR_IBEAM,
+	Input.CURSOR_POINTING_HAND,
+	Input.CURSOR_CROSS,
+	Input.CURSOR_WAIT,
+	Input.CURSOR_BUSY,
+	Input.CURSOR_DRAG,
+	Input.CURSOR_CAN_DROP,
+	Input.CURSOR_FORBIDDEN,
+	Input.CURSOR_VSIZE,
+	Input.CURSOR_HSIZE,
+	Input.CURSOR_BDIAGSIZE,
+	Input.CURSOR_FDIAGSIZE,
+	Input.CURSOR_MOVE,
+	Input.CURSOR_VSPLIT,
+	Input.CURSOR_HSPLIT,
+	Input.CURSOR_HELP,
+]
+
 const ACTION_ORDER := [
 	ACTION_POINTER_PRIMARY,
 	ACTION_POINTER_SECONDARY,
@@ -170,7 +190,8 @@ func focus_first_available() -> void:
 func _apply_custom_cursor() -> void:
 	var cursor_texture := _load_cursor_texture()
 	if cursor_texture != null:
-		Input.set_custom_mouse_cursor(cursor_texture, Input.CURSOR_ARROW, Vector2.ZERO)
+		for cursor_shape in CUSTOM_CURSOR_SHAPES:
+			Input.set_custom_mouse_cursor(cursor_texture, cursor_shape, Vector2.ZERO)
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 func _load_cursor_texture() -> Texture2D:

@@ -70,6 +70,38 @@ func _ready() -> void:
 		return _fail("relic_hold_duration_wrong")
 	if absf(overlay.ART_FLIGHT_SFX_LEAD_TIME - 0.10) > 0.001:
 		return _fail("art_flight_sfx_lead_time_wrong")
+	var reward_probe_item := {"type": "gold", "target_rect": Rect2(Vector2(860, 120), Vector2(30, 30))}
+	var reward_probe_start := Vector2(240, 260)
+	var reward_probe_icon := overlay._create_reward_icon(reward_probe_item, reward_probe_start)
+	if reward_probe_icon == null:
+		return _fail("reward_probe_icon_missing")
+	overlay._start_reward_flight(reward_probe_icon, reward_probe_item, reward_probe_start, 0.0)
+	await get_tree().create_timer(SynthesisAnimationOverlayScript.REWARD_GOLD_FLIGHT_DURATION * 0.90).timeout
+	if not is_instance_valid(reward_probe_icon):
+		return _fail("reward_probe_icon_disappeared_before_target")
+	if reward_probe_icon.modulate.a < 0.99:
+		return _fail("reward_probe_icon_faded_before_target")
+	await get_tree().create_timer(SynthesisAnimationOverlayScript.REWARD_GOLD_FLIGHT_DURATION * 0.20).timeout
+	if is_instance_valid(reward_probe_icon):
+		return _fail("reward_probe_icon_not_removed_after_target")
+	var relic_probe := Control.new()
+	relic_probe.name = "RelicFlightAlphaProbe"
+	relic_probe.position = Vector2(260, 260)
+	relic_probe.size = Vector2(80, 120)
+	relic_probe.modulate.a = 1.0
+	overlay.add_child(relic_probe)
+	var original_nav_target: Rect2 = overlay.get("_nav_target_rect")
+	overlay.set("_nav_target_rect", Rect2(Vector2(20, 220), Vector2(104, 36)))
+	overlay._send_relic_to_nav(relic_probe)
+	await get_tree().create_timer(SynthesisAnimationOverlayScript.RELIC_TO_NAV_DURATION * 0.80).timeout
+	if not is_instance_valid(relic_probe):
+		return _fail("relic_probe_removed_before_target")
+	if relic_probe.modulate.a < 0.99:
+		return _fail("relic_probe_faded_before_target")
+	await get_tree().create_timer(SynthesisAnimationOverlayScript.RELIC_TO_NAV_DURATION * 0.35).timeout
+	if is_instance_valid(relic_probe):
+		relic_probe.queue_free()
+	overlay.set("_nav_target_rect", original_nav_target)
 	var preview_nodes := overlay._create_card_nodes()
 	overlay._bind_card_nodes(preview_nodes)
 	if preview_nodes.size() > 0:

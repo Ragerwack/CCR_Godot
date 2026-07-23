@@ -116,18 +116,35 @@ func _ready() -> void:
 	var total_decks := _total_deck_defs()
 	if progress_label == null or progress_label.text != "已收藏 7/7":
 		return _fail("collection_progress_wrong")
-	var relic_grid := museum.find_child("MuseumRelicGrid", true, false) as GridContainer
-	if relic_grid == null or relic_grid.columns != DeckCollectionUI.RELICS_PER_ROW:
-		return _fail("relic_fixed_five_column_grid_missing")
+	var relic_grid := museum.find_child("MuseumRelicGrid", true, false) as HFlowContainer
+	var visible_relics := museum._apply_relic_filters(museum._aggregate_relics(DeckSystem.get_player_decks()))
+	museum._sort_relic_list(visible_relics)
+	var expected_first_row_count := museum._get_relics_that_fit_first_row(visible_relics)
+	if relic_grid == null:
+		return _fail("relic_flow_grid_missing")
+	if expected_first_row_count <= DeckCollectionUI.RELICS_PER_ROW:
+		return _fail("relic_grid_did_not_add_columns")
 	if relic_grid.get_child_count() != ALL_RELIC_COLORS.size():
 		return _fail("relic_grid_count_wrong")
 	if relic_grid.get_child(0).name != "RelicCard%d" % CardColor.ColorType.RED:
 		return _fail("standard_sort_does_not_put_rarest_first")
 
+	var expected_scales := {
+		CardColor.ColorType.WHITE: 1.0,
+		CardColor.ColorType.GREEN: 1.12,
+		CardColor.ColorType.BLUE: 1.26,
+		CardColor.ColorType.PURPLE: 1.05,
+		CardColor.ColorType.ORANGE: 0.92,
+		CardColor.ColorType.BLACK: 0.92,
+		CardColor.ColorType.RED: 1.08,
+	}
+	var relic_visible_bottom_by_row: Dictionary = {}
 	for color_type in ALL_RELIC_COLORS:
 		var relic_card := museum.find_child("RelicCard%d" % color_type, true, false) as Control
 		if relic_card == null:
 			return _fail("relic_card_missing_%d" % color_type)
+		if absf(RelicView.get_display_scale(color_type) - float(expected_scales[color_type])) > 0.001:
+			return _fail("relic_display_scale_wrong_%d" % color_type)
 		var hover_frame := relic_card.find_child("RelicHoverFrame", true, false) as Panel
 		if hover_frame == null:
 			return _fail("relic_hover_frame_missing_%d" % color_type)
@@ -149,19 +166,30 @@ func _ready() -> void:
 		var relic_host := relic_card.find_child("RelicHost", true, false) as Control
 		if relic_host == null:
 			return _fail("relic_host_missing_%d" % color_type)
+		var box := relic_card.find_child("RelicCardBox", true, false) as VBoxContainer
+		if box == null or label_box.get_parent() != box or relic_host.get_parent() != box:
+			return _fail("relic_box_order_parent_wrong_%d" % color_type)
+		if label_box.get_index() <= relic_host.get_index():
+			return _fail("relic_labels_not_below_relic_%d" % color_type)
 		var relic_shadow := relic_card.find_child("RelicThumbnailShadow", true, false) as TextureRect
 		if relic_shadow == null:
 			return _fail("relic_shadow_missing_%d" % color_type)
 		var expected_relic_size := museum._get_visual_relic_size(color_type)
-		if absf(relic_host.custom_minimum_size.y - expected_relic_size.y) > 1.0:
-			return _fail("relic_height_wrong_%d" % color_type)
+		if absf(relic_host.custom_minimum_size.y - museum._get_visual_relic_slot_height()) > 1.0:
+			return _fail("relic_host_height_wrong_%d" % color_type)
 		if absf(relic_host.custom_minimum_size.x - expected_relic_size.x) > 1.0:
 			return _fail("relic_width_wrong_%d" % color_type)
-		if expected_relic_size.x * float(DeckCollectionUI.RELICS_PER_ROW) + DeckCollectionUI.CARD_HORIZONTAL_SPACING * float(DeckCollectionUI.RELICS_PER_ROW - 1) > museum.size.x + 0.1:
-			return _fail("relic_five_columns_overflow_%d" % color_type)
 		var thumbnail := relic_card.find_child("RelicThumbnail", true, false) as TextureRect
 		if thumbnail == null or thumbnail.texture == null:
 			return _fail("relic_thumbnail_missing_%d" % color_type)
+		if thumbnail.size.distance_to(expected_relic_size) > 1.0:
+			return _fail("relic_thumbnail_size_wrong_%d" % color_type)
+		var visible_bottom_y := thumbnail.global_position.y + RelicView.get_visible_bottom_ratio(color_type) * thumbnail.size.y
+		var row_key := roundi(relic_card.global_position.y)
+		if not relic_visible_bottom_by_row.has(row_key):
+			relic_visible_bottom_by_row[row_key] = visible_bottom_y
+		elif absf(visible_bottom_y - float(relic_visible_bottom_by_row[row_key])) > 1.0:
+			return _fail("relic_visible_bottom_not_aligned_%d" % color_type)
 		if relic_shadow.texture == null or relic_shadow.texture != thumbnail.texture:
 			return _fail("relic_shadow_texture_wrong_%d" % color_type)
 		var cache_path: String = THUMBNAIL_CACHE.get_cache_path(color_type, "solar_system__sun", 21)
@@ -171,12 +199,16 @@ func _ready() -> void:
 		if fallback_relic_view != null:
 			return _fail("relic_thumbnail_fallback_used_%d" % color_type)
 
-	for index in range(DeckCollectionUI.RELICS_PER_ROW):
+	for index in range(expected_first_row_count):
 		var relic := relic_grid.get_child(index) as Control
 		if relic == null:
 			return _fail("relic_grid_first_row_missing_%d" % index)
 		if absf(relic.global_position.y - relic_grid.get_child(0).global_position.y) > 1.0:
-			return _fail("relic_grid_not_five_items_on_first_row")
+			return _fail("relic_grid_not_max_items_on_first_row")
+	if expected_first_row_count < relic_grid.get_child_count():
+		var next_relic := relic_grid.get_child(expected_first_row_count) as Control
+		if next_relic != null and absf(next_relic.global_position.y - relic_grid.get_child(0).global_position.y) <= 1.0:
+			return _fail("relic_grid_first_row_left_unused_space")
 
 	var first_relic := museum.find_child("RelicCard0", true, false) as Control
 	var first_thumb := first_relic.find_child("RelicThumbnail", true, false) as TextureRect
@@ -188,6 +220,7 @@ func _ready() -> void:
 		"color": CardColor.ColorType.WHITE,
 		"count": 1,
 	}
+	Localization.set_locale("en")
 	museum._start_relic_view(test_relic, first_thumb, first_relic)
 	await get_tree().create_timer(0.55).timeout
 	if museum._view_state != museum.ViewState.RELIC_CENTERED:
@@ -200,6 +233,12 @@ func _ready() -> void:
 		return _fail("source_relic_layout_not_reserved")
 	if first_relic.modulate.a > 0.01:
 		return _fail("source_relic_not_transparent")
+	museum.render_decks()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	first_relic = museum.find_child("RelicCard0", true, false) as Control
+	if first_relic == null or first_relic.modulate.a > 0.01:
+		return _fail("source_relic_restored_during_view_rerender")
 	museum._advance_relic_view()
 	await get_tree().create_timer(1.35).timeout
 	if museum._view_state != museum.ViewState.CARDS_VISIBLE or museum._view_card_displays.size() != 5:
@@ -210,15 +249,32 @@ func _ready() -> void:
 			return _fail("view_card_order_wrong")
 		if not display.hover_scale_enabled:
 			return _fail("view_card_hover_scale_disabled")
+		if absf(display.normal_visual_scale - 0.5) > 0.001 or absf(display.hover_visual_scale - 1.0) > 0.001:
+			return _fail("view_card_not_supersampled_for_clear_text")
+		if display.scale.distance_to(Vector2(display.normal_visual_scale, display.normal_visual_scale)) > 0.02:
+			return _fail("view_card_resting_scale_wrong")
+		if display.card.series_name != "Solar System" or display.card.deck_name != "Sun":
+			return _fail("view_card_locale_not_english_%d" % i)
+		if i == 0 and (display.card.card_name != "Dawn's First Light" or not display.card.description.begins_with("The first ray of sunlight")):
+			return _fail("view_card_text_not_english")
 	var hovered_display := museum._view_card_displays[2] as CardDisplay
 	hovered_display._on_mouse_entered()
-	await get_tree().create_timer(CardDisplay.HOVER_TRANSITION_DURATION + 0.05).timeout
-	if hovered_display.scale.distance_to(Vector2(2.0, 2.0)) > 0.02:
-		return _fail("view_card_hover_not_doubled")
+	await get_tree().create_timer(CardDisplay.HOVER_TRANSITION_DURATION * 0.5).timeout
+	var previous_hover_z := hovered_display.z_index
+	var next_hovered_display := museum._view_card_displays[3] as CardDisplay
+	next_hovered_display._on_mouse_entered()
 	hovered_display._on_mouse_exited()
+	await get_tree().process_frame
+	if next_hovered_display.z_index <= previous_hover_z or next_hovered_display.z_index <= hovered_display.z_index:
+		return _fail("view_card_new_hover_not_on_top")
 	await get_tree().create_timer(CardDisplay.HOVER_TRANSITION_DURATION + 0.05).timeout
-	if hovered_display.scale.distance_to(Vector2.ONE) > 0.02:
+	if next_hovered_display.scale.distance_to(Vector2.ONE) > 0.02:
+		return _fail("view_card_hover_not_doubled")
+	next_hovered_display._on_mouse_exited()
+	await get_tree().create_timer(CardDisplay.HOVER_TRANSITION_DURATION + 0.05).timeout
+	if next_hovered_display.scale.distance_to(Vector2(next_hovered_display.normal_visual_scale, next_hovered_display.normal_visual_scale)) > 0.02:
 		return _fail("view_card_hover_not_restored")
+	Localization.set_locale("zh-CN")
 	museum._advance_relic_view()
 	await get_tree().create_timer(1.35).timeout
 	if museum._view_state != museum.ViewState.CARDS_HIDDEN or not museum._view_card_displays.is_empty():
@@ -227,6 +283,9 @@ func _ready() -> void:
 	await get_tree().create_timer(0.55).timeout
 	if museum._view_state != museum.ViewState.NONE or museum._view_overlay != null:
 		return _fail("view_not_closed")
+	first_relic = museum.find_child("RelicCard0", true, false) as Control
+	if first_relic == null:
+		return _fail("source_relic_missing_after_view_closed")
 	if first_relic.modulate.a < 0.99:
 		return _fail("source_relic_not_restored")
 
@@ -270,7 +329,7 @@ func _ready() -> void:
 	museum._selected_series = DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER
 	museum.render_decks()
 	await get_tree().process_frame
-	var today_grid := museum.find_child("MuseumRelicGrid", true, false) as GridContainer
+	var today_grid := museum.find_child("MuseumRelicGrid", true, false) as HFlowContainer
 	progress_label = museum.find_child("MuseumCollectionProgress", true, false) as Label
 	if today_grid == null or today_grid.get_child_count() != ALL_RELIC_COLORS.size():
 		return _fail("today_visible_filter_did_not_keep_draw_key_relics")
@@ -325,7 +384,7 @@ func _ready() -> void:
 	var restored_series := restored_museum.find_child("MuseumSeriesOption", true, false) as OptionButton
 	if restored_series == null or str(restored_series.get_item_metadata(restored_series.selected)) != DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER:
 		return _fail("session_series_ui_not_restored")
-	var restored_grid := restored_museum.find_child("MuseumRelicGrid", true, false) as GridContainer
+	var restored_grid := restored_museum.find_child("MuseumRelicGrid", true, false) as HFlowContainer
 	if restored_grid == null or restored_grid.get_child_count() != ALL_RELIC_COLORS.size() - 1:
 		return _fail("session_filtered_grid_not_restored")
 	progress_label = restored_museum.find_child("MuseumCollectionProgress", true, false) as Label
@@ -333,7 +392,7 @@ func _ready() -> void:
 		return _fail("session_progress_not_restored")
 	DeckCollectionUI.reset_session_filter_state()
 
-	print("MUSEUM_RELIC ok colors=7 five_columns=true thumbnails=true view=true today_filter=true session_filter=true hover_2x=true")
+	print("MUSEUM_RELIC ok colors=7 first_row=%d thumbnails=true view=true today_filter=true session_filter=true hover_2x=true" % expected_first_row_count)
 	get_tree().quit(0)
 
 

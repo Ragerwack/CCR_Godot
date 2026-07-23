@@ -204,8 +204,8 @@ func _apply_action_column_layout() -> void:
 
 func _action_font_size() -> int:
 	if _side_button_width < 120.0:
-		return 12 if Localization.locale == "en" else 13
-	return 15 if Localization.locale == "en" else 16
+		return 13 if Localization.locale == "en" else 14
+	return 16 if Localization.locale == "en" else 17
 
 func _right_region_center_x() -> float:
 	var viewport_width := get_viewport_rect().size.x
@@ -544,6 +544,12 @@ func get_synthesis_animation_sources(indices: Array) -> Array[Dictionary]:
 
 
 func hide_synthesis_slots_for_animation(indices: Array) -> void:
+	_hide_slots_for_animation(indices)
+
+func hide_card_action_slots_for_animation(indices: Array) -> void:
+	_hide_slots_for_animation(indices)
+
+func _hide_slots_for_animation(indices: Array) -> void:
 	_synthesis_hidden_indices.clear()
 	for global_idx in indices:
 		var idx := int(global_idx)
@@ -565,6 +571,9 @@ func hide_synthesis_slots_for_animation(indices: Array) -> void:
 
 func clear_synthesis_animation_hidden_slots() -> void:
 	_synthesis_hidden_indices.clear()
+
+func clear_card_action_animation_hidden_slots() -> void:
+	clear_synthesis_animation_hidden_slots()
 
 func _is_synthesis_hidden(global_idx: int) -> bool:
 	return _synthesis_hidden_indices.has(global_idx)

@@ -1,7 +1,7 @@
 extends RefCounted
 class_name MuseumRelicThumbnailCache
 
-const CACHE_VERSION := "v1_h720"
+const CACHE_VERSION := "v2_h720"
 const CACHE_ROOT := "user://museum_relic_thumbnails/"
 const THUMBNAIL_HEIGHT := 720
 const CARD_ART_PREFIX := "res://Resources/Cards/"

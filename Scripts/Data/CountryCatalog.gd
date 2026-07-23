@@ -262,14 +262,63 @@ const COUNTRIES: Array[Dictionary] = [
 ]
 
 static func localized_entries(locale: String) -> Array[Dictionary]:
-	var name_key := "zh" if locale == "zh-CN" else "en"
+	var name_key := "zh" if locale == "zh-CN" or locale == "zh-TW" else "en"
 	var result: Array[Dictionary] = []
 	for country in COUNTRIES:
 		var code := str(country["code"])
 		if code != "EARTH" and not (code in UN_MEMBER_CODES) and not (code in EXTRA_REGION_CODES):
 			continue
+		var label := str(country[name_key])
+		if locale == "zh-TW":
+			label = _to_traditional_zh(label)
 		result.append({
 			"code": code,
-			"label": str(country[name_key]),
+			"label": label,
 		})
+	return result
+
+static func _to_traditional_zh(text: String) -> String:
+	var result := text
+	var replacements := {
+		"中国": "中國",
+		"国": "國",
+		"亚": "亞",
+		"东": "東",
+		"岛": "島",
+		"兰": "蘭",
+		"尔": "爾",
+		"达": "達",
+		"门": "門",
+		"马": "馬",
+		"乌": "烏",
+		"贝": "貝",
+		"冈": "岡",
+		"刚": "剛",
+		"卢": "盧",
+		"圣": "聖",
+		"库": "庫",
+		"开": "開",
+		"挝": "撾",
+		"旧": "舊",
+		"时": "時",
+		"来": "來",
+		"欧": "歐",
+		"汉": "漢",
+		"湾": "灣",
+		"爱": "愛",
+		"纳": "納",
+		"维": "維",
+		"罗": "羅",
+		"苏": "蘇",
+		"萨": "薩",
+		"诺": "諾",
+		"赞": "贊",
+		"逊": "遜",
+		"边": "邊",
+		"际": "際",
+		"领": "領",
+		"馆": "館",
+	}
+	for source in replacements.keys():
+		result = result.replace(source, replacements[source])
 	return result

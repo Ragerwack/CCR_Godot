@@ -5,15 +5,20 @@ signal pool_filled(cards: Array)
 signal refresh_failed(reason: String)
 signal loading_started()
 signal loading_completed()
+signal roll_prefetch_status_changed(status: String)
 
 var current_pool: Array = []
 var visible_series: Array[String] = []
 const WARM_ROLL_CLICK_WAIT_MS: int = 450
 const WARM_ROLL_CACHE_KEY: String = "next"
 const RAPID_DRAW_SEQUENCE_WINDOW_MS: int = 8000
+const ROLL_PREFETCH_STATUS_READY := "ready"
+const ROLL_PREFETCH_STATUS_WAITING := "waiting"
+const ROLL_PREFETCH_STATUS_ERROR := "error"
 
 var _warm_rolls: Dictionary = {}
 var _warming_types: Dictionary = {}
+var _roll_prefetch_status: String = ROLL_PREFETCH_STATUS_WAITING
 var _confirm_in_flight: bool = false
 var _queued_refresh_type: String = ""
 var _queued_refresh_wait_active: bool = false
@@ -27,6 +32,13 @@ var rapid_next_pool_update: bool = false
 func _ready() -> void:
 	GameManager.pool_refreshed.connect(_on_pool_refresh)
 	_update_visible_series()
+
+func get_roll_prefetch_status() -> String:
+	if not _get_warm_roll("free").is_empty():
+		return ROLL_PREFETCH_STATUS_READY
+	if _has_any_warming_type():
+		return ROLL_PREFETCH_STATUS_WAITING
+	return _roll_prefetch_status
 
 func _update_visible_series() -> void:
 	var lvl = GameManager.player_data.level
@@ -250,6 +262,8 @@ func refresh_pool(refresh_type: String = "free") -> void:
 		var next_roll = data.get("next_roll", {})
 		if next_roll is Dictionary and not next_roll.is_empty():
 			_store_warm_roll(refresh_type, next_roll)
+		else:
+			_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 
 		if data.get("profile", {}) is Dictionary:
 			GameManager.apply_profile(data["profile"])
@@ -440,11 +454,14 @@ func _handle_unknown_confirm_result(
 
 func warm_refresh_roll(refresh_type: String = "free") -> void:
 	if _get_warm_roll(refresh_type).size() > 0:
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_READY)
 		return
 	if _has_any_warming_type():
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 		return
 
 	_warming_types[refresh_type] = true
+	_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 	var warm_started := Time.get_ticks_msec()
 	FileLogger.perf("draw_roll_warm_start", {"type": refresh_type})
 	var resp := await _prepare_refresh_roll(refresh_type)
@@ -457,6 +474,7 @@ func warm_refresh_roll(refresh_type: String = "free") -> void:
 			"total_ms": Time.get_ticks_msec() - warm_started,
 		})
 	else:
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_ERROR)
 		FileLogger.perf("draw_roll_warm_done", {
 			"type": refresh_type,
 			"success": false,
@@ -494,11 +512,13 @@ func _store_warm_roll(refresh_type: String, roll_data: Dictionary) -> void:
 	_warm_rolls[WARM_ROLL_CACHE_KEY] = {
 		"roll": roll_data,
 	}
+	_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_READY)
 
 func _take_warm_roll(refresh_type: String) -> Dictionary:
 	var roll := _get_warm_roll(refresh_type)
 	if not roll.is_empty():
 		_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 	return roll
 
 func _get_warm_roll(refresh_type: String) -> Dictionary:
@@ -507,19 +527,23 @@ func _get_warm_roll(refresh_type: String) -> Dictionary:
 	var entry = _warm_rolls[WARM_ROLL_CACHE_KEY]
 	if not entry is Dictionary:
 		_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 		return {}
 	var roll = entry.get("roll", {})
 	if roll is Dictionary:
 		var roll_draw_key = roll.get("draw_key", {})
 		if not roll_draw_key is Dictionary or str(roll_draw_key.get("date_key", "")) != _beijing_date_key():
 			_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
+			_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 			return {}
 		var matrix: Array = roll.get("random_matrix", [])
 		if matrix.size() < 16:
 			_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
+			_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 			return {}
 		return roll
 	_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
+	_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 	return {}
 
 func _beijing_date_key() -> String:
@@ -532,6 +556,12 @@ func _has_any_warming_type() -> bool:
 		if bool(_warming_types[key]):
 			return true
 	return false
+
+func _set_roll_prefetch_status(status: String) -> void:
+	if _roll_prefetch_status == status:
+		return
+	_roll_prefetch_status = status
+	roll_prefetch_status_changed.emit(_roll_prefetch_status)
 
 func _rollback_refresh_attempt(refresh_type: String) -> void:
 	if refresh_type == "gem":

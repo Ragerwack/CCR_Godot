@@ -8,6 +8,7 @@ const MAGIC_REVEAL_DURATION: float = 1.0
 const CARD_FLY_DURATION: float = 0.5
 const TOTAL_DURATION: float = SUN_GROW_DURATION + MAGIC_REVEAL_DURATION + CARD_FLY_DURATION
 const MAGIC_CIRCLE_TEXTURE: Texture2D = preload("res://Resources/UI/VFX/orange_magic_circle.png")
+const FIRE_RING_SFX_EVENT := "draw_orange_fire_ring"
 
 const SUN_SHADER: String = """
 shader_type canvas_item;
@@ -106,6 +107,7 @@ func play(delay: float = 0.0) -> void:
 	_sequence.tween_property(_sun, "modulate:a", 1.0, SUN_GROW_DURATION * 0.12).set_delay(grow_start).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_sequence.tween_property(_sun, "scale", Vector2.ONE, SUN_GROW_DURATION).set_delay(grow_start).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
 	# 第二阶段：太阳释放一轮冲出屏幕的金色光圈，同时留下法阵与中央橙卡。
+	_sequence.tween_callback(_play_fire_ring_sfx).set_delay(magic_start)
 	_sequence.tween_property(_halo, "modulate:a", 1.0, MAGIC_REVEAL_DURATION * 0.12).set_delay(magic_start).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_sequence.tween_property(_halo, "scale", Vector2.ONE, MAGIC_REVEAL_DURATION * 0.78).set_delay(magic_start).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
 	_sequence.tween_property(_halo, "modulate:a", 0.0, MAGIC_REVEAL_DURATION * 0.38).set_delay(magic_start + MAGIC_REVEAL_DURATION * 0.62).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
@@ -127,6 +129,9 @@ func cancel() -> void:
 		_sequence.kill()
 	_sequence = null
 	queue_free()
+
+func _play_fire_ring_sfx() -> void:
+	AudioManager.play_sfx(FIRE_RING_SFX_EVENT, 1.0, 0.0)
 
 func _make_shader_rect(node_name: String, shader_code: String) -> ColorRect:
 	var rect := ColorRect.new()

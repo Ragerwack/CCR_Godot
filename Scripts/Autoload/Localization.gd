@@ -3,7 +3,7 @@ extends Node
 signal locale_changed(locale: String)
 
 const DEFAULT_LOCALE := "en"
-const SUPPORTED_LOCALES := ["en", "zh-CN"]
+const SUPPORTED_LOCALES := ["en", "zh-CN", "zh-TW", "ja", "ko"]
 
 var locale: String = DEFAULT_LOCALE
 
@@ -88,6 +88,9 @@ var _texts := {
 		"ui.login.loading.cards": "正在整理卡池与手牌",
 		"ui.login.loading.online": "正在建立游戏状态",
 		"ui.login.loading.done": "准备完成",
+		"ui.loading_tip.short_prefix": "短提示",
+		"ui.loading_tip.default_category": "收藏提示",
+		"ui.loading_tip.default_title": "收藏提示",
 		"ui.card_pool.refresh.free": "体力抽卡",
 		"ui.card_pool.refresh.free_newbie": "赠送体力 %d",
 		"ui.card_pool.refresh.free_regular": "体力 %d",
@@ -100,9 +103,9 @@ var _texts := {
 		"ui.menu.title": "设置",
 		"ui.menu.music_volume": "音乐音量",
 		"ui.menu.sfx_volume": "音效音量",
-		"ui.menu.mute": "🔊 静音",
-		"ui.menu.muted": "🔇 已静音",
-		"ui.menu.logout": "🚪 登出",
+		"ui.menu.mute": "静音",
+		"ui.menu.muted": "已静音",
+		"ui.menu.logout": "登出",
 		"ui.menu.language": "语言",
 		"ui.menu.resolution": "分辨率",
 		"ui.menu.window_mode": "显示模式",
@@ -166,6 +169,9 @@ var _texts := {
 		"ui.reconnect.connecting": "正在重连...",
 		"ui.language.zh_cn": "简体中文",
 		"ui.language.en": "English",
+		"ui.language.zh_tw": "繁體中文",
+		"ui.language.ja": "日本語",
+		"ui.language.ko": "한국어",
 		"ui.button.back": "返回",
 		"ui.today_decks.title": "今日卡组",
 		"ui.today_decks.loading": "正在同步今日抽卡密匙",
@@ -180,7 +186,7 @@ var _texts := {
 		"ui.today_decks.type.random": "随机卡组",
 		"ui.today_decks.visible_level": "可见等级：%d级",
 		"ui.hand.page": "翻页",
-		"ui.hand.synthesize": "合成",
+		"ui.hand.synthesize": "锻造",
 		"ui.hand.discard": "丢弃",
 		"ui.hand.store_vault": "存保险箱",
 		"ui.nav.today_decks": "今日卡组",
@@ -219,11 +225,11 @@ var _texts := {
 		"ui.synthesis.success_gold": "圣物合成成功! 奖励金币: %d",
 		"ui.synthesis.done": "已合成",
 		"ui.synthesis.failed": "合成失败: %s",
-		"ui.synthesis.vault.count": "合成 (%d/5)",
-		"ui.synthesis.vault.invalid": "合成 (%d/5)",
-		"ui.synthesis.vault.valid": "合成 (5/5)",
-		"ui.synthesis.vault.done": "合成成功",
-		"ui.synthesis.vault.failed": "合成失败",
+		"ui.synthesis.vault.count": "锻造",
+		"ui.synthesis.vault.invalid": "锻造",
+		"ui.synthesis.vault.valid": "锻造",
+		"ui.synthesis.vault.done": "锻造成功",
+		"ui.synthesis.vault.failed": "锻造失败",
 		"ui.deck_collection.title": "圣物博物馆",
 		"ui.deck_collection.empty": "手动合成圣物后将在这里展示",
 		"ui.deck_collection.color_header": "%s圣物",
@@ -336,6 +342,9 @@ var _texts := {
 		"ui.login.loading.cards": "Organizing card pool and hand",
 		"ui.login.loading.online": "Establishing game state",
 		"ui.login.loading.done": "Ready",
+		"ui.loading_tip.short_prefix": "Tip",
+		"ui.loading_tip.default_category": "tip",
+		"ui.loading_tip.default_title": "Collection Tip",
 		"ui.card_pool.refresh.free": "Stamina Draw",
 		"ui.card_pool.refresh.free_newbie": "Gift %d",
 		"ui.card_pool.refresh.free_regular": "Stamina %d",
@@ -348,9 +357,9 @@ var _texts := {
 		"ui.menu.title": "Settings",
 		"ui.menu.music_volume": "Music",
 		"ui.menu.sfx_volume": "SFX",
-		"ui.menu.mute": "🔊 Mute",
-		"ui.menu.muted": "🔇 Muted",
-		"ui.menu.logout": "🚪 Logout",
+		"ui.menu.mute": "Mute",
+		"ui.menu.muted": "Muted",
+		"ui.menu.logout": "Logout",
 		"ui.menu.language": "Language",
 		"ui.menu.resolution": "Resolution",
 		"ui.menu.window_mode": "Display Mode",
@@ -387,7 +396,7 @@ var _texts := {
 		"ui.controller.action.nav_next": "Next Nav Page",
 		"ui.controller.action.hand_page": "Hand Page",
 		"ui.controller.action.draw_free": "Stamina / Free Draw",
-		"ui.controller.action.synthesize": "Craft",
+		"ui.controller.action.synthesize": "Forge",
 		"ui.controller.action.store_vault": "Store in Vault",
 		"ui.controller.action.discard": "Discard",
 		"ui.controller.action.draw_gem": "Gem Draw",
@@ -414,6 +423,9 @@ var _texts := {
 		"ui.reconnect.connecting": "Reconnecting...",
 		"ui.language.zh_cn": "简体中文",
 		"ui.language.en": "English",
+		"ui.language.zh_tw": "繁體中文",
+		"ui.language.ja": "日本語",
+		"ui.language.ko": "한국어",
 		"ui.button.back": "Back",
 		"ui.today_decks.title": "Today's Decks",
 		"ui.today_decks.loading": "Syncing today's draw key",
@@ -428,7 +440,7 @@ var _texts := {
 		"ui.today_decks.type.random": "Random Deck",
 		"ui.today_decks.visible_level": "Visible: Lv %d",
 		"ui.hand.page": "Page",
-		"ui.hand.synthesize": "Craft",
+		"ui.hand.synthesize": "Forge",
 		"ui.hand.discard": "Discard",
 		"ui.hand.store_vault": "Store",
 		"ui.nav.today_decks": "Today",
@@ -454,29 +466,29 @@ var _texts := {
 		"ui.vault.unlock_gem": "Gem Expand",
 		"ui.vault.unlock_gem_cost": "Cost: %d gems",
 		"ui.vault.unlock_cost_loading": "Loading cost",
-		"ui.synthesis.title": "Craft Relic [choose 5 matching cards]",
-		"ui.synthesis.button.count": "Craft (%d/5)",
-		"ui.synthesis.button.valid": "Craft (5/5) ✓",
-		"ui.synthesis.button.invalid": "Craft (5/5) ✗",
+		"ui.synthesis.title": "Forge Relic [choose 5 matching cards]",
+		"ui.synthesis.button.count": "Forge (%d/5)",
+		"ui.synthesis.button.valid": "Forge (5/5) ✓",
+		"ui.synthesis.button.invalid": "Forge (5/5) ✗",
 		"ui.synthesis.quick_select": "Quick Select",
-		"ui.synthesis.no_combo": "No craftable set found",
-		"ui.synthesis.invalid_selected": "Selected cards cannot be crafted",
+		"ui.synthesis.no_combo": "No forgeable set found",
+		"ui.synthesis.invalid_selected": "Selected cards cannot be forged",
 		"ui.synthesis.invalid_detail": "Selected cards must share series, deck, color, and numbers 1-5",
-		"ui.synthesis.crafting": "Crafting...",
-		"ui.synthesis.crafting_status": "Crafting...",
-		"ui.synthesis.success_gold": "Relic crafted! Gold reward: %d",
-		"ui.synthesis.done": "Crafted",
-		"ui.synthesis.failed": "Craft failed: %s",
-		"ui.synthesis.vault.count": "Craft (%d/5)",
-		"ui.synthesis.vault.invalid": "Craft (%d/5)",
-		"ui.synthesis.vault.valid": "Craft (5/5)",
-		"ui.synthesis.vault.done": "Crafted",
-		"ui.synthesis.vault.failed": "Craft Failed",
+		"ui.synthesis.crafting": "Forging...",
+		"ui.synthesis.crafting_status": "Forging...",
+		"ui.synthesis.success_gold": "Relic forged! Gold reward: %d",
+		"ui.synthesis.done": "Forged",
+		"ui.synthesis.failed": "Forge failed: %s",
+		"ui.synthesis.vault.count": "Forge",
+		"ui.synthesis.vault.invalid": "Forge",
+		"ui.synthesis.vault.valid": "Forge",
+		"ui.synthesis.vault.done": "Forged",
+		"ui.synthesis.vault.failed": "Forge Failed",
 		"ui.deck_collection.title": "Relic Museum",
-		"ui.deck_collection.empty": "Craft a relic to display it here",
+		"ui.deck_collection.empty": "Forge a relic to display it here",
 		"ui.deck_collection.color_header": "%s Relics",
 		"ui.deck_collection.kind_count": " (%d kinds)",
-		"ui.deck_collection.relic_count": "Crafted x%d",
+		"ui.deck_collection.relic_count": "Forged x%d",
 		"ui.deck_collection.filter.colors_all": "Rarity: All",
 		"ui.deck_collection.filter.colors": "Rarity: %s",
 		"ui.deck_collection.sort.recent": "Newest",
@@ -506,6 +518,45 @@ var _texts := {
 	},
 }
 
+var _locale_overrides := {
+	"ja": {
+		"ui.login.loading": "読み込み中...",
+		"ui.login.syncing": "同期中...",
+		"ui.login.loading.entering": "Cosmic Card Realm に入っています",
+		"ui.login.loading.collection": "コレクション空間を準備中",
+		"ui.login.loading.cards": "カードプールと手札を整理中",
+		"ui.login.loading.online": "ゲーム状態を確立中",
+		"ui.login.loading.done": "準備完了",
+		"ui.loading_tip.short_prefix": "ヒント",
+		"ui.loading_tip.default_category": "ヒント",
+		"ui.loading_tip.default_title": "コレクションヒント",
+		"ui.menu.language": "言語",
+		"ui.language.zh_cn": "简体中文",
+		"ui.language.en": "English",
+		"ui.language.zh_tw": "繁體中文",
+		"ui.language.ja": "日本語",
+		"ui.language.ko": "한국어",
+	},
+	"ko": {
+		"ui.login.loading": "로딩 중...",
+		"ui.login.syncing": "동기화 중...",
+		"ui.login.loading.entering": "Cosmic Card Realm 입장 중",
+		"ui.login.loading.collection": "컬렉션 공간 준비 중",
+		"ui.login.loading.cards": "카드 풀과 손패 정리 중",
+		"ui.login.loading.online": "게임 상태 연결 중",
+		"ui.login.loading.done": "준비 완료",
+		"ui.loading_tip.short_prefix": "팁",
+		"ui.loading_tip.default_category": "팁",
+		"ui.loading_tip.default_title": "컬렉션 팁",
+		"ui.menu.language": "언어",
+		"ui.language.zh_cn": "简体中文",
+		"ui.language.en": "English",
+		"ui.language.zh_tw": "繁體中文",
+		"ui.language.ja": "日本語",
+		"ui.language.ko": "한국어",
+	},
+}
+
 func _ready() -> void:
 	var saved_locale := str(Config.get_value("localization", "last_locale", DEFAULT_LOCALE))
 	locale = saved_locale if saved_locale in SUPPORTED_LOCALES else DEFAULT_LOCALE
@@ -532,9 +583,126 @@ func apply_account_default(country_code: String, user_id: int) -> void:
 func get_http_locale() -> String:
 	return locale
 
+func get_supported_locales() -> Array:
+	return SUPPORTED_LOCALES.duplicate()
+
+func language_label(locale_code: String) -> String:
+	match locale_code:
+		"zh-CN":
+			return t("ui.language.zh_cn")
+		"zh-TW":
+			return t("ui.language.zh_tw")
+		"ja":
+			return t("ui.language.ja")
+		"ko":
+			return t("ui.language.ko")
+		_:
+			return t("ui.language.en")
+
+func uses_english_content(target_locale: String = "") -> bool:
+	var resolved_locale := locale if target_locale.is_empty() else target_locale
+	return resolved_locale != "zh-CN" and resolved_locale != "zh-TW"
+
 func t(key: String, params: Array = []) -> String:
-	var table: Dictionary = _texts.get(locale, _texts[DEFAULT_LOCALE])
+	var base_locale := _base_text_locale(locale)
+	var table: Dictionary = _texts.get(base_locale, _texts[DEFAULT_LOCALE])
 	var text := str(table.get(key, _texts[DEFAULT_LOCALE].get(key, key)))
+	var overrides: Dictionary = _locale_overrides.get(locale, {})
+	if overrides.has(key):
+		text = str(overrides[key])
+	if locale == "zh-TW" and base_locale == "zh-CN":
+		text = _to_traditional_zh(text)
 	if params.size() > 0:
 		return text % params
 	return text
+
+func _base_text_locale(target_locale: String) -> String:
+	if target_locale == "zh-CN" or target_locale == "zh-TW":
+		return "zh-CN"
+	return DEFAULT_LOCALE
+
+func _to_traditional_zh(text: String) -> String:
+	var result := text
+	var replacements := {
+		"万象卡域": "萬象卡域",
+		"加载": "載入",
+		"准备": "準備",
+		"完成": "完成",
+		"正在": "正在",
+		"进入": "進入",
+		"收藏": "收藏",
+		"空间": "空間",
+		"整理": "整理",
+		"卡池": "卡池",
+		"手牌": "手牌",
+		"建立": "建立",
+		"状态": "狀態",
+		"短提示": "短提示",
+		"简体中文": "簡體中文",
+		"语言": "語言",
+		"设置": "設定",
+		"国籍": "國籍",
+		"区域": "區域",
+		"玩家": "玩家",
+		"信息": "資訊",
+		"头像": "頭像",
+		"保险箱": "保險箱",
+		"今日": "今日",
+		"卡组": "卡組",
+		"圣物": "聖物",
+		"锻造": "鍛造",
+		"合成": "合成",
+		"金币": "金幣",
+		"宝石": "寶石",
+		"体力": "體力",
+		"邮箱": "信箱",
+		"退出": "退出",
+		"登录": "登入",
+		"注册": "註冊",
+		"密码": "密碼",
+		"用户名": "使用者名稱",
+		"错误": "錯誤",
+		"服务器": "伺服器",
+		"网络": "網路",
+		"同步": "同步",
+		"选择": "選擇",
+		"确认": "確認",
+		"当前": "目前",
+		"显示": "顯示",
+		"模式": "模式",
+		"分辨率": "解析度",
+		"音乐": "音樂",
+		"音效": "音效",
+		"静音": "靜音",
+		"恢复": "恢復",
+		"默认": "預設",
+		"手柄": "手把",
+		"键位": "按鍵",
+		"前": "前",
+		"后": "後",
+		"随机": "隨機",
+		"稀有度": "稀有度",
+		"全部": "全部",
+		"最近": "最近",
+		"获得": "獲得",
+		"标准": "標準",
+		"顺序": "順序",
+		"普通": "普通",
+		"优秀": "優秀",
+		"精良": "精良",
+		"传说": "傳說",
+		"究极": "究極",
+		"宇宙": "宇宙",
+		"经验": "經驗",
+		"等级": "等級",
+		"槽": "槽",
+		"页": "頁",
+		"丢弃": "丟棄",
+		"返回": "返回",
+		"重试": "重試",
+		"失败": "失敗",
+		"成功": "成功",
+	}
+	for source in replacements.keys():
+		result = result.replace(source, replacements[source])
+	return result

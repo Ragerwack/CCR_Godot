@@ -76,16 +76,26 @@ func _parse_series_format(series_array: Array) -> void:
 		# Process decks
 		for deck_data in series_data.get("decks", []):
 			var dname = deck_data.get("name_zh", "")
+			var den = deck_data.get("name_en", "")
 
 			for card_data in deck_data.get("cards", []):
 				var card = CardInfo.new({
 					"id": str(card_data.get("card_id", 0)),
 					"series_name": sname,
+					"series_name_zh": sname,
+					"series_name_en": sen,
 					"deck_name": dname,
+					"deck_name_cn": dname,
+					"deck_name_zh": dname,
+					"deck_name_en": den,
 					"card_number": int(card_data.get("number", 1)),
 					"color": "白",  # 默认白色，抽卡时随机分配
 					"card_name": card_data.get("name_zh", ""),
+					"card_name_zh": card_data.get("name_zh", ""),
+					"card_name_en": card_data.get("name_en", ""),
 					"description": card_data.get("desc_zh", ""),
+					"description_zh": card_data.get("desc_zh", ""),
+					"description_en": card_data.get("desc_en", ""),
 					"image_path": card_data.get("image", ""),
 					"type": cat,
 					"series_style": sen,
@@ -95,13 +105,20 @@ func _parse_series_format(series_array: Array) -> void:
 
 		all_series.append(cs)
 		_series_by_name[sname] = cs
+		if sen != "":
+			_series_by_name[sen] = cs
 		_cards_by_series[sname] = _filter_cards_by_series(sname)
+		if sen != "":
+			_cards_by_series[sen] = _filter_cards_by_series(sname)
 
 		# Build deck-level lookup
 		for deck_data in series_data.get("decks", []):
 			var dn = deck_data.get("name_zh", "")
+			var den = deck_data.get("name_en", "")
 			var deck_cards = cs.get_deck_cards(dn)
 			_cards_by_deck[sname + "/" + dn] = deck_cards
+			if sen != "" and den != "":
+				_cards_by_deck[sen + "/" + den] = deck_cards
 			# JSON 的 deck_id 是系列内排序号，会在每个系列从 1 重新开始；
 			# 服务端 DeckDef.id 则按种子文件遍历顺序全局生成。
 			_cards_by_deck_id[global_deck_def_id] = deck_cards
@@ -192,8 +209,32 @@ func _to_card_info_array(value: Variant) -> Array[CardInfo]:
 	if value is Array:
 		for card in value:
 			if card is CardInfo:
-				cards.append(card)
+				cards.append(_localized_card_info(card))
 	return cards
+
+func _localized_card_info(card: CardInfo) -> CardInfo:
+	if card == null:
+		return null
+	var copy := CardInfo.new(card.to_dict())
+	if Localization.uses_english_content():
+		if copy.series_name_en != "":
+			copy.series_name = copy.series_name_en
+		if copy.deck_name_en != "":
+			copy.deck_name = copy.deck_name_en
+		if copy.card_name_en != "":
+			copy.card_name = copy.card_name_en
+		if copy.description_en != "":
+			copy.description = copy.description_en
+	else:
+		if copy.series_name_zh != "":
+			copy.series_name = copy.series_name_zh
+		if copy.deck_name_zh != "":
+			copy.deck_name = copy.deck_name_zh
+		if copy.card_name_zh != "":
+			copy.card_name = copy.card_name_zh
+		if copy.description_zh != "":
+			copy.description = copy.description_zh
+	return copy
 
 # 生成随机颜色
 func roll_color() -> CardColor.ColorType:

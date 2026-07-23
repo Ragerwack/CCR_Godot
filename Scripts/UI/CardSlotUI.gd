@@ -539,7 +539,10 @@ func _finish_drop_in_animation() -> void:
 	card_display.mouse_filter = Control.MOUSE_FILTER_STOP
 	card_display.refresh_title_text_color()
 	if card_display.card != null:
-		_play_draw_sfx(card_display.card.color)
+		if card_display.card.color == CardColor.ColorType.BLUE:
+			_play_draw_sfx(CardColor.ColorType.WHITE)
+		else:
+			_play_draw_sfx(card_display.card.color)
 
 
 func _play_draw_confirm_flash() -> void:

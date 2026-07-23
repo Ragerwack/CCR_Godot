@@ -100,6 +100,7 @@ func play(delay: float = 0.0) -> void:
 	_sequence = create_tween().set_parallel(true)
 	_sequence.tween_callback(_begin_audio_silence).set_delay(blackout_start)
 	_sequence.tween_property(_background, "color:a", 1.0, FADE_TO_BLACK_DURATION).set_delay(blackout_start).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_sequence.tween_callback(_play_black_hole_sfx).set_delay(black_hole_start)
 	_sequence.tween_property(_black_hole, "modulate:a", 1.0, BLACK_HOLE_REVEAL_DURATION).set_delay(black_hole_start).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_sequence.tween_property(_black_hole, "scale", Vector2.ONE, BLACK_HOLE_REVEAL_DURATION).set_delay(black_hole_start).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_sequence.tween_property(_card_display, "modulate:a", 1.0, CARD_REVEAL_DURATION * 0.25).set_delay(card_reveal_start).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -134,6 +135,10 @@ func _centered_card_position() -> Vector2:
 func _begin_audio_silence() -> void:
 	if AudioManager != null:
 		AudioManager.fade_all_audio_to_silence(FADE_TO_BLACK_DURATION)
+
+func _play_black_hole_sfx() -> void:
+	if AudioManager != null:
+		AudioManager.play_cinematic_sfx("draw_black_hole", 1.0, 0.0)
 
 func _begin_audio_restore() -> void:
 	_audio_restore_requested = true

@@ -518,10 +518,10 @@
             {
               "card_id": 50,
               "number": 5.0,
-              "name_zh": "神兽归位",
-              "name_en": "Return of the Beasts",
-              "desc_zh": "四大神兽齐聚东方天际，青龙白虎朱雀玄武各归其位，天地秩序重归平衡。",
-              "desc_en": "The Four Sacred Beasts assemble in the eastern sky — Azure Dragon, White Tiger, Vermilion Bird, Black Tortoise — each taking its rightful place. The balance of heaven and earth is restored.",
+              "name_zh": "斯芬克斯",
+              "name_en": "Sphinx",
+              "desc_zh": "星门前，狮身人面的守卫低声提出谜题；答错者化作风中砂砾，答对者看见古文明沉入群星的坐标。",
+              "desc_en": "Before the star gate, the lion-bodied guardian speaks a riddle. Those who fail become sand on the wind; those who answer glimpse the coordinates of an ancient civilization sinking into the stars.",
               "image": "card_050.jpg"
             }
           ]

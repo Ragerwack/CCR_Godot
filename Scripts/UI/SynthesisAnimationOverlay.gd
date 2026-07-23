@@ -440,7 +440,6 @@ func _send_relic_to_nav(relic: Control) -> void:
 	tween.set_parallel(true)
 	tween.tween_property(relic, "position", target_pos, RELIC_TO_NAV_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	tween.tween_property(relic, "scale", Vector2(target_scale, target_scale), RELIC_TO_NAV_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	tween.tween_property(relic, "modulate:a", 0.0, RELIC_TO_NAV_DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	await tween.finished
 
 
@@ -458,7 +457,6 @@ func _send_relic_and_rewards(relic: Control) -> void:
 	relic_tween.set_parallel(true)
 	relic_tween.tween_property(relic, "position", target_pos, RELIC_TO_NAV_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	relic_tween.tween_property(relic, "scale", Vector2(target_scale, target_scale), RELIC_TO_NAV_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	relic_tween.tween_property(relic, "modulate:a", 0.0, RELIC_TO_NAV_DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 
 	var relic_center := _relic_rect.get_center()
 	var reward_duration := 0.0
@@ -492,8 +490,11 @@ func _create_reward_icon(item: Dictionary, start_center: Vector2) -> TextureRect
 		return null
 	var target_rect: Rect2 = item.get("target_rect", Rect2())
 	var reference_size := maxf(target_rect.size.x, target_rect.size.y)
-	if reference_size <= 1.0:
-		reference_size = 42.0 if reward_type == "slot" else 22.0
+	if reward_type == "slot":
+		var key_reference_size := _reward_key_reference_size()
+		reference_size = key_reference_size if reference_size <= 1.0 else minf(reference_size, key_reference_size)
+	elif reference_size <= 1.0:
+		reference_size = 22.0
 	var edge := reference_size * REWARD_KEY_SCALE if reward_type == "slot" else reference_size * REWARD_START_SCALE
 	var icon := TextureRect.new()
 	icon.name = "SynthesisReward_%s" % reward_type
@@ -507,6 +508,10 @@ func _create_reward_icon(item: Dictionary, start_center: Vector2) -> TextureRect
 	icon.z_index = 1
 	add_child(icon)
 	return icon
+
+
+static func _reward_key_reference_size() -> float:
+	return clampf(CardSlotUI.SLOT_SIZE.x * 0.45, 39.0, 63.0)
 
 
 func _start_reward_flight(icon: TextureRect, item: Dictionary, start_center: Vector2, delay: float) -> void:
@@ -546,8 +551,6 @@ func _start_reward_flight(icon: TextureRect, item: Dictionary, start_center: Vec
 		var next_size := start_size.lerp(end_size, progress)
 		icon.size = next_size
 		icon.position = center - next_size * 0.5
-		if progress > 0.82:
-			icon.modulate.a = 1.0 - (progress - 0.82) / 0.18
 	, 0.0, 1.0, total_duration).set_delay(delay)
 	tween.tween_callback(func():
 		match str(item.get("type", "")):

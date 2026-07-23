@@ -6,6 +6,7 @@ const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
 # 博物馆 — 展示所有已合成圣物
 
 const RELICS_PER_ROW: int = 5
+const RELIC_TARGET_MIN_ITEMS_PER_ROW: int = 6
 const CARD_WIDTH: float = 150.0
 const CARD_HEIGHT: float = 200.0
 const CARD_SPACING: float = 24.0
@@ -77,6 +78,7 @@ var _view_relic: TextureRect = null
 var _view_relic_shadow: TextureRect = null
 var _view_source_card: Control = null
 var _view_source_card_modulate: Color = Color.WHITE
+var _view_source_relic_key: String = ""
 var _view_card_displays: Array[CardDisplay] = []
 var _view_cards: Array = []
 var _view_color: int = CardColor.ColorType.WHITE
@@ -150,6 +152,7 @@ func setup_ui() -> void:
 
 	_content = VBoxContainer.new()
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_content.custom_minimum_size = Vector2(size.x, 0.0)
 	_content.add_theme_constant_override("separation", SECTION_SPACING)
 	_scroll_container.add_child(_content)
 
@@ -240,6 +243,8 @@ func render_decks() -> void:
 	_last_render_viewport_height = get_viewport_rect().size.y
 	var render_started := Time.get_ticks_msec()
 	FileLogger.perf("ui_render_start", {"page": "deck_panel", "component": "deck_grid"})
+	if _content != null:
+		_content.custom_minimum_size.x = size.x
 	# 清空内容
 	for child in _content.get_children():
 		_content.remove_child(child)
@@ -523,11 +528,11 @@ func _create_color_header(color_type: int, count: int) -> Control:
 	return hdr
 
 func _create_card_grid(relics: Array) -> Container:
-	# GridContainer 固定为五列，不能让不同长宽比的圣物把一行挤成六列或更多。
-	var flow = GridContainer.new()
+	var flow = HFlowContainer.new()
 	flow.name = "MuseumRelicGrid"
-	flow.columns = RELICS_PER_ROW
 	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	flow.custom_minimum_size = Vector2(size.x, 0.0)
+	flow.size = Vector2(size.x, 0.0)
 	flow.add_theme_constant_override("h_separation", CARD_HORIZONTAL_SPACING)
 	flow.add_theme_constant_override("v_separation", CARD_SPACING)
 
@@ -537,6 +542,32 @@ func _create_card_grid(relics: Array) -> Container:
 
 	return flow
 
+func _get_relics_that_fit_first_row(relics: Array) -> int:
+	if relics.is_empty():
+		return 0
+	var available_width := size.x
+	if available_width <= 1.0:
+		available_width = get_viewport_rect().size.x
+	var used_width := 0.0
+	var count := 0
+	for relic in relics:
+		if not relic is Dictionary:
+			continue
+		var relic_data: Dictionary = relic
+		var item_width := _get_relic_card_width(relic_data)
+		var needed_width := item_width if count == 0 else CARD_HORIZONTAL_SPACING + item_width
+		if count > 0 and used_width + needed_width > available_width + 0.1:
+			break
+		used_width += needed_width
+		count += 1
+	return count
+
+func _get_relic_card_width(relic: Dictionary) -> float:
+	var color_type := int(relic.get("color", CardColor.ColorType.WHITE))
+	if RelicView.supports_color(color_type):
+		return _get_visual_relic_size(color_type).x
+	return CARD_WIDTH
+
 func _create_relic_card(relic: Dictionary) -> Control:
 	var color_type := int(relic.get("color", CardColor.ColorType.WHITE))
 	if RelicView.supports_color(color_type):
@@ -545,6 +576,7 @@ func _create_relic_card(relic: Dictionary) -> Control:
 	var card_container = Control.new()
 	card_container.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
 	card_container.size = Vector2(CARD_WIDTH, CARD_HEIGHT)
+	_register_relic_source_card(card_container, relic)
 
 	# 尚未实装正式图片的其他颜色继续使用颜色矩形占位。
 	var bg = ColorRect.new()
@@ -620,6 +652,7 @@ func _create_relic_card(relic: Dictionary) -> Control:
 	count_label.name = "RelicCardCount"
 	card_container.add_child(count_label)
 
+	_apply_relic_source_view_visibility(card_container, relic)
 	return card_container
 
 func _create_visual_relic_card(relic: Dictionary) -> Control:
@@ -629,11 +662,13 @@ func _create_visual_relic_card(relic: Dictionary) -> Control:
 	var relic_size := _get_visual_relic_size(color_type)
 	var relic_width := relic_size.x
 	var relic_height := relic_size.y
+	var relic_slot_height := _get_visual_relic_slot_height()
 	var container := Control.new()
 	container.name = "RelicCard%d" % color_type
-	container.custom_minimum_size = Vector2(relic_width, relic_height + VISUAL_RELIC_LABEL_HEIGHT)
+	container.custom_minimum_size = Vector2(relic_width, relic_slot_height + VISUAL_RELIC_LABEL_HEIGHT + 4.0)
 	container.size = container.custom_minimum_size
 	container.mouse_filter = Control.MOUSE_FILTER_STOP
+	_register_relic_source_card(container, relic)
 
 	var box := VBoxContainer.new()
 	box.name = "RelicCardBox"
@@ -641,6 +676,13 @@ func _create_visual_relic_card(relic: Dictionary) -> Control:
 	box.add_theme_constant_override("separation", 4)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.add_child(box)
+
+	var relic_host := Control.new()
+	relic_host.name = "RelicHost"
+	relic_host.custom_minimum_size = Vector2(relic_width, relic_slot_height)
+	relic_host.size = relic_host.custom_minimum_size
+	relic_host.clip_contents = false
+	box.add_child(relic_host)
 
 	var label_box := VBoxContainer.new()
 	label_box.name = "RelicCardLabels"
@@ -683,16 +725,10 @@ func _create_visual_relic_card(relic: Dictionary) -> Control:
 	count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label_box.add_child(count_label)
 
-	var relic_host := Control.new()
-	relic_host.name = "RelicHost"
-	relic_host.custom_minimum_size = Vector2(relic_width, relic_height)
-	relic_host.size = relic_host.custom_minimum_size
-	box.add_child(relic_host)
-
 	var cards := _get_relic_cards(relic)
 	var thumbnail := TextureRect.new()
 	thumbnail.name = "RelicThumbnail"
-	thumbnail.set_anchors_preset(Control.PRESET_FULL_RECT)
+	thumbnail.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	thumbnail.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	thumbnail.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	thumbnail.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -702,6 +738,8 @@ func _create_visual_relic_card(relic: Dictionary) -> Control:
 		int(relic.get("deck_def_id", 0)),
 		cards
 	)
+	thumbnail.size = relic_size
+	thumbnail.position = _get_visual_relic_canvas_position(color_type, relic_size, relic_host.custom_minimum_size)
 	var relic_shadow := CCRVisualStyle.make_texture_shadow(thumbnail, "RelicThumbnailShadow", Vector2(10, 16), CCRVisualStyle.RELIC_SHADOW)
 	relic_host.add_child(relic_shadow)
 	relic_host.add_child(thumbnail)
@@ -710,11 +748,9 @@ func _create_visual_relic_card(relic: Dictionary) -> Control:
 		var relic_view := RELIC_VIEW_SCENE.instantiate() as RelicView
 		if relic_view.set_relic_color(color_type):
 			relic_view.name = "RelicView"
-			relic_view.set_anchors_preset(Control.PRESET_FULL_RECT)
-			relic_view.offset_left = 0.0
-			relic_view.offset_top = 0.0
-			relic_view.offset_right = 0.0
-			relic_view.offset_bottom = 0.0
+			relic_view.set_anchors_preset(Control.PRESET_TOP_LEFT)
+			relic_view.position = thumbnail.position
+			relic_view.size = relic_size
 			relic_view.custom_minimum_size = Vector2.ZERO
 			relic_view.set_cards(cards)
 			relic_host.add_child(relic_view)
@@ -750,17 +786,38 @@ func _create_visual_relic_card(relic: Dictionary) -> Control:
 			_start_relic_view(relic, thumbnail, container)
 	)
 
+	_apply_relic_source_view_visibility(container, relic)
 	return container
 
 func _get_visual_relic_size(color_type: int) -> Vector2:
 	var aspect_ratio := THUMBNAIL_CACHE.get_aspect_ratio(color_type)
+	var display_scale := RelicView.get_display_scale(color_type)
+	var relic_base_height := _get_visual_relic_base_height()
+	return Vector2(relic_base_height * display_scale * aspect_ratio, relic_base_height * display_scale)
+
+func _get_visual_relic_slot_height() -> float:
+	var max_height := 1.0
+	for supported_color in RelicView.RELIC_CONFIGS.keys():
+		max_height = maxf(max_height, _get_visual_relic_size(int(supported_color)).y)
+	return max_height
+
+func _get_visual_relic_canvas_position(color_type: int, relic_size: Vector2, host_size: Vector2) -> Vector2:
+	var visible_bottom := RelicView.get_visible_bottom_ratio(color_type) * relic_size.y
+	return Vector2((host_size.x - relic_size.x) * 0.5, host_size.y - visible_bottom)
+
+func _get_visual_relic_base_height() -> float:
 	var ideal_height := get_viewport_rect().size.y * RELIC_SCREEN_HEIGHT_RATIO
 	var available_width := size.x
 	if available_width <= 1.0:
 		available_width = get_viewport_rect().size.x
-	var max_width := maxf(1.0, (available_width - CARD_HORIZONTAL_SPACING * float(RELICS_PER_ROW - 1)) / float(RELICS_PER_ROW))
-	var relic_height := minf(ideal_height, max_width / maxf(aspect_ratio, 0.01))
-	return Vector2(relic_height * aspect_ratio, relic_height)
+	var target_items := maxi(RELICS_PER_ROW, RELIC_TARGET_MIN_ITEMS_PER_ROW)
+	var max_width := maxf(1.0, (available_width - CARD_HORIZONTAL_SPACING * float(target_items - 1)) / float(target_items))
+	var base_height := ideal_height
+	for supported_color in RelicView.RELIC_CONFIGS.keys():
+		var aspect_ratio := THUMBNAIL_CACHE.get_aspect_ratio(int(supported_color))
+		var display_scale := RelicView.get_display_scale(int(supported_color))
+		base_height = minf(base_height, max_width / maxf(aspect_ratio * display_scale, 0.01))
+	return maxf(1.0, base_height)
 
 func _start_relic_view(relic: Dictionary, thumbnail: TextureRect, source_card: Control) -> void:
 	if _view_state != ViewState.NONE or _view_busy:
@@ -771,8 +828,9 @@ func _start_relic_view(relic: Dictionary, thumbnail: TextureRect, source_card: C
 	_view_color = int(relic.get("color", CardColor.ColorType.WHITE))
 	_view_source_rect = relic_rect
 	_view_source_card = source_card
+	_view_source_relic_key = _relic_source_key(relic)
 	_view_source_card_modulate = _view_source_card.modulate
-	_view_source_card.modulate.a = 0.0
+	_set_relic_source_cards_hidden(_view_source_relic_key, true)
 	_view_overlay = Control.new()
 	_view_overlay.name = "MuseumRelicViewOverlay"
 	_view_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -854,6 +912,8 @@ func _reveal_view_cards() -> void:
 	var card_size := Vector2(viewport_size.x * 0.105, viewport_size.x * 0.105 * CardDisplay.CARD_SIZE.y / CardDisplay.CARD_SIZE.x)
 	card_size.y = minf(card_size.y, viewport_size.y * 0.34)
 	card_size.x = card_size.y * CardDisplay.CARD_SIZE.x / CardDisplay.CARD_SIZE.y
+	var render_card_size := card_size * CardDisplay.HOVER_SCALE
+	var resting_scale := 1.0 / CardDisplay.HOVER_SCALE
 	var start_center := Vector2(viewport_size.x / 7.0, viewport_size.y * 0.5)
 	for index in range(mini(5, _view_cards.size())):
 		var display := CardDisplayScript.new() as CardDisplay
@@ -861,18 +921,21 @@ func _reveal_view_cards() -> void:
 		display.hover_uses_slot_bounds = false
 		display.hover_scale_enabled = true
 		display.is_draggable = false
-		display.custom_minimum_size = card_size
-		display.size = card_size
-		display.position = start_center - card_size * 0.5
+		display.custom_minimum_size = render_card_size
+		display.size = render_card_size
+		display.position = start_center - render_card_size * 0.5
+		display.pivot_offset = render_card_size * 0.5
+		display.configure_visual_scales(resting_scale, 1.0)
 		display.modulate.a = 0.0
 		_view_overlay.add_child(display)
+		display.pivot_offset = render_card_size * 0.5
 		var source_card := _view_cards[index] as CardInfo
 		display.set_card(_card_with_relic_color(source_card), index)
 		_view_card_displays.append(display)
 		var target_center := Vector2(viewport_size.x * float(index + 2) / 7.0, viewport_size.y * 0.5)
 		var tween := create_tween()
 		tween.tween_interval(float(index) * VIEW_CARD_INTERVAL_SECONDS)
-		tween.tween_property(display, "position", target_center - card_size * 0.5, VIEW_CARD_MOVE_SECONDS).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.tween_property(display, "position", target_center - render_card_size * 0.5, VIEW_CARD_MOVE_SECONDS).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		tween.parallel().tween_property(display, "modulate:a", 1.0, VIEW_CARD_MOVE_SECONDS * 0.5)
 	await get_tree().create_timer(VIEW_CARD_MOVE_SECONDS + VIEW_CARD_INTERVAL_SECONDS * 4.0).timeout
 	if _view_cancel_requested:
@@ -936,10 +999,13 @@ func _reset_relic_view_state() -> void:
 	_view_blur = null
 	_view_relic = null
 	_view_relic_shadow = null
+	if _view_source_relic_key != "":
+		_set_relic_source_cards_hidden(_view_source_relic_key, false)
 	if is_instance_valid(_view_source_card):
 		_view_source_card.modulate = _view_source_card_modulate
 	_view_source_card = null
 	_view_source_card_modulate = Color.WHITE
+	_view_source_relic_key = ""
 	_view_card_displays.clear()
 	_view_cards.clear()
 	_view_state = ViewState.NONE
@@ -952,6 +1018,48 @@ func _card_with_relic_color(card: CardInfo) -> CardInfo:
 	var copy := CardInfo.new(card.to_dict())
 	copy.color = _view_color as CardColor.ColorType
 	return copy
+
+func _register_relic_source_card(card: Control, relic: Dictionary) -> void:
+	card.set_meta("museum_relic_source_key", _relic_source_key(relic))
+	card.add_to_group("museum_relic_source_cards")
+
+func _apply_relic_source_view_visibility(card: Control, relic: Dictionary) -> void:
+	if _view_state == ViewState.NONE:
+		return
+	var key := _relic_source_key(relic)
+	if key == "" or key != _view_source_relic_key:
+		return
+	var modulate := card.modulate
+	modulate.a = 0.0
+	card.modulate = modulate
+
+func _set_relic_source_cards_hidden(key: String, hidden: bool) -> void:
+	if key == "":
+		return
+	var target_alpha := 0.0 if hidden else 1.0
+	for node in get_tree().get_nodes_in_group("museum_relic_source_cards"):
+		var card := node as Control
+		if card == null or not is_instance_valid(card):
+			continue
+		if str(card.get_meta("museum_relic_source_key", "")) != key:
+			continue
+		var modulate := card.modulate
+		modulate.a = target_alpha
+		card.modulate = modulate
+
+func _relic_source_key(relic: Dictionary) -> String:
+	var color_type := int(relic.get("color", CardColor.ColorType.WHITE))
+	var deck_key := str(relic.get("deck_def_key", ""))
+	if deck_key != "":
+		return "%s|%d" % [deck_key, color_type]
+	var deck_def_id := int(relic.get("deck_def_id", 0))
+	if deck_def_id > 0:
+		return "%d|%d" % [deck_def_id, color_type]
+	return "%s|%s|%d" % [
+		str(relic.get("series_name", "")),
+		str(relic.get("deck_name", "")),
+		color_type,
+	]
 
 
 func _apply_relic_label_rect(label: Label, layout: Dictionary, relic_width: float, relic_height: float) -> void:

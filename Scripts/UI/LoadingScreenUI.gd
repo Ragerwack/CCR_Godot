@@ -45,7 +45,8 @@ func set_tip(category: String, title: String, body: String, short_tip: String = 
 	_tip_category_label.text = category.to_upper()
 	_tip_title_label.text = title
 	_tip_body_label.text = body
-	_tip_short_label.text = "短提示 · " + short_tip if not short_tip.is_empty() else ""
+	var short_prefix := Localization.t("ui.loading_tip.short_prefix")
+	_tip_short_label.text = short_prefix + " · " + short_tip if not short_tip.is_empty() else ""
 	_tip_tween = create_tween()
 	_tip_tween.tween_property(_loading_panel, "modulate:a", 0.72, 0.12)
 	_tip_tween.tween_property(_loading_panel, "modulate:a", 1.0, 0.18)

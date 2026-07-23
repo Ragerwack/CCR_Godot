@@ -401,7 +401,7 @@ func _show_loading_screen_ui(status: String, progress: float) -> void:
 	if path != "":
 		_loading_screen_ui.set_background(load(path))
 	var tip := LoadingTutorialUIScript.pick_tip_for_locale(maxi(1, GameManager.player_data.level), Localization.locale)
-	var category := str(tip.get("category", "tip" if Localization.locale == "en" else "收藏提示"))
+	var category := str(tip.get("category", Localization.t("ui.loading_tip.default_category")))
 	_loading_screen_ui.set_tip(category, str(tip.get("title", Localization.t("ui.login.prepare.title"))), str(tip.get("body", "")), str(tip.get("short_tip", "")))
 	_loading_screen_ui.set_progress(progress, status)
 	_loading_screen_ui.set_server_status(Localization.t("ui.login.loading.online"))

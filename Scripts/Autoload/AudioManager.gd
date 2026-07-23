@@ -23,10 +23,14 @@ const EVENT_COOLDOWNS: Dictionary = {
 	"hand_page": 0.16,
 	"draw_white": 0.10,
 	"draw_green": 0.14,
-	"draw_blue": 0.20,
+	"draw_blue": 0.05,
+	"draw_blue_flip": 0.0,
 	"draw_purple": 0.30,
+	"draw_purple_lightning": 0.35,
 	"draw_orange": 0.40,
+	"draw_orange_fire_ring": 0.60,
 	"draw_black": 0.80,
+	"draw_black_hole": 0.60,
 	"forge_start": 0.45,
 	"forge_art_flight": 0.02,
 	"forge_success_white": 0.60,
@@ -39,6 +43,7 @@ const EVENT_COOLDOWNS: Dictionary = {
 	"vault_store": 0.18,
 	"discard": 0.18,
 	"level_up": 0.80,
+	"stamina_full": 0.60,
 	"card_preview": 0.12,
 	"error_soft": 0.20,
 }
@@ -53,10 +58,14 @@ const EVENT_GAINS: Dictionary = {
 	"hand_page": 0.50,
 	"draw_white": 0.48,
 	"draw_green": 0.54,
-	"draw_blue": 0.60,
+	"draw_blue": 1.00,
+	"draw_blue_flip": 1.00,
 	"draw_purple": 0.68,
+	"draw_purple_lightning": 0.90,
 	"draw_orange": 0.72,
+	"draw_orange_fire_ring": 0.92,
 	"draw_black": 0.74,
+	"draw_black_hole": 0.92,
 	"forge_start": 0.64,
 	"forge_art_flight": 0.58,
 	"forge_success_white": 0.76,
@@ -72,6 +81,7 @@ const EVENT_GAINS: Dictionary = {
 	"currency_gold": 0.52,
 	"currency_gem": 0.56,
 	"level_up": 0.70,
+	"stamina_full": 0.64,
 	"card_preview": 0.378,
 	"error_soft": 0.48,
 }
@@ -95,6 +105,8 @@ var _last_variant_index: Dictionary = {}
 var _last_bgm_index: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 var _last_played_sfx_event: String = ""
+var _last_played_sfx_gain: float = 0.0
+var _last_played_sfx_pitch_scale: float = 0.0
 var _current_bgm_context: String = ""
 var _current_bgm_path: String = ""
 var _bgm_loop_enabled: bool = false
@@ -214,9 +226,16 @@ func _scan_audio_paths(root: String) -> Array[String]:
 
 ## 播放短音效。variation、微随机音高、节流和并发统一在这里处理。
 func play_sfx(sfx_name: String, volume: float = 1.0, pitch_variation: float = DEFAULT_PITCH_VARIATION) -> void:
+	_play_sfx_internal(sfx_name, volume, pitch_variation, false)
+
+## 全屏演出专用音效。它可以在 cinematic silence 状态下播放，但仍遵守玩家静音和 SFX 音量设置。
+func play_cinematic_sfx(sfx_name: String, volume: float = 1.0, pitch_variation: float = DEFAULT_PITCH_VARIATION) -> void:
+	_play_sfx_internal(sfx_name, volume, pitch_variation, true)
+
+func _play_sfx_internal(sfx_name: String, volume: float, pitch_variation: float, allow_cinematic: bool) -> void:
 	if not SFX_PLAYBACK_ENABLED:
 		return
-	if is_muted or sfx_volume <= 0.0 or _cinematic_silence_active:
+	if is_muted or sfx_volume <= 0.0 or (_cinematic_silence_active and not allow_cinematic):
 		return
 	if not _sfx_library.has(sfx_name):
 		if not _missing_sfx_warned.has(sfx_name):
@@ -254,6 +273,8 @@ func play_sfx(sfx_name: String, volume: float = 1.0, pitch_variation: float = DE
 	player.pitch_scale = maxf(0.05, event_pitch * (1.0 + _rng.randf_range(-absf(pitch_variation), absf(pitch_variation))))
 	var event_gain := float(EVENT_GAINS.get(sfx_name, 0.6))
 	var combined_gain := clampf(event_gain * volume, 0.0, 1.0)
+	_last_played_sfx_gain = combined_gain
+	_last_played_sfx_pitch_scale = player.pitch_scale
 	player.set_meta("ccr_sfx_gain", combined_gain)
 	player.volume_db = _volume_to_db(clampf(sfx_volume * combined_gain, 0.0, 1.0))
 	player.set_meta("ccr_sfx_started_msec", now)
@@ -339,28 +360,28 @@ func stop_bgm() -> void:
 	_current_bgm_path = ""
 	_bgm_player.stop()
 
-## 黑卡等全屏演出使用 Master 总线衰减，确保所有当前及未来音乐、音效播放器一起静音。
-## 这里只改变运行时总线，不改玩家保存的音乐、音效和静音设置。
+## 黑卡等全屏演出压低普通 BGM/SFX 播放器，但允许专用 cinematic SFX 在静默背景中发声。
+## 这里只改变运行时播放器音量，不改玩家保存的音乐、音效和静音设置。
 func fade_all_audio_to_silence(duration: float = 0.5) -> void:
-	if _master_bus_index < 0:
-		_master_bus_index = AudioServer.get_bus_index("Master")
-	if _master_bus_index < 0:
-		return
 	if _cinematic_audio_tween != null and _cinematic_audio_tween.is_valid():
 		_cinematic_audio_tween.kill()
-	if not _cinematic_silence_active:
-		_master_volume_before_cinematic = AudioServer.get_bus_volume_db(_master_bus_index)
 	_cinematic_silence_active = true
-	_cinematic_audio_tween = create_tween()
-	_cinematic_audio_tween.tween_method(_set_master_volume_db, AudioServer.get_bus_volume_db(_master_bus_index), -80.0, maxf(0.0, duration))
+	_cinematic_audio_tween = create_tween().set_parallel(true)
+	_cinematic_audio_tween.tween_property(_bgm_player, "volume_db", -80.0, maxf(0.0, duration))
+	for player in _sfx_players:
+		_cinematic_audio_tween.tween_property(player, "volume_db", -80.0, maxf(0.0, duration))
 
 func restore_all_audio(duration: float = 0.5) -> void:
-	if _master_bus_index < 0 or not _cinematic_silence_active:
+	if not _cinematic_silence_active:
 		return
 	if _cinematic_audio_tween != null and _cinematic_audio_tween.is_valid():
 		_cinematic_audio_tween.kill()
-	_cinematic_audio_tween = create_tween()
-	_cinematic_audio_tween.tween_method(_set_master_volume_db, AudioServer.get_bus_volume_db(_master_bus_index), _master_volume_before_cinematic, maxf(0.0, duration))
+	_cinematic_audio_tween = create_tween().set_parallel(true)
+	_cinematic_audio_tween.tween_property(_bgm_player, "volume_db", -80.0 if is_muted else _volume_to_db(bgm_volume), maxf(0.0, duration))
+	for player in _sfx_players:
+		var active_gain := float(player.get_meta("ccr_sfx_gain", 1.0))
+		var target_volume := -80.0 if is_muted else _volume_to_db(clampf(sfx_volume * active_gain, 0.0, 1.0))
+		_cinematic_audio_tween.tween_property(player, "volume_db", target_volume, maxf(0.0, duration))
 	_cinematic_audio_tween.finished.connect(func():
 		_cinematic_audio_tween = null
 		_cinematic_silence_active = false
@@ -402,6 +423,12 @@ func get_event_pitch_scale(event_name: String) -> float:
 
 func get_last_played_sfx_event() -> String:
 	return _last_played_sfx_event
+
+func get_last_played_sfx_gain() -> float:
+	return _last_played_sfx_gain
+
+func get_last_played_sfx_pitch_scale() -> float:
+	return _last_played_sfx_pitch_scale
 
 func _on_tree_node_added(node: Node) -> void:
 	if node is BaseButton:

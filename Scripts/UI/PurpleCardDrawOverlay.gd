@@ -8,6 +8,7 @@ const TELEPORT_DURATION: float = 0.30
 const REMATERIALIZE_DURATION: float = 0.40
 const SETTLE_DURATION: float = 0.35
 const TOTAL_DURATION: float = CHARGE_DURATION + TELEPORT_DURATION + REMATERIALIZE_DURATION + SETTLE_DURATION
+const LIGHTNING_SFX_EVENT := "draw_purple_lightning"
 
 const PURPLE_LIGHTNING_COLOR := Color(0.72, 0.22, 1.0, 1.0)
 const PURPLE_LIGHTNING_CORE_COLOR := Color(0.94, 0.78, 1.0, 1.0)
@@ -98,6 +99,7 @@ func play(delay: float = 0.0) -> void:
 	_sequence.tween_property(_electric_ring, "scale", Vector2.ONE, CHARGE_DURATION).set_delay(charge_start).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 	# 瞬移：紫色主雷击穿卡牌与卡槽，卡牌压缩为残光后消失。
+	_sequence.tween_callback(_play_lightning_sfx).set_delay(teleport_start)
 	_sequence.tween_property(_bolt_glow, "modulate:a", 1.0, TELEPORT_DURATION * 0.16).set_delay(teleport_start).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_sequence.tween_property(_bolt_core, "modulate:a", 1.0, TELEPORT_DURATION * 0.10).set_delay(teleport_start).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	for branch in _branch_bolts:
@@ -129,6 +131,9 @@ func cancel() -> void:
 		_sequence.kill()
 	_sequence = null
 	queue_free()
+
+func _play_lightning_sfx() -> void:
+	AudioManager.play_sfx(LIGHTNING_SFX_EVENT, 1.0, 0.0)
 
 func _make_bolt(node_name: String, bolt_width: float, bolt_color: Color) -> Line2D:
 	var bolt := Line2D.new()

@@ -25,7 +25,6 @@ const BUTTON_ICON_HOVER_SECONDS := 0.4
 const DIALOG_PANEL_PATH := "res://Resources/UI/Dialogs/ExitGame/exit_dialog_panel.png"
 const DIALOG_CONFIRM_BUTTON_PATH := "res://Resources/UI/Dialogs/ExitGame/exit_dialog_confirm_button.png"
 const DIALOG_CANCEL_BUTTON_PATH := "res://Resources/UI/Dialogs/ExitGame/exit_dialog_cancel_button.png"
-const DIALOG_CLOSE_BUTTON_PATH := "res://Resources/UI/Dialogs/ExitGame/exit_dialog_close_button.png"
 const DIALOG_PANEL_SIZE := Vector2(960, 394)
 const SETTINGS_PANEL_PATH := "res://Resources/UI/Settings/RelicPanel/settings_panel_scheme_c.png"
 
@@ -67,6 +66,9 @@ const ICON_PATHS := {
 	"status_stamina": "res://Resources/UI/Icons/Status/status_stamina.png",
 	"status_gold": "res://Resources/UI/Icons/Status/status_gold.png",
 	"status_gem": "res://Resources/UI/Icons/Status/status_gem.png",
+	"status_roll_green": "res://Resources/UI/Icons/Status/status_roll_green.png",
+	"status_roll_yellow": "res://Resources/UI/Icons/Status/status_roll_yellow.png",
+	"status_roll_red": "res://Resources/UI/Icons/Status/status_roll_red.png",
 	"status_level": "res://Resources/UI/Icons/Status/status_level.png",
 	"status_combat_power": "res://Resources/UI/Icons/Status/status_combat_power.png",
 	"status_experience": "res://Resources/UI/Icons/Status/status_experience.png",
@@ -313,6 +315,7 @@ static func configure_relic_button_metrics(
 		return
 	var icon_width := maxi(1, int(roundf(button_height * icon_height_ratio)))
 	button.add_theme_constant_override("icon_max_width", icon_width)
+	_configure_button_text_shift(button, float(icon_width))
 	_layout_button_icon(button, icon_width, button_height)
 
 static func get_button_icon(button: Button) -> TextureRect:
@@ -343,6 +346,14 @@ static func _layout_button_icon(button: Button, icon_size: float, button_height:
 	button_icon.custom_minimum_size = button_icon.size
 	button_icon.position = Vector2(center_x - icon_size * 0.5, (button.size.y - icon_size) * 0.5)
 	button_icon.pivot_offset = button_icon.size * 0.5
+
+static func _configure_button_text_shift(button: Button, icon_size: float) -> void:
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		var style := button.get_theme_stylebox(state) as StyleBoxTexture
+		if style == null:
+			continue
+		style.content_margin_left = 4.0 + maxf(1.0, icon_size)
+		style.content_margin_right = 4.0
 
 static func _ensure_button_icon_hover_animation(button: Button) -> void:
 	if button.has_meta("ccr_icon_hover_animation_bound"):

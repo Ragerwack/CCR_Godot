@@ -24,17 +24,29 @@ func _ready() -> void:
 
 	var gold_icon := currency.find_child("GoldIcon", true, false) as TextureRect
 	var gem_icon := currency.find_child("GemIcon", true, false) as TextureRect
+	var roll_icon := currency.find_child("RollPrefetchIcon", true, false) as TextureRect
 	var gold_roll := currency.find_child("GoldNumberRoll", true, false) as AssetNumberRoll
 	var gem_roll := currency.find_child("GemsNumberRoll", true, false) as AssetNumberRoll
 	var stamina_roll := currency.find_child("StaminaNumberRoll", true, false) as AssetNumberRoll
 	if (
 		gold_icon == null
 		or gem_icon == null
+		or roll_icon == null
 		or gold_roll == null
 		or gem_roll == null
 		or stamina_roll == null
 	):
 		return _fail("status_nodes_missing")
+	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_yellow"]):
+		return _fail("roll_prefetch_initial_icon_wrong")
+	CardPoolSystem.roll_prefetch_status_changed.emit(CardPoolSystem.ROLL_PREFETCH_STATUS_READY)
+	await get_tree().process_frame
+	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_green"]):
+		return _fail("roll_prefetch_ready_icon_wrong")
+	CardPoolSystem.roll_prefetch_status_changed.emit(CardPoolSystem.ROLL_PREFETCH_STATUS_ERROR)
+	await get_tree().process_frame
+	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_red"]):
+		return _fail("roll_prefetch_error_icon_wrong")
 	var base_width := currency.size.x
 	var right_edge := currency.global_position.x + currency.size.x
 	var gold_icon_x := gold_icon.global_position.x

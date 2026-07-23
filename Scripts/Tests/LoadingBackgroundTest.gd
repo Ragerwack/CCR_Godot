@@ -12,6 +12,9 @@ func _ready() -> void:
 	await _test_loading_tutorial_background()
 	if _failed:
 		return
+	await _test_loading_tutorial_locales()
+	if _failed:
+		return
 	await _test_splash_background()
 	if _failed:
 		return
@@ -22,6 +25,7 @@ func _ready() -> void:
 	get_tree().quit(0)
 
 func _test_loading_screen_scene() -> void:
+	Localization.set_locale("zh-CN")
 	var loading := LoadingScreenScene.instantiate()
 	add_child(loading)
 	await get_tree().process_frame
@@ -62,7 +66,7 @@ func _test_loading_screen_scene() -> void:
 		_fail("loading tip changed during one loading session")
 		return
 	var short_tip := loading.find_child("TipShortLabel", true, false) as Label
-	if short_tip == null or short_tip.text != "短提示 · 同卡组、同颜色、5 个不同编号，才能合成圣物。" or short_tip.autowrap_mode == TextServer.AUTOWRAP_OFF or short_tip.clip_text:
+	if short_tip == null or short_tip.text != Localization.t("ui.loading_tip.short_prefix") + " · 同卡组、同颜色、5 个不同编号，才能合成圣物。" or short_tip.autowrap_mode == TextServer.AUTOWRAP_OFF or short_tip.clip_text:
 		_fail("loading short tip did not render")
 		return
 	var title := loading.find_child("TipTitleLabel", true, false) as Label
@@ -150,6 +154,30 @@ func _test_loading_tutorial_background() -> void:
 		_fail("tutorial loading background is not stretch scale")
 		return
 	tutorial.queue_free()
+
+func _test_loading_tutorial_locales() -> void:
+	for locale in Localization.get_supported_locales():
+		Localization.set_locale(str(locale))
+		var tutorial := LoadingTutorialUIScript.new()
+		add_child(tutorial)
+		await get_tree().process_frame
+		tutorial.setup_for_level(30)
+		await get_tree().process_frame
+		var title := tutorial.find_child("TipTitleLabel", true, false) as Label
+		var body := tutorial.find_child("TipBodyLabel", true, false) as Label
+		var short_tip := tutorial.find_child("TipShortLabel", true, false) as Label
+		if title == null or title.text.is_empty() or body == null or body.text.is_empty() or short_tip == null or short_tip.text.is_empty():
+			_fail("localized tutorial text missing for " + str(locale))
+			return
+		if not short_tip.text.begins_with(Localization.t("ui.loading_tip.short_prefix") + " · "):
+			_fail("localized tutorial short prefix wrong for " + str(locale) + ": " + short_tip.text)
+			return
+		if str(locale) in ["en", "ja", "ko"] and short_tip.text.contains("短提示"):
+			_fail("non-Chinese tutorial short prefix contains Chinese for " + str(locale))
+			return
+		tutorial.queue_free()
+		await get_tree().process_frame
+	Localization.set_locale("en")
 
 func _test_splash_background() -> void:
 	ApiClient.logout()

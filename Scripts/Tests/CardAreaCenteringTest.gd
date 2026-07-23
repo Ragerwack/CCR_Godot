@@ -70,6 +70,8 @@ func _ready() -> void:
 		return
 	if not _assert_vault_right_region(vault_ui, side_width):
 		return
+	if not _assert_vault_slot_area_vertical_layout(main, vault_ui):
+		return
 
 	var long_short_ratio := viewport_size.y / side_width
 	var width_height_ratio := side_width / viewport_size.y
@@ -293,6 +295,24 @@ func _assert_vault_right_region(vault_ui: VaultUI, side_width: float) -> bool:
 		return false
 	if absf(action_panel.get_global_rect().get_center().x - expected_center_x) > CENTER_TOLERANCE:
 		_fail("vault_action_panel_not_centered_right_region")
+		return false
+	return true
+
+func _assert_vault_slot_area_vertical_layout(main: MainUI, vault_ui: VaultUI) -> bool:
+	var viewport := vault_ui.get("_slot_viewport") as ScrollContainer
+	var currency := main.get("_currency") as CurrencyUI
+	if viewport == null or currency == null:
+		_fail("vault_vertical_layout_nodes_missing")
+		return false
+	var viewport_rect := viewport.get_global_rect()
+	var vault_rect := vault_ui.get_global_rect()
+	var expected_center_y := vault_rect.get_center().y
+	if absf(viewport_rect.get_center().y - expected_center_y) > CENTER_TOLERANCE:
+		_fail("vault_slot_area_not_vertically_centered")
+		return false
+	var currency_bottom := currency.get_global_rect().end.y
+	if viewport_rect.position.y <= currency_bottom:
+		_fail("vault_slot_area_not_below_currency")
 		return false
 	return true
 
