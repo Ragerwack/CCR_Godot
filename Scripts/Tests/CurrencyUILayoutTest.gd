@@ -37,13 +37,91 @@ func _ready() -> void:
 		or stamina_roll == null
 	):
 		return _fail("status_nodes_missing")
+	currency.configure_icon_size(50.0)
+	await get_tree().process_frame
+	currency.offset_bottom = currency.offset_top + maxf(50.0, currency.get_required_row_height())
+	await get_tree().process_frame
+	if not _assert_status_center_alignment(
+		currency.find_child("StaminaIcon", true, false) as TextureRect,
+		stamina_roll,
+		"stamina"
+	):
+		return
+	if not _assert_status_center_alignment(gold_icon, gold_roll, "gold"):
+		return
+	if not _assert_status_center_alignment(gem_icon, gem_roll, "gem"):
+		return
+	var number_probe := AssetNumberRoll.new()
+	number_probe.name = "NumberCenterProbe"
+	number_probe.position = Vector2(24.0, 96.0)
+	number_probe.configure("NumberCenterProbeLabel", 18)
+	number_probe.set_display("123", 123, 0, false)
+	host.add_child(number_probe)
+	await get_tree().process_frame
+	if not _assert_number_digit_centers(number_probe, "standalone_123"):
+		return
+	number_probe.queue_free()
 	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_yellow"]):
 		return _fail("roll_prefetch_initial_icon_wrong")
-	CardPoolSystem.roll_prefetch_status_changed.emit(CardPoolSystem.ROLL_PREFETCH_STATUS_READY)
+	var test_matrix: Array = []
+	for _index in range(16):
+		test_matrix.append([0.1, 0.2, 0.3])
+	var test_cards: Array = []
+	for number in range(1, 6):
+		test_cards.append({
+			"card_def_id": 900 + number,
+			"number": number,
+			"name": "LED Test %d" % number,
+		})
+	CardPoolSystem._store_warm_roll("free", {
+		"roll_id": "00000000-0000-4000-8000-000000000090",
+		"signature": "led-readiness-test-signature",
+		"draw_key": {
+			"date_key": CardPoolSystem._beijing_date_key(),
+			"decks": [{
+				"deck_name": "LED Test Deck",
+				"series_name": "LED Test Series",
+				"cards": test_cards,
+			}],
+			"number_probabilities": {"1": 1.0},
+			"color_probabilities": {"white": 1.0},
+		},
+		"random_matrix": test_matrix,
+	})
 	await get_tree().process_frame
 	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_green"]):
 		return _fail("roll_prefetch_ready_icon_wrong")
-	CardPoolSystem.roll_prefetch_status_changed.emit(CardPoolSystem.ROLL_PREFETCH_STATUS_ERROR)
+	ApiClient._network_status = "unstable"
+	ApiClient.network_status_changed.emit("unstable")
+	await get_tree().process_frame
+	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_yellow"]):
+		return _fail("roll_prefetch_unstable_network_not_yellow")
+	ApiClient._network_status = "bad"
+	ApiClient.network_status_changed.emit("bad")
+	await get_tree().process_frame
+	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_red"]):
+		return _fail("roll_prefetch_bad_network_not_red")
+	ApiClient._network_status = "good"
+	ApiClient.network_status_changed.emit("good")
+	await get_tree().process_frame
+	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_green"]):
+		return _fail("roll_prefetch_network_recovery_not_green")
+	ApiClient._asset_request_pending_count = 1
+	ApiClient.asset_request_pending_changed.emit(true)
+	await get_tree().process_frame
+	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_yellow"]):
+		return _fail("roll_prefetch_asset_pending_not_yellow")
+	ApiClient._asset_request_pending_count = 0
+	ApiClient.asset_request_pending_changed.emit(false)
+	await get_tree().process_frame
+	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_green"]):
+		return _fail("roll_prefetch_asset_clear_not_green")
+	CardPoolSystem._warm_rolls.clear()
+	CardPoolSystem._publish_roll_prefetch_status()
+	await get_tree().process_frame
+	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_yellow"]):
+		return _fail("roll_prefetch_missing_roll_not_yellow")
+	CardPoolSystem._set_roll_prefetch_status(CardPoolSystem.ROLL_PREFETCH_STATUS_ERROR)
 	await get_tree().process_frame
 	if roll_icon.texture == null or roll_icon.texture.resource_path != str(CCRVisualStyle.ICON_PATHS["status_roll_red"]):
 		return _fail("roll_prefetch_error_icon_wrong")
@@ -157,6 +235,18 @@ func _ready() -> void:
 	GameManager.player_data.changed.emit()
 	if gold_roll.get_visible_outgoing_digit_count() != 0 or gem_roll.get_visible_outgoing_digit_count() != 0 or stamina_roll.get_visible_outgoing_digit_count() != 0:
 		return _fail("unchanged_assets_replayed_animation")
+	if gold_roll.get_current_digit_labels().size() != gold_roll.get_display_text().length():
+		return _fail("short_gold_value_kept_old_digit_placeholders")
+	if gem_roll.get_current_digit_labels().size() != gem_roll.get_display_text().length():
+		return _fail("short_gem_value_kept_old_digit_placeholders")
+	var short_gold_rect := _current_digits_global_rect(gold_roll)
+	var short_gem_rect := _current_digits_global_rect(gem_roll)
+	var gold_icon_gap := short_gold_rect.position.x - gold_icon.get_global_rect().end.x
+	var gem_icon_gap := short_gem_rect.position.x - gem_icon.get_global_rect().end.x
+	if gold_icon_gap > AssetNumberRoll.TEXT_HORIZONTAL_PADDING + 4.0:
+		return _fail("short_gold_value_kept_large_icon_gap=%.1f" % gold_icon_gap)
+	if gem_icon_gap > AssetNumberRoll.TEXT_HORIZONTAL_PADDING + 4.0:
+		return _fail("short_gem_value_kept_large_icon_gap=%.1f" % gem_icon_gap)
 
 	print("CURRENCY_UI_LAYOUT ok width=%d right=%.1f roll=gain_spend_stamina" % [currency.size.x, right_edge])
 	get_tree().quit(0)
@@ -227,3 +317,38 @@ func _currency_digit_labels(rolls: Array) -> Array[Label]:
 
 func _color_close(a: Color, b: Color, epsilon: float = 0.005) -> bool:
 	return absf(a.r - b.r) <= epsilon and absf(a.g - b.g) <= epsilon and absf(a.b - b.b) <= epsilon and absf(a.a - b.a) <= epsilon
+
+func _assert_status_center_alignment(icon: TextureRect, roll: AssetNumberRoll, label: String) -> bool:
+	if icon == null:
+		_fail("%s_icon_missing_for_center_check" % label)
+		return false
+	if not _assert_number_digit_centers(roll, label):
+		return false
+	var icon_center_y := icon.get_global_rect().get_center().y
+	var digit_center_y := _current_digits_global_rect(roll).get_center().y
+	if absf(icon_center_y - digit_center_y) > 1.0:
+		_fail("%s_icon_digit_center_mismatch icon=%.2f digits=%.2f" % [label, icon_center_y, digit_center_y])
+		return false
+	return true
+
+func _assert_number_digit_centers(roll: AssetNumberRoll, label: String) -> bool:
+	var expected_center_y := INF
+	for digit_label in roll.get_current_digit_labels():
+		if digit_label.text == "":
+			continue
+		var center_y := digit_label.get_global_rect().get_center().y
+		if expected_center_y == INF:
+			expected_center_y = center_y
+			continue
+		if absf(center_y - expected_center_y) > 0.1:
+			_fail("%s_digit_center_mismatch expected=%.2f actual=%.2f text=%s" % [
+				label,
+				expected_center_y,
+				center_y,
+				_join_current_digits(roll),
+			])
+			return false
+	if expected_center_y == INF:
+		_fail("%s_digit_center_empty" % label)
+		return false
+	return true

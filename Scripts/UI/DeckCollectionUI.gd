@@ -1,7 +1,10 @@
 extends Control
 class_name DeckCollectionUI
 
+signal filter_controls_rect_changed(rect: Rect2)
+
 const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+const CCRLinkedVerticalScrollBarScript = preload("res://Scripts/UI/CCRLinkedVerticalScrollBar.gd")
 
 # 博物馆 — 展示所有已合成圣物
 
@@ -14,14 +17,26 @@ const CARD_HORIZONTAL_SPACING: float = 4.0
 const SECTION_SPACING: float = 20.0
 const HEADER_HEIGHT: float = 32.0
 const FILTER_BAR_TOP: float = 12.0
-const FILTER_BAR_HEIGHT: float = 38.0
+const FILTER_BAR_HEIGHT: float = 56.0
 const FILTER_FONT_SIZE: int = 17
-const FILTER_CONTROL_FONT_SIZE: int = 14
+const FILTER_CONTROL_FONT_SIZE: int = FILTER_FONT_SIZE
+const FILTER_CONTROL_HEIGHT: float = 56.0
+const FILTER_OPTION_VISUAL_HEIGHT: int = 49
+const FILTER_RARITY_ICON_HEIGHT: int = 48
+const FILTER_BAR_GAP: int = 10
+const FILTER_PROGRESS_WIDTH: float = 220.0
+const FILTER_OPTION_WIDTH: float = 317.0
+const MUSEUM_SCROLLBAR_RESOURCE_ICON_HALF_WIDTH: float = 11.0
+const TODAY_DECK_KEY_ROW_HEIGHT: float = 26.0
+const TODAY_DECK_INFO_ROW_HEIGHT: float = 26.0
+const TODAY_DECK_CARD_ROW_SEPARATOR: float = 4.0
+const TODAY_DECK_SCROLL_BOTTOM_MARGIN: float = 18.0
 const VISUAL_RELIC_LABEL_HEIGHT: float = 72.0
 const RELIC_SCALE_MULTIPLIER: float = 1.30
 const RELIC_SCREEN_HEIGHT_RATIO: float = (3.0 / 5.0) * RELIC_SCALE_MULTIPLIER
 const MUSEUM_TEXT_DARK: Color = Color(0.10, 0.085, 0.065, 0.96)
 const MUSEUM_TEXT_MUTED: Color = Color(0.19, 0.16, 0.12, 0.88)
+const MUSEUM_RARITY_CHECK_TEXT: Color = Color(0.03, 0.025, 0.018, 1.0)
 const RELIC_VIEW_SCENE = preload("res://Scenes/UI/RelicView.tscn")
 const THUMBNAIL_CACHE = preload("res://Scripts/UI/MuseumRelicThumbnailCache.gd")
 const CardDisplayScript = preload("res://Scripts/UI/CardDisplay.gd")
@@ -63,15 +78,18 @@ const COLOR_ORDER: Array[int] = [
 ]
 
 var _scroll_container: ScrollContainer = null
+var _vertical_scrollbar: VScrollBar = null
 var _content: VBoxContainer = null
 var _empty_label: Label = null
 var _filter_bar: HBoxContainer = null
-var _color_filter_button: MenuButton = null
+var _color_filter_row: HBoxContainer = null
+var _color_filter_checks: Dictionary = {}
 var _sort_option: OptionButton = null
 var _series_option: OptionButton = null
-var _collection_progress_label: Label = null
+var _collection_progress_label: LineEdit = null
 var _last_render_viewport_height: float = 0.0
 var _resize_render_queued: bool = false
+var _filter_geometry_emit_queued: bool = false
 var _view_overlay: Control = null
 var _view_blur: ColorRect = null
 var _view_relic: TextureRect = null
@@ -91,6 +109,8 @@ var _available_colors: Array[int] = []
 var _selected_series: String = TODAY_VISIBLE_SERIES_FILTER
 var _sort_mode: String = "standard"
 var _top_padding: float = FILTER_BAR_TOP
+var _session_scroll_vertical: int = 0
+var _restore_scroll_pending: bool = false
 
 static var _session_filter_state: Dictionary = {}
 
@@ -105,6 +125,19 @@ func _ready() -> void:
 	setup_ui()
 	_restore_session_filter_state()
 	render_decks()
+	if not Localization.locale_changed.is_connected(_on_locale_changed):
+		Localization.locale_changed.connect(_on_locale_changed)
+
+func _on_locale_changed(_locale: String) -> void:
+	if not is_inside_tree():
+		return
+	# 当前筛选值历史上保存的是显示文本；语言切换后旧语言名称不能
+	# 再作为新语言的筛选条件，清除具体系列并保留“今日可见”语义。
+	if _selected_series != TODAY_VISIBLE_SERIES_FILTER:
+		_selected_series = ""
+	if _empty_label != null:
+		_empty_label.text = Localization.t("ui.deck_collection.empty")
+	render_decks()
 
 func configure_layout(top_padding: float) -> void:
 	_top_padding = maxf(0.0, top_padding)
@@ -114,8 +147,11 @@ func configure_layout(top_padding: float) -> void:
 func _notification(what: int) -> void:
 	if what != NOTIFICATION_RESIZED or not is_node_ready() or _content == null:
 		return
+	_layout_empty_label()
+	_queue_filter_controls_rect_changed()
 	var viewport_height := get_viewport_rect().size.y
 	if absf(viewport_height - _last_render_viewport_height) <= 1.0 or _resize_render_queued:
+		_layout_vertical_scrollbar()
 		return
 	_resize_render_queued = true
 	call_deferred("_rerender_after_viewport_resize")
@@ -130,64 +166,83 @@ func setup_ui() -> void:
 
 	# 空状态提示（初始隐藏）
 	_empty_label = Label.new()
-	_empty_label.set_anchors_preset(Control.PRESET_CENTER)
-	_empty_label.position = Vector2(0, 20)
-	_empty_label.size = Vector2(400, 40)
+	_empty_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_empty_label.size = Vector2(520, 40)
 	_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_empty_label.text = Localization.t("ui.deck_collection.empty")
 	_empty_label.add_theme_font_size_override("font_size", 16)
 	_empty_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 1.0))
 	_empty_label.visible = false
 	_empty_label.name = "MuseumEmpty"
 	add_child(_empty_label)
+	_layout_empty_label()
 
 	# 滚动容器
 	_scroll_container = ScrollContainer.new()
+	_scroll_container.name = "DeckCollectionScroll"
 	_scroll_container.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_scroll_container.offset_top = _top_padding + FILTER_BAR_HEIGHT + 8.0
 	_scroll_container.offset_bottom = 0
 	_scroll_container.offset_left = 0
-	_scroll_container.offset_right = 0
+	_scroll_container.offset_right = -_scrollbar_reserved_width()
 	add_child(_scroll_container)
 
 	_content = VBoxContainer.new()
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_content.custom_minimum_size = Vector2(size.x, 0.0)
+	_content.custom_minimum_size = Vector2(_content_width(), 0.0)
 	_content.add_theme_constant_override("separation", SECTION_SPACING)
 	_scroll_container.add_child(_content)
+
+	_vertical_scrollbar = CCRLinkedVerticalScrollBarScript.new() as VScrollBar
+	_vertical_scrollbar.name = "MuseumVerticalScrollbar"
+	_vertical_scrollbar.z_index = 8
+	add_child(_vertical_scrollbar)
+	_vertical_scrollbar.call("bind_scroll_container", _scroll_container)
+	_layout_vertical_scrollbar()
 
 func _create_filter_bar() -> void:
 	_filter_bar = HBoxContainer.new()
 	_filter_bar.name = "MuseumFilterBar"
 	_filter_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_filter_bar.offset_left = 0
-	_filter_bar.offset_right = 0
+	_filter_bar.offset_right = -_scrollbar_reserved_width()
 	_filter_bar.offset_top = _top_padding
 	_filter_bar.offset_bottom = _top_padding + FILTER_BAR_HEIGHT
-	_filter_bar.add_theme_constant_override("separation", 0)
+	_filter_bar.add_theme_constant_override("separation", FILTER_BAR_GAP)
+	_filter_bar.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_filter_bar.resized.connect(_queue_filter_controls_rect_changed)
 	add_child(_filter_bar)
 
-	_collection_progress_label = Label.new()
+	_collection_progress_label = LineEdit.new()
 	_collection_progress_label.name = "MuseumCollectionProgress"
-	_collection_progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_collection_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_collection_progress_label.editable = false
+	_collection_progress_label.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_collection_progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_collection_progress_label.custom_minimum_size = Vector2(FILTER_PROGRESS_WIDTH, FILTER_CONTROL_HEIGHT)
+	_collection_progress_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_collection_progress_label.add_theme_font_size_override("font_size", FILTER_FONT_SIZE)
-	_collection_progress_label.add_theme_color_override("font_color", MUSEUM_TEXT_DARK)
-	_filter_bar.add_child(_filter_cell(_collection_progress_label, HORIZONTAL_ALIGNMENT_LEFT))
-
-	_color_filter_button = MenuButton.new()
-	_color_filter_button.name = "MuseumColorFilter"
-	_color_filter_button.get_popup().id_pressed.connect(_on_color_filter_pressed)
-	_apply_filter_control_text_style(_color_filter_button)
-	_apply_filter_control_text_style(_color_filter_button.get_popup())
+	CCRVisualStyle.apply_settings_line_edit(_collection_progress_label)
+	CCRVisualStyle.apply_settings_line_edit_height(_collection_progress_label, int(FILTER_CONTROL_HEIGHT))
+	_apply_collection_progress_text_color()
+	_filter_bar.add_child(_collection_progress_label)
 
 	_series_option = OptionButton.new()
 	_series_option.name = "MuseumSeriesOption"
 	_series_option.item_selected.connect(_on_series_selected)
-	_apply_filter_control_text_style(_series_option)
-	_filter_bar.add_child(_filter_cell(_series_option, HORIZONTAL_ALIGNMENT_CENTER))
+	_series_option.add_theme_font_size_override("font_size", FILTER_CONTROL_FONT_SIZE)
+	CCRVisualStyle.apply_settings_option_button(_series_option)
+	_configure_filter_option_button(_series_option)
+	_filter_bar.add_child(_series_option)
 
-	_filter_bar.add_child(_filter_cell(_color_filter_button, HORIZONTAL_ALIGNMENT_CENTER))
+	_color_filter_row = HBoxContainer.new()
+	_color_filter_row.name = "MuseumColorFilter"
+	_color_filter_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_color_filter_row.custom_minimum_size.y = FILTER_CONTROL_HEIGHT
+	_color_filter_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_color_filter_row.add_theme_constant_override("separation", 6)
+	_color_filter_row.minimum_size_changed.connect(_queue_filter_controls_rect_changed)
+	_filter_bar.add_child(_color_filter_row)
 
 	_sort_option = OptionButton.new()
 	_sort_option.name = "MuseumSortOption"
@@ -199,36 +254,65 @@ func _create_filter_bar() -> void:
 	_sort_option.set_item_metadata(2, "standard")
 	_sort_option.select(2)
 	_sort_option.item_selected.connect(_on_sort_selected)
-	_apply_filter_control_text_style(_sort_option)
-	_filter_bar.add_child(_filter_cell(_sort_option, HORIZONTAL_ALIGNMENT_RIGHT))
+	_sort_option.add_theme_font_size_override("font_size", FILTER_CONTROL_FONT_SIZE)
+	CCRVisualStyle.apply_settings_option_button(_sort_option)
+	_configure_filter_option_button(_sort_option)
+	_filter_bar.add_child(_sort_option)
 
-	var spacer := Control.new()
-	spacer.name = "MuseumFilterBarSpacer"
-	spacer.custom_minimum_size = Vector2(0, FILTER_BAR_HEIGHT)
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_filter_bar.add_child(spacer)
+func _configure_filter_option_button(option: OptionButton) -> void:
+	if option == null:
+		return
+	var control_size := Vector2i(int(roundf(FILTER_OPTION_WIDTH)), int(roundf(FILTER_CONTROL_HEIGHT)))
+	CCRVisualStyle.apply_settings_option_button_geometry(option, control_size, FILTER_OPTION_VISUAL_HEIGHT)
+	option.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	option.get_popup().add_theme_font_size_override("font_size", FILTER_CONTROL_FONT_SIZE)
+	option.resized.connect(_queue_filter_controls_rect_changed)
 
-func _filter_cell(child: Control, align: HorizontalAlignment) -> Control:
+func get_filter_controls_global_rect() -> Rect2:
+	if _collection_progress_label == null or _sort_option == null or not _collection_progress_label.is_inside_tree() or not _sort_option.is_inside_tree():
+		return Rect2()
+	var first_rect := _collection_progress_label.get_global_rect()
+	var last_rect := _sort_option.get_global_rect()
+	return Rect2(first_rect.position, last_rect.end - first_rect.position)
+
+func _queue_filter_controls_rect_changed() -> void:
+	if _filter_geometry_emit_queued or not is_inside_tree():
+		return
+	_filter_geometry_emit_queued = true
+	_emit_filter_controls_rect_changed.call_deferred()
+
+func _emit_filter_controls_rect_changed() -> void:
+	await get_tree().process_frame
+	_filter_geometry_emit_queued = false
+	if not is_inside_tree():
+		return
+	var rect := get_filter_controls_global_rect()
+	if rect.size.x > 0.0:
+		filter_controls_rect_changed.emit(rect)
+
+func _filter_cell(child: Control, align: HorizontalAlignment, min_width: float, expand: bool = false) -> Control:
 	var cell := Control.new()
-	cell.custom_minimum_size = Vector2(0, FILTER_BAR_HEIGHT)
-	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cell.custom_minimum_size = Vector2(min_width, FILTER_BAR_HEIGHT)
+	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL if expand else Control.SIZE_SHRINK_CENTER
 	child.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	child.custom_minimum_size = Vector2(170, FILTER_BAR_HEIGHT - 6.0)
+	child.custom_minimum_size = Vector2(maxf(child.custom_minimum_size.x, min_width), FILTER_BAR_HEIGHT)
 	child.size = child.custom_minimum_size
 	child.position = Vector2.ZERO
 	cell.add_child(child)
 	cell.resized.connect(func():
-		var child_width := minf(maxf(child.custom_minimum_size.x, 160.0), cell.size.x)
-		if child == _series_option:
-			child_width = minf(maxf(child.custom_minimum_size.x, 210.0), cell.size.x)
-		child.size = Vector2(child_width, FILTER_BAR_HEIGHT - 6.0)
+		var child_width := maxf(child.custom_minimum_size.x, min_width)
+		if expand:
+			child_width = maxf(child_width, cell.size.x)
+		else:
+			child_width = minf(child_width, cell.size.x)
+		child.size = Vector2(child_width, FILTER_BAR_HEIGHT)
 		match align:
 			HORIZONTAL_ALIGNMENT_RIGHT:
-				child.position = Vector2(cell.size.x - child_width, 3.0)
+				child.position = Vector2(cell.size.x - child_width, 0.0)
 			HORIZONTAL_ALIGNMENT_CENTER:
-				child.position = Vector2((cell.size.x - child_width) * 0.5, 3.0)
+				child.position = Vector2((cell.size.x - child_width) * 0.5, 0.0)
 			_:
-				child.position = Vector2(0.0, 3.0)
+				child.position = Vector2(0.0, 0.0)
 	)
 	return cell
 
@@ -236,15 +320,60 @@ func _apply_shell_layout() -> void:
 	if _filter_bar != null:
 		_filter_bar.offset_top = _top_padding
 		_filter_bar.offset_bottom = _top_padding + FILTER_BAR_HEIGHT
+		_filter_bar.offset_right = -_scrollbar_reserved_width()
 	if _scroll_container != null:
 		_scroll_container.offset_top = _top_padding + FILTER_BAR_HEIGHT + 8.0
+		_scroll_container.offset_right = -_scrollbar_reserved_width()
+	_layout_empty_label()
+	_layout_vertical_scrollbar()
+
+func _layout_empty_label() -> void:
+	if _empty_label == null:
+		return
+	var viewport_size := get_viewport_rect().size
+	var center_global: Vector2 = viewport_size * 0.5
+	var center_local: Vector2 = center_global - global_position if is_inside_tree() else size * 0.5
+	_empty_label.position = center_local - _empty_label.size * 0.5
+
+func _layout_vertical_scrollbar() -> void:
+	if _vertical_scrollbar == null:
+		return
+	var first_card_top := _today_deck_first_card_top()
+	var last_card_bottom := _today_deck_last_card_bottom()
+	var protected_caps_height := float(CCRVisualStyle.SETTINGS_VERTICAL_SCROLLBAR_TRACK_END_MARGIN * 2)
+	var scrollbar_height := maxf(protected_caps_height, last_card_bottom - first_card_top)
+	var scrollbar_size := Vector2(CCRLinkedVerticalScrollBarScript.CONTROL_SIZE.x, scrollbar_height)
+	_vertical_scrollbar.size = scrollbar_size
+	_vertical_scrollbar.custom_minimum_size = scrollbar_size
+	var scrollbar_x := maxf(0.0, size.x - scrollbar_size.x - MUSEUM_SCROLLBAR_RESOURCE_ICON_HALF_WIDTH)
+	_vertical_scrollbar.position = Vector2(scrollbar_x, first_card_top)
+
+func _today_deck_first_card_top() -> float:
+	var scroll_top := _top_padding + TODAY_DECK_KEY_ROW_HEIGHT + 10.0
+	return scroll_top + TODAY_DECK_INFO_ROW_HEIGHT + TODAY_DECK_CARD_ROW_SEPARATOR
+
+func _today_deck_last_card_bottom() -> float:
+	var scroll_top := _top_padding + TODAY_DECK_KEY_ROW_HEIGHT + 10.0
+	var scroll_bottom := maxf(scroll_top, size.y - TODAY_DECK_SCROLL_BOTTOM_MARGIN)
+	return scroll_bottom - _today_deck_card_shadow_bottom_bleed()
+
+func _today_deck_card_shadow_bottom_bleed() -> float:
+	return float(CardDisplay.CARD_SHADOW_SIZE) + maxf(0.0, CardDisplay.CARD_SHADOW_OFFSET.y)
+
+func _content_width() -> float:
+	return maxf(0.0, size.x - _scrollbar_reserved_width())
+
+func _scrollbar_reserved_width() -> float:
+	return CCRLinkedVerticalScrollBarScript.CONTROL_SIZE.x + MUSEUM_SCROLLBAR_RESOURCE_ICON_HALF_WIDTH
 
 func render_decks() -> void:
 	_last_render_viewport_height = get_viewport_rect().size.y
 	var render_started := Time.get_ticks_msec()
 	FileLogger.perf("ui_render_start", {"page": "deck_panel", "component": "deck_grid"})
+	_capture_scroll_vertical()
 	if _content != null:
-		_content.custom_minimum_size.x = size.x
+		_content.custom_minimum_size.x = _content_width()
+	_layout_vertical_scrollbar()
 	# 清空内容
 	for child in _content.get_children():
 		_content.remove_child(child)
@@ -281,7 +410,37 @@ func render_decks() -> void:
 	# 以单一五列网格展示全部圣物。颜色仍可通过筛选器筛选，避免按颜色分组后
 	# 每组只有一件时退化成“一行一个”的展示。
 	_content.add_child(_create_card_grid(relics))
+	_schedule_scroll_restore()
 	FileLogger.perf("ui_render_done", {"page": "deck_panel", "component": "relic_grid", "count": all_decks.size(), "display_count": relics.size(), "total_ms": Time.get_ticks_msec() - render_started})
+
+func get_session_scroll_vertical() -> int:
+	if _scroll_container != null:
+		return _scroll_container.scroll_vertical
+	return _session_scroll_vertical
+
+func set_session_scroll_vertical(value: int) -> void:
+	_session_scroll_vertical = maxi(0, value)
+	_schedule_scroll_restore()
+
+func _capture_scroll_vertical() -> void:
+	if _scroll_container == null or _restore_scroll_pending:
+		return
+	_session_scroll_vertical = _scroll_container.scroll_vertical
+
+func _schedule_scroll_restore() -> void:
+	if _scroll_container == null or _restore_scroll_pending:
+		return
+	_restore_scroll_pending = true
+	_restore_session_scroll_vertical.call_deferred()
+
+func _restore_session_scroll_vertical() -> void:
+	if not is_inside_tree():
+		_restore_scroll_pending = false
+		return
+	await get_tree().process_frame
+	if is_instance_valid(_scroll_container):
+		_scroll_container.scroll_vertical = _session_scroll_vertical
+	_restore_scroll_pending = false
 
 func _aggregate_relics(decks: Array[Deck]) -> Array[Dictionary]:
 	var by_key: Dictionary = {}
@@ -293,6 +452,8 @@ func _aggregate_relics(decks: Array[Deck]) -> Array[Dictionary]:
 				"id": d.id,
 				"deck_def_id": d.deck_def_id,
 				"deck_def_key": d.deck_def_key,
+				"deck_asset_id": d.deck_asset_id,
+				"series_asset_id": d.series_asset_id,
 				"series_name": d.series_name,
 				"deck_name": d.deck_name,
 				"color": int(d.color),
@@ -331,24 +492,54 @@ func _update_color_filter_options(relics: Array[Dictionary]) -> void:
 		if not _selected_colors.has(color_type):
 			_selected_colors[color_type] = true
 
-	var popup := _color_filter_button.get_popup()
-	popup.clear()
+	_rebuild_color_filter_checks(colors)
 	for color_type in colors:
-		popup.add_check_item(_museum_relic_tier_name(color_type), color_type)
-		var item_index := popup.get_item_index(color_type)
-		if item_index >= 0:
-			popup.set_item_checked(item_index, bool(_selected_colors.get(color_type, true)))
-	_update_color_filter_button_text()
+		var check_box := _color_filter_checks.get(color_type) as CheckBox
+		if check_box != null:
+			check_box.set_pressed_no_signal(bool(_selected_colors.get(color_type, true)))
 
-func _update_color_filter_button_text() -> void:
-	var selected_names: Array[String] = []
-	for color_type in _available_colors:
-		if bool(_selected_colors.get(color_type, true)):
-			selected_names.append(_museum_relic_tier_name(color_type))
-	if selected_names.size() == _available_colors.size() or selected_names.is_empty():
-		_color_filter_button.text = Localization.t("ui.deck_collection.filter.colors_all")
-	else:
-		_color_filter_button.text = Localization.t("ui.deck_collection.filter.colors", [", ".join(selected_names)])
+func _rebuild_color_filter_checks(colors: Array[int]) -> void:
+	if _color_filter_row == null:
+		return
+	var wanted: Dictionary = {}
+	for color_type in colors:
+		wanted[color_type] = true
+	for color_type in _color_filter_checks.keys():
+		if wanted.has(int(color_type)):
+			continue
+		var stale_check := _color_filter_checks[color_type] as CheckBox
+		if stale_check != null and is_instance_valid(stale_check):
+			_color_filter_row.remove_child(stale_check)
+			stale_check.queue_free()
+		_color_filter_checks.erase(color_type)
+	for color_type in colors:
+		var check_box := _color_filter_checks.get(color_type) as CheckBox
+		if check_box == null:
+			check_box = CheckBox.new()
+			check_box.name = "MuseumColorFilter%d" % color_type
+			check_box.text = _museum_relic_tier_name(color_type)
+			check_box.button_pressed = bool(_selected_colors.get(color_type, true))
+			check_box.custom_minimum_size = Vector2(0.0, FILTER_CONTROL_HEIGHT)
+			check_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			check_box.add_theme_font_size_override("font_size", FILTER_CONTROL_FONT_SIZE)
+			CCRVisualStyle.apply_settings_check_box(check_box)
+			CCRVisualStyle.apply_settings_check_box_icon_size(check_box, FILTER_RARITY_ICON_HEIGHT)
+			_apply_museum_rarity_check_text_color(check_box)
+			check_box.toggled.connect(_on_color_filter_toggled.bind(color_type))
+			_color_filter_checks[color_type] = check_box
+			_color_filter_row.add_child(check_box)
+		_color_filter_row.move_child(check_box, colors.find(color_type))
+	_queue_filter_controls_rect_changed()
+
+func _apply_museum_rarity_check_text_color(check_box: CheckBox) -> void:
+	if check_box == null:
+		return
+	check_box.add_theme_color_override("font_color", MUSEUM_RARITY_CHECK_TEXT)
+	check_box.add_theme_color_override("font_hover_color", MUSEUM_RARITY_CHECK_TEXT)
+	check_box.add_theme_color_override("font_pressed_color", MUSEUM_RARITY_CHECK_TEXT)
+	check_box.add_theme_color_override("font_focus_color", MUSEUM_RARITY_CHECK_TEXT)
+	check_box.add_theme_color_override("font_disabled_color", MUSEUM_RARITY_CHECK_TEXT)
+	check_box.add_theme_constant_override("outline_size", 0)
 
 func _update_series_filter_options(relics: Array[Dictionary]) -> void:
 	var series_set: Dictionary = {}
@@ -397,9 +588,11 @@ func _apply_color_filter(relics: Array[Dictionary]) -> Array[Dictionary]:
 		if bool(_selected_colors.get(color_type, true)):
 			has_active_color = true
 			break
+	if not has_active_color:
+		return filtered
 	for relic in relics:
 		var color_type := int(relic.get("color", CardColor.ColorType.WHITE))
-		if has_active_color and not bool(_selected_colors.get(color_type, true)):
+		if not bool(_selected_colors.get(color_type, true)):
 			continue
 		filtered.append(relic)
 	return filtered
@@ -409,6 +602,8 @@ func _is_today_visible_relic(relic: Dictionary) -> bool:
 	if not decks is Array:
 		return false
 	var relic_id := int(relic.get("deck_def_id", 0))
+	var relic_deck_asset_id := int(relic.get("deck_asset_id", 0))
+	var relic_series_asset_id := int(relic.get("series_asset_id", 0))
 	var relic_key := str(relic.get("deck_def_key", ""))
 	var relic_series := str(relic.get("series_name", ""))
 	var relic_deck := str(relic.get("deck_name", ""))
@@ -418,6 +613,13 @@ func _is_today_visible_relic(relic: Dictionary) -> bool:
 		var deck_data := deck as Dictionary
 		var deck_id := int(deck_data.get("deck_def_id", 0))
 		if relic_id > 0 and deck_id > 0 and relic_id == deck_id:
+			return true
+		if (
+			relic_series_asset_id > 0
+			and relic_deck_asset_id > 0
+			and relic_series_asset_id == int(deck_data.get("series_asset_id", 0))
+			and relic_deck_asset_id == int(deck_data.get("deck_asset_id", 0))
+		):
 			return true
 		var deck_key := str(deck_data.get("deck_def_key", ""))
 		if relic_key != "" and deck_key != "" and relic_key == deck_key:
@@ -490,6 +692,11 @@ func _on_color_filter_pressed(id: int) -> void:
 	_save_session_filter_state()
 	render_decks()
 
+func _on_color_filter_toggled(pressed: bool, color_type: int) -> void:
+	_selected_colors[color_type] = pressed
+	_save_session_filter_state()
+	render_decks()
+
 func _on_sort_selected(index: int) -> void:
 	_sort_mode = str(_sort_option.get_item_metadata(index))
 	_save_session_filter_state()
@@ -531,8 +738,8 @@ func _create_card_grid(relics: Array) -> Container:
 	var flow = HFlowContainer.new()
 	flow.name = "MuseumRelicGrid"
 	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	flow.custom_minimum_size = Vector2(size.x, 0.0)
-	flow.size = Vector2(size.x, 0.0)
+	flow.custom_minimum_size = Vector2(_content_width(), 0.0)
+	flow.size = Vector2(_content_width(), 0.0)
 	flow.add_theme_constant_override("h_separation", CARD_HORIZONTAL_SPACING)
 	flow.add_theme_constant_override("v_separation", CARD_SPACING)
 
@@ -545,7 +752,7 @@ func _create_card_grid(relics: Array) -> Container:
 func _get_relics_that_fit_first_row(relics: Array) -> int:
 	if relics.is_empty():
 		return 0
-	var available_width := size.x
+	var available_width := _content_width()
 	if available_width <= 1.0:
 		available_width = get_viewport_rect().size.x
 	var used_width := 0.0
@@ -1073,9 +1280,13 @@ func _apply_relic_label_rect(label: Label, layout: Dictionary, relic_width: floa
 	)
 
 func _get_relic_cards(relic: Dictionary) -> Array:
+	var series_asset_id := int(relic.get("series_asset_id", 0))
+	var deck_asset_id := int(relic.get("deck_asset_id", 0))
+	var cards: Array = CardDataManager.get_cards_by_asset_ids(series_asset_id, deck_asset_id)
 	var deck_def_key := str(relic.get("deck_def_key", ""))
 	var deck_def_id := int(relic.get("deck_def_id", 0))
-	var cards: Array = CardDataManager.get_cards_by_deck_key(deck_def_key) if deck_def_key != "" else []
+	if cards.is_empty() and deck_def_key != "":
+		cards = CardDataManager.get_cards_by_deck_key(deck_def_key)
 	if cards.is_empty() and deck_def_id > 0:
 		cards = CardDataManager.get_cards_by_deck_id(deck_def_id)
 	if cards.is_empty():
@@ -1128,6 +1339,12 @@ func _get_color_text(color_type: int) -> Color:
 func refresh() -> void:
 	render_decks()
 
+func contains_relic(deck_definition_id: int, color_type: int) -> bool:
+	for deck in DeckSystem.player_decks:
+		if deck != null and int(deck.deck_def_id) == deck_definition_id and int(deck.color) == color_type:
+			return true
+	return false
+
 func _museum_relic_tier_name(color_type: int) -> String:
 	match color_type:
 		CardColor.ColorType.WHITE:
@@ -1153,6 +1370,13 @@ func _apply_filter_control_text_style(control) -> void:
 		control.add_theme_color_override(color_name, MUSEUM_TEXT_DARK)
 	control.add_theme_color_override("font_disabled_color", Color(MUSEUM_TEXT_DARK, 0.42))
 	control.add_theme_font_size_override("font_size", FILTER_CONTROL_FONT_SIZE)
+
+func _apply_collection_progress_text_color() -> void:
+	if _collection_progress_label == null:
+		return
+	_collection_progress_label.add_theme_color_override("font_color", CCRVisualStyle.SETTINGS_TEXT)
+	_collection_progress_label.add_theme_color_override("font_readonly_color", CCRVisualStyle.SETTINGS_TEXT)
+	_collection_progress_label.add_theme_color_override("font_uneditable_color", CCRVisualStyle.SETTINGS_TEXT)
 
 func _restore_session_filter_state() -> void:
 	if _session_filter_state.is_empty():
@@ -1201,7 +1425,7 @@ func _selected_color_count_for_progress() -> int:
 	for color_type in _available_colors:
 		if bool(_selected_colors.get(color_type, true)):
 			selected_count += 1
-	return selected_count if selected_count > 0 else _available_colors.size()
+	return selected_count
 
 func _available_deck_def_count_for_progress() -> int:
 	if _selected_series == TODAY_VISIBLE_SERIES_FILTER:

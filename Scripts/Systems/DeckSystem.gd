@@ -10,6 +10,9 @@ signal synthesis_completed(exp_reward: int)
 
 var player_decks: Array[Deck] = []
 
+func reset_account_state() -> void:
+	player_decks.clear()
+
 func check_synthesis_cards(cards: Array[CardInfo]) -> bool:
 	if cards.size() != 5:
 		return false
@@ -57,6 +60,10 @@ func synthesize(cards: Array[CardInfo]) -> bool:
 		"%s_%s_%d" % [card.series_name, card.deck_name, card.color],
 		card.series_name, card.deck_name, card.color
 	)
+	deck.deck_def_id = card.deck_definition_id
+	deck.series_definition_id = card.series_definition_id
+	deck.deck_asset_id = card.deck_asset_id
+	deck.series_asset_id = card.series_asset_id
 	for i in range(1, 6):
 		deck.add_card_number(i)
 	player_decks.append(deck)
@@ -70,17 +77,21 @@ func add_synthesized_deck(deck_data: Dictionary) -> void:
 	var deck_id = deck_data.get("id", "")
 	var deck_def_id := 0
 	var deck_def_key := ""
+	var deck_asset_id := 0
+	var series_asset_id := 0
 	var series_name = ""
 	var deck_name = ""
 
 	var dd = deck_data.get("deck_def", {})
 	if dd is Dictionary:
 		deck_def_id = int(dd.get("id", 0))
+		deck_asset_id = int(dd.get("asset_id", dd.get("deck_asset_id", 0)))
 		deck_def_key = str(dd.get("name", ""))
 		deck_name = str(dd.get("description", dd.get("name", "")))
 
 	var s = deck_data.get("series", {})
 	if s is Dictionary:
+		series_asset_id = int(s.get("asset_id", s.get("series_asset_id", 0)))
 		series_name = s.get("name", "")
 
 	var color = CardColor.from_string(str(deck_data.get("color", "white")))
@@ -89,9 +100,20 @@ func add_synthesized_deck(deck_data: Dictionary) -> void:
 	var deck = _CCRData.Deck.new(str(deck_id), series_name, deck_name, color)
 	deck.deck_def_id = deck_def_id
 	deck.deck_def_key = deck_def_key
+	deck.series_definition_id = int(s.get("id", 0)) if s is Dictionary else 0
+	deck.deck_asset_id = deck_asset_id
+	deck.series_asset_id = series_asset_id
 	deck.combat_power = combat_power
+	deck.status = str(deck_data.get("status", "active"))
+	deck.created_date_beijing = str(deck_data.get("created_date_beijing", ""))
+	deck.created_at_iso = str(deck_data.get("created_at", ""))
+	if deck.created_at_iso != "":
+		deck.created_at_unix = Time.get_unix_time_from_datetime_string(deck.created_at_iso)
 	for i in range(1, 6):
 		deck.add_card_number(i)
+	# 博物馆快照和合成响应可能来自未完成 locale seed 的服务器缓存。
+	# 在正式载入入口立即按客户端当前语言规范化，避免下拉框直接使用英文原文。
+	CardDataManager.localize_deck_in_place(deck)
 	player_decks.append(deck)
 	deck_updated.emit(deck)
 	call_deferred("_prewarm_museum_thumbnail", deck)

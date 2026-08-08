@@ -329,6 +329,8 @@ func _on_synthesis_succeeded(result: Dictionary) -> void:
 	var deck_data = result.get("deck", {})
 	if not deck_data.is_empty():
 		DeckSystem.add_synthesized_deck(deck_data)
+		GameManager.apply_confirmed_synthesis_combat_power(deck_data)
+	GameManager.player_data.changed.emit()
 
 	synthesis_completed.emit(result)
 	await GameManager.sync_reward_state_from_server()

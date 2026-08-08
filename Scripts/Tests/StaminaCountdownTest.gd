@@ -131,6 +131,10 @@ func _assert_stamina_info_between_buttons(ui: CardPoolUI) -> bool:
 	if countdown_label == null or cost_label == null or gold_cost_label == null or gem_cost_label == null:
 		_fail("stamina_info_nodes_missing")
 		return false
+	for hint_label in [countdown_label, cost_label, gold_cost_label, gem_cost_label]:
+		if not _color_close(hint_label.get_theme_color("font_color"), Color.BLACK):
+			_fail("draw_hint_text_is_not_black")
+			return false
 	var stamina_top := stamina_button.global_position.y
 	var stamina_bottom := stamina_top + stamina_button.size.y
 	var gold_top := gold_button.global_position.y
@@ -170,3 +174,6 @@ func _assert_stamina_info_between_buttons(ui: CardPoolUI) -> bool:
 func _fail(message: String) -> void:
 	push_error("STAMINA_COUNTDOWN " + message)
 	get_tree().quit(1)
+
+func _color_close(actual: Color, expected: Color) -> bool:
+	return is_equal_approx(actual.r, expected.r) and is_equal_approx(actual.g, expected.g) and is_equal_approx(actual.b, expected.b) and is_equal_approx(actual.a, expected.a)

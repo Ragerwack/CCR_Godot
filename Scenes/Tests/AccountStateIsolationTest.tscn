@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Tests/AccountStateIsolationTest.gd" id="1_account_state_isolation"]
+
+[node name="AccountStateIsolationTest" type="Node"]
+script = ExtResource("1_account_state_isolation")

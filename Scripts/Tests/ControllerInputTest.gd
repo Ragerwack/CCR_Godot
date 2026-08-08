@@ -91,6 +91,13 @@ func _assert_slot_is_translucent(slot: CardSlotUI, area: String) -> bool:
 	if inset == null or inset.find_child("TopInsetShadow", false, false) == null or inset.find_child("BottomInsetHighlight", false, false) == null:
 		_fail(area + "_slot_inset_shadow_missing")
 		return false
+	if inset.material == null or not (inset.material is ShaderMaterial):
+		_fail(area + "_slot_inset_shadow_not_rounded_shader")
+		return false
+	var opaque_texture := slot.find_child("OpaqueSlotTexture", false, false) as TextureRect
+	if opaque_texture == null or opaque_texture.texture == null or not opaque_texture.visible:
+		_fail(area + "_slot_opaque_texture_missing")
+		return false
 
 	slot.set_unlocked(false)
 	await get_tree().process_frame

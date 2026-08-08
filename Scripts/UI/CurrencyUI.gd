@@ -72,14 +72,17 @@ func _create_status_item(parent: HBoxContainer, icon_id: String, icon_name: Stri
 	var item := HBoxContainer.new()
 	item.name = label_name.trim_suffix("Label") + "Status"
 	item.alignment = BoxContainer.ALIGNMENT_CENTER
+	item.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	item.add_theme_constant_override("separation", 1)
 	item.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var icon := CCRVisualStyle.make_status_icon(icon_id, icon_name, _icon_size)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_status_icons.append(icon)
 	item.add_child(icon)
 	var number := AssetNumberRollScript.new()
 	number.name = label_name.trim_suffix("Label") + "NumberRoll"
 	number.configure(label_name, 18)
+	number.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	item.add_child(number)
 	parent.add_child(item)
 	return number
@@ -88,8 +91,10 @@ func _create_roll_prefetch_status_item(parent: HBoxContainer) -> TextureRect:
 	var item := HBoxContainer.new()
 	item.name = "RollPrefetchStatus"
 	item.alignment = BoxContainer.ALIGNMENT_CENTER
+	item.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	item.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var icon := CCRVisualStyle.make_status_icon("status_roll_yellow", "RollPrefetchIcon", _icon_size)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var roll_icon_size := maxf(1.0, roundf(_icon_size * ROLL_PREFETCH_ICON_SCALE))
 	icon.custom_minimum_size = Vector2(roll_icon_size, roll_icon_size)
 	icon.size = Vector2(roll_icon_size, roll_icon_size)

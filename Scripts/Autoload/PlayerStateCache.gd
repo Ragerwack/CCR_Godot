@@ -3,8 +3,8 @@ extends RefCounted
 
 ## 玩家本地只读快照。文件可随时删除；任何资产判断仍以服务端为准。
 
-const CACHE_SCHEMA_VERSION := 1
-const CACHE_DIRECTORY := "user://player-cache/v1"
+const CACHE_SCHEMA_VERSION := 2
+const CACHE_DIRECTORY := "user://player-cache/v2"
 const DEVICE_ID_PATH := "user://player-cache/device_id.txt"
 const MAX_CACHE_BYTES := 64 * 1024 * 1024
 
@@ -45,7 +45,8 @@ func build_sync_request(player_id: int, locale: String) -> Dictionary:
 		"player_id": player_id if not snapshot.is_empty() else null,
 		"profile_version": int(snapshot.get("profile_version", 0)),
 		"relic_inventory_version": int(snapshot.get("relic_inventory_version", 0)),
-		"relic_locale": str(snapshot.get("relic_locale", locale)),
+		# 字段为旧服务端请求兼容保留；v2 relic 快照是语言无关资产 ID。
+		"relic_locale": "asset-id",
 		"device_id": _load_or_create_device_id(),
 	}
 
@@ -53,7 +54,7 @@ func save_snapshot(
 	player_id: int,
 	profile_version: int,
 	relic_inventory_version: int,
-	relic_locale: String,
+	content_contract: String,
 	identity: Dictionary,
 	relics: Array
 ) -> bool:
@@ -68,7 +69,7 @@ func save_snapshot(
 		"player_id": player_id,
 		"profile_version": profile_version,
 		"relic_inventory_version": relic_inventory_version,
-		"relic_locale": relic_locale,
+		"content_contract": content_contract,
 		"saved_at_unix": int(Time.get_unix_time_from_system()),
 		"payload_json": payload_json,
 		"payload_sha256": _sha256(payload_json),

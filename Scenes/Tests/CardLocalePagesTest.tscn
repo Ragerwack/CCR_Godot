@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://card_locale_pages_test"]
+
+[ext_resource type="Script" path="res://Scripts/Tests/CardLocalePagesTest.gd" id="1_card_locale_pages"]
+
+[node name="CardLocalePagesTest" type="Node"]
+script = ExtResource("1_card_locale_pages")

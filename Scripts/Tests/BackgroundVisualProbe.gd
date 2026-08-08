@@ -9,7 +9,9 @@ func _ready() -> void:
 	get_tree().quit(0)
 
 func _capture_login() -> void:
-	ApiClient.logout()
+	# 视觉探针只隔离当前进程的登录态，不改写开发者本机保存的 token。
+	ApiClient._auth_token = ""
+	ApiClient._refresh_token = ""
 	var splash := SplashScreenUI.new()
 	add_child(splash)
 	await get_tree().process_frame

@@ -6,6 +6,8 @@ signal refresh_failed(reason: String)
 signal loading_started()
 signal loading_completed()
 signal roll_prefetch_status_changed(status: String)
+signal refresh_request_started(refresh_type: String)
+signal refresh_confirmed(cards: Array, refresh_type: String)
 
 var current_pool: Array = []
 var visible_series: Array[String] = []
@@ -19,6 +21,7 @@ const ROLL_PREFETCH_STATUS_ERROR := "error"
 var _warm_rolls: Dictionary = {}
 var _warming_types: Dictionary = {}
 var _roll_prefetch_status: String = ROLL_PREFETCH_STATUS_WAITING
+var _published_roll_prefetch_status: String = ""
 var _confirm_in_flight: bool = false
 var _queued_refresh_type: String = ""
 var _queued_refresh_wait_active: bool = false
@@ -31,14 +34,59 @@ var rapid_next_pool_update: bool = false
 
 func _ready() -> void:
 	GameManager.pool_refreshed.connect(_on_pool_refresh)
+	if not Localization.locale_changed.is_connected(_on_locale_changed):
+		Localization.locale_changed.connect(_on_locale_changed)
+	if not ApiClient.network_status_changed.is_connected(_on_network_status_changed):
+		ApiClient.network_status_changed.connect(_on_network_status_changed)
+	if not ApiClient.asset_request_pending_changed.is_connected(_on_asset_request_pending_changed):
+		ApiClient.asset_request_pending_changed.connect(_on_asset_request_pending_changed)
+	_update_visible_series()
+	_publish_roll_prefetch_status()
+
+func reset_account_state() -> void:
+	current_pool = []
+	visible_series = []
+	_warm_rolls.clear()
+	_warming_types.clear()
+	_roll_prefetch_status = ROLL_PREFETCH_STATUS_WAITING
+	_confirm_in_flight = false
+	_queued_refresh_type = ""
+	_queued_refresh_wait_active = false
+	_next_refresh_is_buffered = false
+	_last_preview_msec = -1
+	gold_draw_debug_click_started_msec = 0
+	animate_next_pool_update = false
+	rapid_next_pool_update = false
+	_update_visible_series()
+	pool_updated.emit(current_pool)
+	_publish_roll_prefetch_status()
+
+func _on_locale_changed(_locale: String) -> void:
+	# draw key 与 pending roll 只含语言无关资产 ID；切换语言只需重绘本地文本，
+	# 已签名随机数组可以安全复用，不再请求服务端重新生成语言版本。
 	_update_visible_series()
 
 func get_roll_prefetch_status() -> String:
+	var network_status := ApiClient.get_network_status()
+	if network_status in ["bad", "offline"]:
+		return ROLL_PREFETCH_STATUS_ERROR
+	if _roll_prefetch_status == ROLL_PREFETCH_STATUS_ERROR:
+		return ROLL_PREFETCH_STATUS_ERROR
+	if (
+		_confirm_in_flight
+		or ApiClient.has_pending_asset_requests()
+		or _queued_refresh_type != ""
+		or _queued_refresh_wait_active
+	):
+		return ROLL_PREFETCH_STATUS_WAITING
+	if network_status == "unstable":
+		return ROLL_PREFETCH_STATUS_WAITING
 	if not _get_warm_roll("free").is_empty():
 		return ROLL_PREFETCH_STATUS_READY
 	if _has_any_warming_type():
 		return ROLL_PREFETCH_STATUS_WAITING
-	return _roll_prefetch_status
+	# READY 不能只相信历史状态值；没有可验证的缓存 roll 时必须保持黄灯。
+	return ROLL_PREFETCH_STATUS_WAITING
 
 func _update_visible_series() -> void:
 	var lvl = GameManager.player_data.level
@@ -60,6 +108,7 @@ func _update_visible_series() -> void:
 # ══════════════════════════════════════════════════
 
 func refresh_pool(refresh_type: String = "free") -> void:
+	refresh_request_started.emit(refresh_type)
 	var draw_started := Time.get_ticks_msec()
 	var debug_total_started := draw_started
 	if refresh_type == "gold" and gold_draw_debug_click_started_msec > 0:
@@ -216,6 +265,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 
 	# 预览已经完成，按钮和页面不再等待服务端最终确认；confirm 继续在后台收口资产状态。
 	_confirm_in_flight = true
+	_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 	loading_completed.emit()
 
 	if skip_confirm_after_preview_for_test:
@@ -234,7 +284,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			"reason": "perf_test",
 			"total_ms": Time.get_ticks_msec() - draw_started,
 		})
-		_confirm_in_flight = false
+		_finish_confirm_state()
 		return
 
 	var confirm_started := Time.get_ticks_msec()
@@ -289,6 +339,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			"layout_sync_submitted": should_sync_layout,
 			"total_ms": Time.get_ticks_msec() - draw_started,
 		})
+		refresh_confirmed.emit(current_pool, refresh_type)
 	else:
 		_print_gold_draw_step(
 			refresh_type,
@@ -312,7 +363,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 				debug_total_started,
 				should_sync_layout
 			)
-			_confirm_in_flight = false
+			_finish_confirm_state()
 			loading_completed.emit()
 			return
 
@@ -344,7 +395,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 			"layout_sync_submitted": should_sync_layout,
 			"total_ms": Time.get_ticks_msec() - draw_started,
 		})
-	_confirm_in_flight = false
+	_finish_confirm_state()
 	loading_completed.emit()
 
 ## 抽卡按钮统一入口。上一轮 confirm 或其他资产指令尚未完成时，只缓冲一次最新点击，
@@ -352,6 +403,7 @@ func refresh_pool(refresh_type: String = "free") -> void:
 func request_refresh(refresh_type: String = "free") -> bool:
 	if _confirm_in_flight or ApiClient.has_pending_asset_requests():
 		_queued_refresh_type = refresh_type
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 		FileLogger.perf("draw_refresh_buffered", {
 			"type": refresh_type,
 			"confirm_in_flight": _confirm_in_flight,
@@ -410,6 +462,7 @@ func _handle_unknown_confirm_result(
 		pool_updated.emit(current_pool)
 		pool_filled.emit(current_pool)
 		GameManager.mark_pool_hand_layout_clean("draw_confirm_reconciled")
+		refresh_confirmed.emit(current_pool, refresh_type)
 		_print_gold_draw_step(
 			refresh_type,
 			7,
@@ -453,6 +506,9 @@ func _handle_unknown_confirm_result(
 	})
 
 func warm_refresh_roll(refresh_type: String = "free") -> void:
+	if _confirm_in_flight or ApiClient.has_pending_asset_requests():
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
+		return
 	if _get_warm_roll(refresh_type).size() > 0:
 		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_READY)
 		return
@@ -461,10 +517,14 @@ func warm_refresh_roll(refresh_type: String = "free") -> void:
 		return
 
 	_warming_types[refresh_type] = true
+	var expected_account_generation := GameManager.get_account_state_generation()
 	_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 	var warm_started := Time.get_ticks_msec()
 	FileLogger.perf("draw_roll_warm_start", {"type": refresh_type})
 	var resp := await _prepare_refresh_roll(refresh_type)
+	if expected_account_generation != GameManager.get_account_state_generation():
+		_warming_types.erase(refresh_type)
+		return
 	_warming_types.erase(refresh_type)
 	if resp.get("success", false):
 		_store_warm_roll(refresh_type, resp["data"])
@@ -506,13 +566,16 @@ func _prepare_refresh_roll(refresh_type: String) -> Dictionary:
 		GameManager.apply_draw_key(roll_data["draw_key"])
 	return prepare_resp
 
-func _store_warm_roll(refresh_type: String, roll_data: Dictionary) -> void:
+func _store_warm_roll(refresh_type: String, roll_data: Dictionary, _source_locale: String = "") -> void:
 	if roll_data.is_empty() or roll_data.get("key_stale", false):
 		return
 	_warm_rolls[WARM_ROLL_CACHE_KEY] = {
 		"roll": roll_data,
 	}
-	_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_READY)
+	if _confirm_in_flight or ApiClient.has_pending_asset_requests():
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
+	else:
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_READY)
 
 func _take_warm_roll(refresh_type: String) -> Dictionary:
 	var roll := _get_warm_roll(refresh_type)
@@ -531,6 +594,10 @@ func _get_warm_roll(refresh_type: String) -> Dictionary:
 		return {}
 	var roll = entry.get("roll", {})
 	if roll is Dictionary:
+		if str(roll.get("roll_id", "")).is_empty() or str(roll.get("signature", "")).is_empty():
+			_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
+			_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
+			return {}
 		var roll_draw_key = roll.get("draw_key", {})
 		if not roll_draw_key is Dictionary or str(roll_draw_key.get("date_key", "")) != _beijing_date_key():
 			_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
@@ -538,6 +605,21 @@ func _get_warm_roll(refresh_type: String) -> Dictionary:
 			return {}
 		var matrix: Array = roll.get("random_matrix", [])
 		if matrix.size() < 16:
+			_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
+			_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
+			return {}
+		for row in matrix.slice(0, 16):
+			if not row is Array or row.size() < 3:
+				_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
+				_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
+				return {}
+		var expected_slots := mini(GameManager.player_data.pool_slots, 16)
+		var translated_slots := ApiClient.translate_refresh_roll_to_slots(
+			roll,
+			GameManager.player_data.level,
+			GameManager.player_data.pool_slots
+		)
+		if expected_slots <= 0 or translated_slots.size() != expected_slots:
 			_warm_rolls.erase(WARM_ROLL_CACHE_KEY)
 			_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 			return {}
@@ -558,10 +640,30 @@ func _has_any_warming_type() -> bool:
 	return false
 
 func _set_roll_prefetch_status(status: String) -> void:
-	if _roll_prefetch_status == status:
-		return
 	_roll_prefetch_status = status
-	roll_prefetch_status_changed.emit(_roll_prefetch_status)
+	_publish_roll_prefetch_status()
+
+func _publish_roll_prefetch_status() -> void:
+	var effective_status := get_roll_prefetch_status()
+	if _published_roll_prefetch_status == effective_status:
+		return
+	_published_roll_prefetch_status = effective_status
+	roll_prefetch_status_changed.emit(effective_status)
+
+func _on_network_status_changed(_status: String) -> void:
+	_publish_roll_prefetch_status()
+
+func _on_asset_request_pending_changed(_pending: bool) -> void:
+	_publish_roll_prefetch_status()
+
+func _finish_confirm_state() -> void:
+	_confirm_in_flight = false
+	if not _get_warm_roll("free").is_empty():
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_READY)
+	elif _has_any_warming_type():
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
+	elif _roll_prefetch_status != ROLL_PREFETCH_STATUS_ERROR:
+		_set_roll_prefetch_status(ROLL_PREFETCH_STATUS_WAITING)
 
 func _rollback_refresh_attempt(refresh_type: String) -> void:
 	if refresh_type == "gem":
@@ -643,6 +745,7 @@ func _refresh_pool_legacy(refresh_type: String, old_pool_cards: Array, old_hand_
 		animate_next_pool_update = true
 		pool_updated.emit(current_pool)
 		pool_filled.emit(current_pool)
+		refresh_confirmed.emit(current_pool, refresh_type)
 		loading_completed.emit()
 		_print_gold_draw_step(
 			refresh_type,

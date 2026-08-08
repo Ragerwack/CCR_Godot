@@ -49,6 +49,9 @@ func _ready() -> void:
 	var settle_started := Time.get_ticks_msec()
 	while (CardPoolSystem.has_pending_confirm() or ApiClient.has_pending_asset_requests()) and Time.get_ticks_msec() - settle_started < FAIL_TIMEOUT_MS:
 		await get_tree().process_frame
+	if CardPoolSystem.get_roll_prefetch_status() != CardPoolSystem.ROLL_PREFETCH_STATUS_READY:
+		_exit_code = 1
+		push_error("DRAW_CONTINUOUS next roll did not return to ready after confirm")
 	get_tree().quit(_exit_code)
 
 func _setup_state() -> void:
@@ -106,6 +109,10 @@ func _on_pool_updated(cards: Array) -> void:
 
 func _queue_second_draw() -> void:
 	_buffered_click_msec = Time.get_ticks_msec()
+	CardPoolSystem.warm_refresh_roll("gem")
+	if CardPoolSystem.get_roll_prefetch_status() != CardPoolSystem.ROLL_PREFETCH_STATUS_WAITING:
+		_fail("roll status showed ready while confirm was pending")
+		return
 	if not CardPoolSystem.request_refresh("gem"):
 		_fail("buffered draw rejected")
 

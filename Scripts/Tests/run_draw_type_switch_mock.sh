@@ -138,23 +138,24 @@ function makeConfirmedCards() {
 }
 
 const server = http.createServer(async (req, res) => {
-  if (req.method === "GET" && req.url === "/__health") {
-    sendJson(res, 200, { ok: true });
-    return;
-  }
+	const requestUrl = new URL(req.url || "/", `http://127.0.0.1:${port}`);
+	if (req.method === "GET" && requestUrl.pathname === "/__health") {
+		sendJson(res, 200, { ok: true });
+		return;
+	}
 
-  if (req.method === "GET" && req.url === "/api/game/draw-key") {
-    sendSuccess(res, makeDrawKey());
-    return;
-  }
+	if (req.method === "GET" && requestUrl.pathname === "/api/game/draw-key") {
+		sendSuccess(res, makeDrawKey());
+		return;
+	}
 
-  if (req.method === "POST" && req.url === "/api/game/refresh-pool/prepare") {
-    const body = await readBody(req);
-    sendSuccess(res, makeRoll(body.type || "free"));
-    return;
-  }
+	if (req.method === "POST" && requestUrl.pathname === "/api/game/refresh-pool/prepare") {
+		const body = await readBody(req);
+		sendSuccess(res, makeRoll(body.type || "free"));
+		return;
+	}
 
-  if (req.method === "POST" && req.url === "/api/game/refresh-pool/confirm") {
+	if (req.method === "POST" && requestUrl.pathname === "/api/game/refresh-pool/confirm") {
     const body = await readBody(req);
     if (!pending || body.roll_id !== pending.roll_id || body.signature !== pending.signature) {
       sendJson(res, 400, { success: false, error: "pending roll mismatch" });

@@ -20,6 +20,15 @@ var nickname: String = ""
 var combat_power: int = 0
 var country: String = "EARTH"
 var avatar_id: String = "basic.north_star"
+var equipped_titles: Array = []
+var tutorial_version: int = 1
+var tutorial_state: String = "COMPLETED"
+var tutorial_completed: bool = true
+var tutorial_target_definition_id: int = 0
+var tutorial_target_color: String = ""
+var tutorial_target_card_instance_ids: Array = []
+var tutorial_collected_numbers: Array = []
+var tutorial_relic_instance_id: String = ""
 
 # 卡池（当前展示的卡）
 var pool_cards: Array = []
@@ -27,6 +36,39 @@ var pool_cards: Array = []
 # 后端返回的等级阈值信息（由 GameManager 从 /user/level API 同步）
 var exp_in_level: int = 0       # 当前等级内已获得的经验值
 var exp_for_next: int = 400     # 升至下一级所需的总经验（当前等级阈值范围）
+
+## 清空当前账号的全部运行时数据，但保留 PlayerData 对象本身。
+## 常驻 UI 会长期连接 changed 信号，因此切换账号时不能直接替换这个对象。
+func reset_to_defaults(emit_changed: bool = true) -> void:
+	level = 1
+	exp = 0
+	gold = 100
+	gems = 50
+	user_id = 0
+	hand_cards = []
+	vault_cards = []
+	decks = []
+	hand_slots = 8
+	pool_slots = 8
+	vault_slots = 2
+	nickname = ""
+	combat_power = 0
+	country = "EARTH"
+	avatar_id = "basic.north_star"
+	equipped_titles = []
+	tutorial_version = 1
+	tutorial_state = "COMPLETED"
+	tutorial_completed = true
+	tutorial_target_definition_id = 0
+	tutorial_target_color = ""
+	tutorial_target_card_instance_ids = []
+	tutorial_collected_numbers = []
+	tutorial_relic_instance_id = ""
+	pool_cards = []
+	exp_in_level = 0
+	exp_for_next = 400
+	if emit_changed:
+		changed.emit()
 
 # ============ 货币 ============
 func add_gold(amount: int) -> void:

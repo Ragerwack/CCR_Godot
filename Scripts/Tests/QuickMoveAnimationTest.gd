@@ -1,7 +1,9 @@
 extends Node
 
 func _ready() -> void:
-	ApiClient.logout()
+	# 测试只隔离当前进程，不持久清除开发者本机保存的登录凭据。
+	ApiClient._auth_token = ""
+	ApiClient._refresh_token = ""
 	Localization.set_locale("zh-CN")
 	_prepare_player_data()
 

@@ -40,6 +40,7 @@ const EVENT_COOLDOWNS: Dictionary = {
 	"forge_success_orange": 0.60,
 	"forge_success_black": 0.60,
 	"forge_success_red": 0.60,
+	"relic_landing": 0.20,
 	"vault_store": 0.18,
 	"discard": 0.18,
 	"level_up": 0.80,
@@ -75,6 +76,7 @@ const EVENT_GAINS: Dictionary = {
 	"forge_success_orange": 0.86,
 	"forge_success_black": 0.88,
 	"forge_success_red": 0.90,
+	"relic_landing": 0.936,
 	"vault_store": 0.58,
 	"discard": 0.46,
 	"slot_unlock": 0.62,
@@ -208,10 +210,12 @@ func reload_bgm_library() -> void:
 	}
 
 func _audio_files_at(root: String) -> PackedStringArray:
-	if DirAccess.open(root) == null:
-		return PackedStringArray()
 	var result := PackedStringArray()
-	for filename in DirAccess.get_files_at(root):
+	# 导出后音频位于 PCK 资源包中，DirAccess 不能可靠列出导入资源的原始文件名。
+	# ResourceLoader.list_directory() 会在编辑器与导出包中统一返回原始资源名。
+	for filename in ResourceLoader.list_directory(root):
+		if filename.ends_with("/"):
+			continue
 		if AUDIO_EXTENSIONS.has(filename.get_extension().to_lower()):
 			result.append(filename)
 	return result

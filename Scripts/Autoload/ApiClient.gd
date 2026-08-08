@@ -55,6 +55,7 @@ signal heartbeat_failed(reason: String)
 signal auth_expired()
 signal session_reconnect_required(reason: String)
 signal network_status_changed(status: String)
+signal asset_request_pending_changed(pending: bool)
 
 # ══════════════════════════════════════════════════
 #  常量 & 状态
@@ -173,6 +174,15 @@ func _api_url(path: String) -> String:
 	if path.begins_with("/"):
 		return _api_base_url + path
 	return _api_base_url + "/" + path
+
+func _localized_api_url(path: String) -> String:
+	var separator := "&" if path.contains("?") else "?"
+	return _api_url(path + separator + "lang=" + Localization.get_http_locale().uri_encode())
+
+## 并行批量请求由 GameManager 直接组装完整 URL；统一通过这个入口附加语言，
+## 避免登录首屏的 pool/hand/vault 绕过单请求 get_cards() 的 locale 参数。
+func get_localized_api_url(path: String) -> String:
+	return _localized_api_url(path)
 
 # ══════════════════════════════════════════════════
 #  核心请求方法
@@ -328,6 +338,7 @@ func _request_once(
 	resp["pool_wait_ms"] = int(raw.get("pool_wait_ms", 0))
 	resp["connect_ms"] = int(raw.get("connect_ms", 0))
 	resp["ttfb_ms"] = int(raw.get("ttfb_ms", 0))
+	resp["reused_first_byte_timeout"] = bool(raw.get("reused_first_byte_timeout", false))
 	FileLogger.http(_METHOD_NAMES.get(method, "?"), url, resp.get("status_code", 0), ("成功" if resp.get("success", false) else "失败: " + resp.get("error", "")) + " | network_ms=" + str(network_ms) + " | total_ms=" + str(total_ms))
 	FileLogger.perf("new_data_request_done", {
 		"method": _METHOD_NAMES.get(method, "?"),
@@ -343,6 +354,7 @@ func _request_once(
 		"pool_wait_ms": resp["pool_wait_ms"],
 		"connect_ms": resp["connect_ms"],
 		"ttfb_ms": resp["ttfb_ms"],
+		"reused_first_byte_timeout": resp["reused_first_byte_timeout"],
 	})
 	return resp
 
@@ -404,8 +416,11 @@ func _record_network_result(resp: Dictionary) -> void:
 		FileLogger.perf("network_status_changed", {"status": _network_status, "failures": _consecutive_network_failures, "network_ms": network_ms})
 
 func _asset_request(url: String, method: int, body: String, operation_kind: String) -> Dictionary:
+	var was_pending := _asset_request_pending_count > 0
 	_asset_request_queue_counter += 1
 	_asset_request_pending_count += 1
+	if not was_pending:
+		asset_request_pending_changed.emit(true)
 	var queue_id := _asset_request_queue_counter
 	var queued_at := Time.get_ticks_msec()
 	if _asset_request_busy:
@@ -422,6 +437,8 @@ func _asset_request(url: String, method: int, body: String, operation_kind: Stri
 	var resp := await _request(url, method, body, HTTP_TIMEOUT_SECONDS, ASSET_WRITE_RETRY_ATTEMPTS, true)
 	_asset_request_busy = false
 	_asset_request_pending_count = maxi(0, _asset_request_pending_count - 1)
+	if _asset_request_pending_count == 0:
+		asset_request_pending_changed.emit(false)
 	FileLogger.perf("asset_request_done", {
 		"kind": operation_kind,
 		"queue_id": queue_id,
@@ -485,17 +502,29 @@ func _parse_response(result_arr: Array, _url: String = "") -> Dictionary:
 	var error_code := str(data.get("error_code", ""))
 	var error_data = data.get("data", {})
 	if code == 401:
-		# 认证过期 — 清除 token 并通知
-		_auth_token = ""
-		Config.set_value("auth", "token", "")
+		# 登录/注册提交的 401 只是本次凭据错误，不代表当前会话过期，不能再创建一层登录页。
+		if _should_invalidate_access_token(_url):
+			_auth_token = ""
+			Config.set_value("auth", "token", "")
 		if error_code == "SESSION_IDLE_TIMEOUT":
 			session_reconnect_required.emit(err)
 			return {"success": false, "error": err, "error_type": "auth", "error_code": error_code, "data": error_data, "status_code": code}
-		if not _url.ends_with("/auth/refresh") and not _url.ends_with("/auth/heartbeat"):
+		if _should_emit_auth_expired(_url):
 			auth_expired.emit()
 		return {"success": false, "error": err, "error_type": "auth", "error_code": error_code, "data": error_data, "status_code": code}
 
 	return {"success": false, "error": err, "error_type": "business", "error_code": error_code, "data": error_data, "status_code": code}
+
+func _should_invalidate_access_token(url: String) -> bool:
+	return not url.ends_with("/auth/login") and not url.ends_with("/auth/register")
+
+func _should_emit_auth_expired(url: String) -> bool:
+	return (
+		not url.ends_with("/auth/login")
+		and not url.ends_with("/auth/register")
+		and not url.ends_with("/auth/refresh")
+		and not url.ends_with("/auth/heartbeat")
+	)
 
 # ══════════════════════════════════════════════════
 #  认证
@@ -524,8 +553,10 @@ func login(username: String, password: String) -> Dictionary:
 	return resp
 
 ## 注册
-func register(username: String, password: String, email: String, country: String = "EARTH") -> Dictionary:
+func register(username: String, password: String, email: String, country: String = "EARTH", avatar: String = "") -> Dictionary:
 	var payload := {"username": username, "password": password, "email": email, "country": country}
+	if avatar != "":
+		payload["avatar"] = avatar
 	var queue_ticket := str(Config.get_value("queue", "ticket_id", ""))
 	if queue_ticket != "":
 		payload["queue_ticket_id"] = queue_ticket
@@ -541,6 +572,16 @@ func register(username: String, password: String, email: String, country: String
 	else:
 		register_failed.emit(resp["error"])
 	return resp
+
+## 注册字段可用性预检。服务端不会返回具体敏感词，只返回字段是否可用及稳定原因码。
+func check_registration_availability(fields: Dictionary) -> Dictionary:
+	return await _request(
+		_api_url("/auth/availability"),
+		HTTPClient.METHOD_POST,
+		JSON.stringify(fields),
+		HTTP_TIMEOUT_SECONDS,
+		READ_RETRY_ATTEMPTS,
+	)
 
 ## 登出
 func logout() -> void:
@@ -620,10 +661,29 @@ func update_profile(changes: Dictionary) -> Dictionary:
 		profile_failed.emit(str(resp.get("error", "更新用户资料失败")))
 	return resp
 
+## 设置页改名预检；鉴权后服务端会排除当前玩家自己的 ID。
+func check_username_availability(username: String) -> Dictionary:
+	return await _request(
+		_api_url("/user/username-availability"),
+		HTTPClient.METHOD_POST,
+		JSON.stringify({"username": username}),
+		HTTP_TIMEOUT_SECONDS,
+		READ_RETRY_ATTEMPTS,
+	)
+
+## 保存首次引导进度。最终完成态由服务端持久化，客户端本地快照只负责崩溃恢复。
+func update_tutorial_progress(progress: Dictionary) -> Dictionary:
+	return await _request(
+		_api_url("/user/tutorial"),
+		HTTPClient.METHOD_PATCH,
+		JSON.stringify(progress),
+		HTTP_TIMEOUT_SECONDS,
+	)
+
 ## 条件同步玩家稳定资料与博物馆 relic 快照。
 func sync_player_cache(cache_state: Dictionary) -> Dictionary:
 	return await _request(
-		_api_url("/user/cache-sync"),
+		_localized_api_url("/user/cache-sync"),
 		HTTPClient.METHOD_POST,
 		JSON.stringify(cache_state),
 		HTTP_TIMEOUT_SECONDS,
@@ -640,7 +700,7 @@ func refresh_pool(refresh_type: String) -> Dictionary:
 		"operation_id": _new_operation_id("refresh_pool"),
 		"type": refresh_type,
 	})
-	var resp := await _asset_request(_api_url("/game/refresh-pool"), HTTPClient.METHOD_POST, body, "refresh_pool")
+	var resp := await _asset_request(_localized_api_url("/game/refresh-pool"), HTTPClient.METHOD_POST, body, "refresh_pool")
 	if resp["success"]:
 		pool_refreshed.emit(resp["data"])
 	else:
@@ -648,7 +708,7 @@ func refresh_pool(refresh_type: String) -> Dictionary:
 	return resp
 
 func get_draw_key() -> Dictionary:
-	var resp := await _request(_api_url("/game/draw-key"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
+	var resp := await _request(_localized_api_url("/game/draw-key"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp.get("success", false):
 		draw_key_loaded.emit(resp["data"])
 	return resp
@@ -660,7 +720,7 @@ func prepare_refresh_pool_roll(refresh_type: String, draw_key_version: int) -> D
 	if draw_key_version > 0:
 		payload["draw_key_version"] = draw_key_version
 	var body := JSON.stringify(payload)
-	return await _request(_api_url("/game/refresh-pool/prepare"), HTTPClient.METHOD_POST, body, HTTP_TIMEOUT_SECONDS, PREPARE_RETRY_ATTEMPTS)
+	return await _request(_localized_api_url("/game/refresh-pool/prepare"), HTTPClient.METHOD_POST, body, HTTP_TIMEOUT_SECONDS, PREPARE_RETRY_ATTEMPTS)
 
 func confirm_refresh_pool_roll(refresh_type: String, roll_data: Dictionary, cards: Array, pool_cards: Array, hand_cards: Array, sync_layout: bool = true, operation_id: String = "") -> Dictionary:
 	var op_id := operation_id
@@ -677,7 +737,7 @@ func confirm_refresh_pool_roll(refresh_type: String, roll_data: Dictionary, card
 		payload["pool"] = _cards_to_layout(pool_cards)
 		payload["hand"] = _cards_to_layout(hand_cards)
 	var body := JSON.stringify(payload)
-	var resp := await _asset_request(_api_url("/game/refresh-pool/confirm"), HTTPClient.METHOD_POST, body, "refresh_pool_confirm")
+	var resp := await _asset_request(_localized_api_url("/game/refresh-pool/confirm"), HTTPClient.METHOD_POST, body, "refresh_pool_confirm")
 	resp["operation_id"] = op_id
 	if resp.get("success", false):
 		pool_refreshed.emit(resp["data"].get("cards", []))
@@ -692,7 +752,7 @@ func move_to_hand(pool_slot_index: int, hand_slot_index: int) -> Dictionary:
 		"pool_slot_index": pool_slot_index,
 		"hand_slot_index": hand_slot_index,
 	})
-	var resp := await _asset_request(_api_url("/game/move-to-hand"), HTTPClient.METHOD_POST, body, "move_to_hand")
+	var resp := await _asset_request(_localized_api_url("/game/move-to-hand"), HTTPClient.METHOD_POST, body, "move_to_hand")
 	if resp["success"]:
 		card_moved_to_hand.emit(resp["data"])
 	else:
@@ -707,7 +767,7 @@ func move_to_vault(source_type: String, source_slot_index: int, vault_slot_index
 		"source_slot_index": source_slot_index,
 		"vault_slot_index": vault_slot_index,
 	})
-	var resp := await _asset_request(_api_url("/game/move-to-vault"), HTTPClient.METHOD_POST, body, "move_to_vault")
+	var resp := await _asset_request(_localized_api_url("/game/move-to-vault"), HTTPClient.METHOD_POST, body, "move_to_vault")
 	if resp["success"]:
 		card_moved_to_vault.emit(resp["data"])
 	else:
@@ -719,7 +779,7 @@ func sync_pool_hand_layout(pool_cards: Array, hand_cards: Array) -> Dictionary:
 		"pool": _cards_to_layout(pool_cards),
 		"hand": _cards_to_layout(hand_cards),
 	})
-	var resp := await _request(_api_url("/game/sync-layout"), HTTPClient.METHOD_POST, body, HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
+	var resp := await _request(_localized_api_url("/game/sync-layout"), HTTPClient.METHOD_POST, body, HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp["success"]:
 		layout_synced.emit(resp["data"])
 	else:
@@ -730,7 +790,7 @@ func sync_vault_layout(vault_cards: Array) -> Dictionary:
 	var body := JSON.stringify({
 		"vault": _cards_to_layout(vault_cards),
 	})
-	var resp := await _request(_api_url("/game/sync-layout"), HTTPClient.METHOD_POST, body, HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
+	var resp := await _request(_localized_api_url("/game/sync-layout"), HTTPClient.METHOD_POST, body, HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp["success"]:
 		layout_synced.emit(resp["data"])
 	else:
@@ -741,7 +801,7 @@ func organize_vault() -> Dictionary:
 	var body := JSON.stringify({
 		"operation_id": _new_operation_id("organize_vault"),
 	})
-	var resp := await _asset_request(_api_url("/game/organize-vault"), HTTPClient.METHOD_POST, body, "organize_vault")
+	var resp := await _asset_request(_localized_api_url("/game/organize-vault"), HTTPClient.METHOD_POST, body, "organize_vault")
 	if resp["success"]:
 		layout_synced.emit(resp["data"])
 	else:
@@ -755,7 +815,7 @@ func discard_card(slot_type: String, slot_index: int) -> Dictionary:
 		"slot_type": slot_type,
 		"slot_index": slot_index,
 	})
-	var resp := await _asset_request(_api_url("/game/discard"), HTTPClient.METHOD_POST, body, "discard")
+	var resp := await _asset_request(_localized_api_url("/game/discard"), HTTPClient.METHOD_POST, body, "discard")
 	if resp["success"]:
 		card_discarded.emit(resp["data"])
 	else:
@@ -763,7 +823,7 @@ func discard_card(slot_type: String, slot_index: int) -> Dictionary:
 	return resp
 
 func get_vault_slot_quote() -> Dictionary:
-	return await _request(_api_url("/game/vault-slot-quote"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
+	return await _request(_localized_api_url("/game/vault-slot-quote"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 
 ## 解锁槽位
 func unlock_slot(slot_type: String, slot_index: int, currency: String = "gem") -> Dictionary:
@@ -773,7 +833,7 @@ func unlock_slot(slot_type: String, slot_index: int, currency: String = "gem") -
 		"index": slot_index,
 		"currency": currency,
 	})
-	var resp := await _asset_request(_api_url("/game/unlock-slot"), HTTPClient.METHOD_POST, body, "unlock_slot")
+	var resp := await _asset_request(_localized_api_url("/game/unlock-slot"), HTTPClient.METHOD_POST, body, "unlock_slot")
 	if resp["success"]:
 		print("[ApiClient] 槽位解锁成功: " + slot_type + "[" + str(slot_index) + "]")
 	else:
@@ -782,7 +842,7 @@ func unlock_slot(slot_type: String, slot_index: int, currency: String = "gem") -
 
 ## 获取槽位卡牌
 func get_cards(slot_type: String) -> Dictionary:
-	var resp := await _request(_api_url("/game/cards?type=" + slot_type), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
+	var resp := await _request(_localized_api_url("/game/cards?type=" + slot_type), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp["success"]:
 		cards_loaded.emit(slot_type, resp["data"])
 	else:
@@ -798,7 +858,7 @@ func synthesize(slot_indices: Array, source_type: String = "hand") -> Dictionary
 		"draw_key_version": GameManager.draw_key_version,
 		"slot_indices": slot_indices,
 	})
-	var resp := await _asset_request(_api_url("/game/synthesize"), HTTPClient.METHOD_POST, body, "synthesize")
+	var resp := await _asset_request(_localized_api_url("/game/synthesize"), HTTPClient.METHOD_POST, body, "synthesize")
 	if resp["success"]:
 		var data: Dictionary = resp.get("data", {})
 		if data.get("key_stale", false):
@@ -827,7 +887,7 @@ func _apply_optional_draw_key(data: Dictionary) -> bool:
 
 ## 获取已合成套牌列表
 func get_decks() -> Dictionary:
-	var resp := await _request(_api_url("/game/decks"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
+	var resp := await _request(_localized_api_url("/game/decks"), HTTPClient.METHOD_GET, "", HTTP_TIMEOUT_SECONDS, READ_RETRY_ATTEMPTS)
 	if resp["success"]:
 		decks_loaded.emit(resp["data"])
 	else:
@@ -871,16 +931,18 @@ static func card_slot_to_cardinfo(slot_data: Dictionary) -> CardInfo:
 	if card_def == null:
 		card_def = {}
 	var color_val = slot_data.get("color", "white")
-	return CardInfo.new({
+	var card := CardInfo.new({
 		"id": str(card_def_id),
-		"series_name": card_def.get("series_name", ""),
-		"deck_name": card_def.get("deck_name", ""),
+		"card_asset_id": int(card_def.get("card_asset_id", card_def.get("number", 0))),
+		"deck_asset_id": int(card_def.get("deck_asset_id", 0)),
+		"series_asset_id": int(card_def.get("series_asset_id", 0)),
+		"deck_definition_id": int(card_def.get("deck_def_id", 0)),
+		"series_definition_id": int(card_def.get("series_id", 0)),
 		"card_number": card_def.get("number", 1),
 		"color": color_val if color_val is String else CardColor.from_string(str(color_val)),
-		"card_name": card_def.get("name", ""),
-		"description": card_def.get("description", ""),
-		"image_path": card_def.get("image_url", card_def.get("image", "")),
 	})
+	# 服务端只返回语言无关的资产 ID；名称、描述和图片全部由客户端资源解析。
+	return CardDataManager.localize_card_in_place(card)
 
 static func _cards_to_layout(cards: Array) -> Array:
 	var result: Array = []
@@ -959,12 +1021,12 @@ static func translate_refresh_roll_to_slots(roll_data: Dictionary, player_level:
 			"color": color,
 			"card_def": {
 				"id": int(card_def.get("card_def_id", 0)),
+				"deck_def_id": int(deck.get("deck_def_id", 0)),
+				"series_id": int(deck.get("series_id", 0)),
+				"series_asset_id": int(deck.get("series_asset_id", 0)),
+				"deck_asset_id": int(deck.get("deck_asset_id", 0)),
+				"card_asset_id": int(card_def.get("card_asset_id", card_def.get("number", number))),
 				"number": int(card_def.get("number", number)),
-				"name": str(card_def.get("name", "")),
-				"deck_name": str(deck.get("deck_name", "")),
-				"series_name": str(deck.get("series_name", "")),
-				"description": str(card_def.get("description", "")),
-				"image_url": str(card_def.get("image_url", card_def.get("image", ""))),
 			},
 		})
 	return result

@@ -10,6 +10,7 @@ const TEXT_HORIZONTAL_PADDING: float = 6.0
 const TEXT_VERTICAL_PADDING: float = 2.0
 const CLIP_HORIZONTAL_BLEED: float = 2.0
 const FONT_COLOR: Color = Color.BLACK
+const LINE_HEIGHT_REFERENCE_TEXT: String = "0123456789/"
 
 var _clip_host: Control
 var _digits_row: HBoxContainer
@@ -25,6 +26,7 @@ var _active_outgoing_labels: Array[Label] = []
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	clip_contents = false
+	size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
 	# Godot 的 clip_contents 会同时裁剪横纵两个方向。滚动动画需要纵向裁剪，
 	# 但横向边界必须略微外扩，否则字体的末位抗锯齿像素仍可能被切掉。
@@ -160,7 +162,7 @@ func _rebuild_digits(new_text: String, old_text: String, direction: int, animate
 	var old_chars: Array[String] = aligned_chars[0]
 	var new_chars: Array[String] = aligned_chars[1]
 	var cell_count := maxi(old_chars.size(), new_chars.size())
-	var max_cell_height := 0.0
+	var cell_height := _measure_reference_label_height()
 	var total_width := 0.0
 	var first_current_label: Label = null
 	var first_outgoing_label: Label = null
@@ -171,7 +173,7 @@ func _rebuild_digits(new_text: String, old_text: String, direction: int, animate
 		var should_roll := animate and old_char != "" and new_char != "" and old_char != new_char and _is_digit(old_char) and _is_digit(new_char)
 		var cell := _make_digit_cell(index, new_char, old_char, should_roll)
 		_digits_row.add_child(cell)
-		_update_digit_cell_size(cell)
+		_update_digit_cell_size(cell, cell_height)
 
 		var current_label := _find_digit_label(cell, "current")
 		var outgoing_label := _find_digit_label(cell, "outgoing")
@@ -181,10 +183,9 @@ func _rebuild_digits(new_text: String, old_text: String, direction: int, animate
 			first_outgoing_label = outgoing_label
 
 		total_width += cell.custom_minimum_size.x
-		max_cell_height = maxf(max_cell_height, cell.custom_minimum_size.y)
 
 		if should_roll and current_label != null and outgoing_label != null:
-			current_label.position.y = max_cell_height * float(direction)
+			current_label.position.y = cell_height * float(direction)
 			current_label.modulate.a = FADED_ALPHA
 			outgoing_label.position.y = 0.0
 			outgoing_label.modulate.a = 1.0
@@ -198,7 +199,7 @@ func _rebuild_digits(new_text: String, old_text: String, direction: int, animate
 
 	custom_minimum_size = Vector2(
 		ceilf(total_width + TEXT_HORIZONTAL_PADDING * 2.0),
-		ceilf(max_cell_height + TEXT_VERTICAL_PADDING * 2.0)
+		ceilf(cell_height + TEXT_VERTICAL_PADDING * 2.0)
 	)
 
 func _make_digit_cell(index: int, new_char: String, old_char: String, should_roll: bool) -> Control:
@@ -217,18 +218,14 @@ func _make_digit_cell(index: int, new_char: String, old_char: String, should_rol
 	outgoing_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	return cell
 
-func _update_digit_cell_size(cell: Control) -> void:
+func _update_digit_cell_size(cell: Control, cell_height: float) -> void:
 	var current_label := _find_digit_label(cell, "current")
 	var outgoing_label := _find_digit_label(cell, "outgoing")
 	var width := maxf(
 		_measure_label_width(current_label) if current_label != null else 0.0,
 		_measure_label_width(outgoing_label) if outgoing_label != null else 0.0
 	)
-	var height := maxf(
-		_measure_label_height(current_label) if current_label != null else 0.0,
-		_measure_label_height(outgoing_label) if outgoing_label != null else 0.0
-	)
-	cell.custom_minimum_size = Vector2(ceilf(width), ceilf(height))
+	cell.custom_minimum_size = Vector2(ceilf(width), ceilf(cell_height))
 	cell.size = cell.custom_minimum_size
 
 func _make_digit_label(label_name: String, text: String) -> Label:
@@ -239,6 +236,7 @@ func _make_digit_label(label_name: String, text: String) -> Label:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	label.add_theme_font_size_override("font_size", _font_size)
 	label.add_theme_color_override("font_color", FONT_COLOR)
 	return label
@@ -253,6 +251,10 @@ func _measure_label_height(label: Label) -> float:
 	var height := label.get_combined_minimum_size().y
 	label.text = ""
 	return height
+
+func _measure_reference_label_height() -> float:
+	var label := _make_digit_label("ReferenceDigit", LINE_HEIGHT_REFERENCE_TEXT)
+	return maxf(1.0, label.get_combined_minimum_size().y)
 
 func _start_roll(direction: int) -> void:
 	if _active_outgoing_labels.is_empty():
@@ -282,7 +284,9 @@ func _finish_roll() -> void:
 		if is_instance_valid(label):
 			label.hide()
 	_active_outgoing_labels.clear()
-	_reset_visible_digit_labels()
+	# 位数减少时，动画阶段会保留旧数字的前导占位列。动画结束后必须按当前
+	# 文本重新收紧，否则短数字会与左侧资源图标之间留下巨大空白。
+	_rebuild_digits(_display_text, "", 0, false)
 
 func _align_display_chars(new_text: String, old_text: String) -> Array[Array]:
 	if new_text.find("/") == -1 and old_text.find("/") == -1:

@@ -1,6 +1,8 @@
 extends Control
 class_name CardDisplay
 
+signal draw_rarity_effect_finished
+
 const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
 
 signal card_clicked(card: CardInfo, index: int)
@@ -44,6 +46,8 @@ var _rarity_shine_overlay: ColorRect
 var _rarity_shine_material: ShaderMaterial
 var _blue_draw_back: TextureRect
 var _active_title_text_color: Color = CARD_TEXT_COLOR
+var _title_text_color_override_enabled: bool = false
+var _title_text_color_override: Color = CARD_TEXT_COLOR
 var _hovered: bool = false
 var _dragging_preview: bool = false
 var _drop_targeted: bool = false
@@ -84,6 +88,8 @@ const CARD_TEXT_COLOR_RED: Color = Color(1.000000, 0.858824, 0.592157, 1.0)
 const INFO_PANEL_BORDER_COLOR: Color = Color(0.850980, 0.866667, 0.898039, 1.0)
 const INFO_PANEL_BG_COLOR: Color = Color(0.972549, 0.976471, 0.984314, 1.0)
 const CARD_CORNER_RADIUS_RATIO: float = 1.0 / 13.0
+const CARD_SHADOW_SIZE: int = 14
+const CARD_SHADOW_OFFSET: Vector2 = Vector2(5, 8)
 const GREEN_DRAW_SHINE_DURATION: float = 0.50
 const BLUE_DRAW_FLIP_DURATION: float = 0.60
 const BLUE_DRAW_SHINE_DURATION: float = GREEN_DRAW_SHINE_DURATION
@@ -97,6 +103,7 @@ const NUMBER_BADGE_RECT_RATIO: Rect2 = Rect2(0.811, 0.008, 0.179, 0.128)
 const DECK_NAME_FONT_CANVAS: float = 92.0
 const CARD_NAME_FONT_CANVAS: float = 62.0
 const DESCRIPTION_FONT_CANVAS: float = 34.0
+const DESCRIPTION_MULTILINE_MIN_LENGTH: int = 16
 const SERIES_TAG_FONT_CANVAS: float = 32.0
 const NUMBER_BADGE_FONT_CANVAS: float = 80.0
 const CARD_ROUNDED_MASK_SHADER: String = """
@@ -157,16 +164,24 @@ func configure_visual_scales(resting_scale: float, hover_scale: float, drop_scal
 		scale = Vector2(normal_visual_scale, normal_visual_scale)
 
 func _ready() -> void:
+	if not Localization.locale_changed.is_connected(_on_locale_changed):
+		Localization.locale_changed.connect(_on_locale_changed)
 	if custom_minimum_size == Vector2.ZERO:
 		custom_minimum_size = CARD_SIZE
 	if size.x <= 0.0 or size.y <= 0.0:
 		size = custom_minimum_size
 	setup_ui()
 
+func _on_locale_changed(_locale: String) -> void:
+	if card == null or _deck_name_label == null:
+		return
+	CardDataManager.localize_card_in_place(card)
+	_update_display()
+
 func setup_ui() -> void:
 	clip_contents = false
 	var current_size := _current_card_size()
-	_card_shadow = CCRVisualStyle.make_shadow_panel("CardShadow", int(roundf(current_size.x * 0.08)), 14, Vector2(5, 8), CCRVisualStyle.CARD_SHADOW)
+	_card_shadow = CCRVisualStyle.make_shadow_panel("CardShadow", int(roundf(current_size.x * 0.08)), CARD_SHADOW_SIZE, CARD_SHADOW_OFFSET, CCRVisualStyle.CARD_SHADOW)
 	_card_shadow.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_card_shadow.position = Vector2.ZERO
 	_card_shadow.size = current_size
@@ -559,6 +574,35 @@ func _measure_label_text(label: Label, font: Font, text: String, font_size: int,
 		return font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, max_width, font_size)
 	return font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
 
+## 卡面描述在不同系统字体回退下也必须保持多行。长描述先加入一个平衡的强制换行，
+## 再交给 Label 做后续自动换行，避免适配算法把整段缩成极小字号的一行。
+func _format_description_text(text: String) -> String:
+	var normalized := text.strip_edges()
+	if normalized == "" or normalized.contains("\n") or normalized.length() < DESCRIPTION_MULTILINE_MIN_LENGTH:
+		return normalized
+	var break_index := _balanced_description_break_index(normalized)
+	if break_index <= 0 or break_index >= normalized.length():
+		return normalized
+	var first_line := normalized.substr(0, break_index).strip_edges()
+	var second_line := normalized.substr(break_index).strip_edges()
+	if first_line == "" or second_line == "":
+		return normalized
+	return first_line + "\n" + second_line
+
+func _balanced_description_break_index(text: String) -> int:
+	var target := text.length() / 2
+	for radius in range(text.length()):
+		for candidate in [target - radius, target + radius]:
+			if candidate <= 0 or candidate >= text.length():
+				continue
+			var current := text.substr(candidate, 1)
+			var previous := text.substr(candidate - 1, 1)
+			if current == " " or current == "\t":
+				return candidate
+			if "，。；：！？、,.!?:;".contains(previous):
+				return candidate
+	return target
+
 func _refresh_label_font_sizes(deck_size: Vector2 = Vector2.ZERO, card_name_size: Vector2 = Vector2.ZERO, series_size: Vector2 = Vector2.ZERO) -> void:
 	_fit_label_font_size_to_region_max(_deck_name_label, 1, deck_size)
 	_number_label.add_theme_font_size_override("font_size", _font_size(NUMBER_BADGE_FONT_CANVAS, 8))
@@ -640,6 +684,10 @@ func _apply_color_border(ct: CardColor.ColorType) -> void:
 func set_card(c: CardInfo, idx: int = -1) -> void:
 	stop_draw_rarity_effect()
 	stop_blue_draw_flip()
+	if c != null:
+		# 页面异步重建或服务端响应晚于语言切换时，卡牌可能刚在当前
+		# locale 下进入控件；此处再做一次轻量本地化，避免只依赖全局缓存刷新。
+		CardDataManager.localize_card_in_place(c)
 	card = c
 	card_index = idx
 	_update_display()
@@ -682,6 +730,7 @@ func _play_draw_shine(shine_color: Color, duration: float) -> void:
 		_rarity_shine_tween = null
 		if _rarity_shine_overlay != null:
 			_rarity_shine_overlay.visible = false
+		draw_rarity_effect_finished.emit()
 	)
 
 func stop_draw_rarity_effect() -> void:
@@ -784,7 +833,7 @@ func _update_display() -> void:
 		_card_name_label.text = ""
 
 	# 描述文字
-	_description_label.text = card.description
+	_description_label.text = _format_description_text(card.description)
 
 	# 子卡编号圆环
 	_number_label.text = "%d" % card.card_number
@@ -934,10 +983,20 @@ func _get_title_text_color(c: CardColor.ColorType) -> Color:
 func _apply_title_text_color(c: CardColor.ColorType) -> void:
 	if _deck_name_label == null or _card_name_label == null or _series_tag_label == null:
 		return
-	_active_title_text_color = _get_title_text_color(c)
+	_active_title_text_color = _title_text_color_override if _title_text_color_override_enabled else _get_title_text_color(c)
 	_deck_name_label.add_theme_color_override("font_color", _active_title_text_color)
 	_card_name_label.add_theme_color_override("font_color", _active_title_text_color)
 	_series_tag_label.add_theme_color_override("font_color", _active_title_text_color)
+
+## 仅供特定页面覆盖卡面标题文字色，避免影响其他卡槽的稀有度配色。
+func set_title_text_color_override(color: Color) -> void:
+	_title_text_color_override_enabled = true
+	_title_text_color_override = color
+	refresh_title_text_color()
+
+func clear_title_text_color_override() -> void:
+	_title_text_color_override_enabled = false
+	refresh_title_text_color()
 
 func refresh_title_text_color() -> void:
 	if card == null:

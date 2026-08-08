@@ -46,6 +46,9 @@ func _ready() -> void:
 	if countdown_label.get_theme_font_size("font_size") != 16:
 		_fail("today decks countdown font not increased")
 		return
+	if not _color_close(countdown_label.get_theme_color("font_color"), Color.BLACK):
+		_fail("today decks countdown text is not black")
+		return
 	var rows := center_area.find_children("TodayDeckRow*", "VBoxContainer", true, false)
 	if rows.size() != 8:
 		_fail("today decks row count is not 8")
@@ -54,6 +57,21 @@ func _ready() -> void:
 	var expected_size: Vector2 = CardSlotUI.SLOT_SIZE
 	var content_host := center_area.find_child("TodayDecksContentRegion", true, false) as Control
 	var expected_left_shift := float(main.call("_exp_bar_height", get_viewport().get_visible_rect().size))
+	var latest_scrollbar := center_area.find_child("TodayDeckVerticalScrollbar", true, false) as VScrollBar
+	if latest_scrollbar == null or not latest_scrollbar.visible:
+		_fail("today deck latest vertical scrollbar is missing")
+		return
+	if latest_scrollbar.size.y <= 438.0:
+		_fail("today deck vertical scrollbar middle section was not extended")
+		return
+	var latest_track := latest_scrollbar.find_child("CCRVerticalScrollbarTrack", false, false) as NinePatchRect
+	if latest_track == null or latest_track.patch_margin_top != latest_track.patch_margin_bottom or latest_track.patch_margin_top != 78:
+		_fail("today deck vertical scrollbar end caps are not protected")
+		return
+	var scroll := center_area.find_child("TodayDeckScroll", true, false) as ScrollContainer
+	if scroll == null:
+		_fail("today deck scroll container is missing")
+		return
 	for row_index in range(rows.size()):
 		var row = rows[row_index]
 		var type_label := row.find_child("DeckTypeLabel", true, false) as Label
@@ -64,6 +82,9 @@ func _ready() -> void:
 			return
 		if type_label.get_theme_font_size("font_size") != 15 or name_label.get_theme_font_size("font_size") != 15 or level_label.get_theme_font_size("font_size") != 15:
 			_fail("today deck info font not increased")
+			return
+		if not _color_close(type_label.get_theme_color("font_color"), Color.BLACK) or not _color_close(name_label.get_theme_color("font_color"), Color.BLACK) or not _color_close(level_label.get_theme_color("font_color"), Color.BLACK):
+			_fail("today deck info text is not black")
 			return
 		if row_index == 0 and type_label.text != "今日新卡组":
 			_fail("today deck type label is wrong")
@@ -89,7 +110,11 @@ func _ready() -> void:
 		if content_host == null or absf(first_card.global_position.x - content_host.global_position.x - expected_left_shift) > 0.1:
 			_fail("today deck cards are not shifted right by experience bar height")
 			return
-		var scroll := center_area.find_child("TodayDeckScroll", true, false) as ScrollContainer
+		if row_index == 0:
+			var cards_right := (card_boxes[0] as Control).get_global_rect().end.x
+			if absf(latest_scrollbar.global_position.x - cards_right - expected_left_shift) > 0.1:
+				_fail("today deck vertical scrollbar gap is not experience bar height")
+				return
 		var card_shadow := first_card.find_child("CardShadow", false, false) as Panel
 		var shadow_style := card_shadow.get_theme_stylebox("panel") as StyleBoxFlat if card_shadow != null else null
 		if scroll == null or shadow_style == null:
@@ -105,6 +130,32 @@ func _ready() -> void:
 		if first_card.mouse_filter != Control.MOUSE_FILTER_STOP or first_card.hover_uses_slot_bounds or first_card.hover_scale_enabled:
 			_fail("today deck card hover preview is not enabled")
 			return
+
+	var first_row_cards_for_bounds := (rows[0].find_child("TodayDeckCards", true, false) as HBoxContainer).find_children("Card*", "CardDisplay", false, false)
+	var first_bound_card := first_row_cards_for_bounds[0] as CardDisplay
+	if absf(latest_scrollbar.global_position.y - first_bound_card.global_position.y) > 0.1:
+		_fail("today deck scrollbar top does not align with first card top")
+		return
+	var last_row_cards_for_bounds := (rows[rows.size() - 1].find_child("TodayDeckCards", true, false) as HBoxContainer).find_children("Card*", "CardDisplay", false, false)
+	var last_bound_card := last_row_cards_for_bounds[0] as CardDisplay
+	var last_shadow := last_bound_card.find_child("CardShadow", false, false) as Panel
+	var last_shadow_style := last_shadow.get_theme_stylebox("panel") as StyleBoxFlat if last_shadow != null else null
+	if last_shadow_style == null:
+		_fail("today deck last-card shadow setup is missing")
+		return
+	scroll.scroll_vertical = int(ceil(scroll.get_v_scroll_bar().max_value))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var bottom_shadow_bleed := float(last_shadow_style.shadow_size) + maxf(0.0, last_shadow_style.shadow_offset.y)
+	var last_card_bottom := last_bound_card.get_global_rect().end.y
+	if last_card_bottom + bottom_shadow_bleed > scroll.get_global_rect().end.y + 0.1:
+		_fail("today deck last-row bottom shadow is clipped")
+		return
+	if absf(latest_scrollbar.get_global_rect().end.y - last_card_bottom) > 0.1:
+		_fail("today deck scrollbar bottom does not align with fully shown last card bottom")
+		return
+	scroll.scroll_vertical = 0
+	await get_tree().process_frame
 
 	var first_row_cards := (rows[0].find_child("TodayDeckCards", true, false) as HBoxContainer).find_children("Card*", "CardDisplay", false, false)
 	var today_ui := _find_today_decks_ui(center_area)
@@ -138,6 +189,9 @@ func _ready() -> void:
 		var card_display := first_row_cards[i] as CardDisplay
 		if card_display.card == null or int(card_display.card.color) != int(expected_colors[i]):
 			_fail("sold out color shift is wrong at card " + str(i + 1))
+			return
+		if not _card_title_color_matches(card_display, _expected_card_title_color(expected_colors[i])):
+			_fail("today deck card title color does not match rarity at card " + str(i + 1))
 			return
 
 	var second_row_cards := (rows[1].find_child("TodayDeckCards", true, false) as HBoxContainer).find_children("Card*", "CardDisplay", false, false)
@@ -232,3 +286,30 @@ func _has_label_text(root: Node, text: String) -> bool:
 func _fail(message: String) -> void:
 	push_error("TODAY_DECKS_UI " + message)
 	get_tree().quit(1)
+
+func _color_close(actual: Color, expected: Color) -> bool:
+	return is_equal_approx(actual.r, expected.r) and is_equal_approx(actual.g, expected.g) and is_equal_approx(actual.b, expected.b) and is_equal_approx(actual.a, expected.a)
+
+func _card_title_color_matches(card_display: CardDisplay, expected: Color) -> bool:
+	for label_name in ["_deck_name_label", "_card_name_label", "_series_tag_label"]:
+		var title_label := card_display.get(label_name) as Label
+		if title_label == null or not _color_close(title_label.get_theme_color("font_color"), expected):
+			return false
+	return true
+
+func _expected_card_title_color(color_type: CardColor.ColorType) -> Color:
+	match color_type:
+		CardColor.ColorType.GREEN:
+			return CardDisplay.CARD_TEXT_COLOR_GREEN
+		CardColor.ColorType.BLUE:
+			return CardDisplay.CARD_TEXT_COLOR_BLUE
+		CardColor.ColorType.PURPLE:
+			return CardDisplay.CARD_TEXT_COLOR_PURPLE
+		CardColor.ColorType.ORANGE:
+			return CardDisplay.CARD_TEXT_COLOR_ORANGE
+		CardColor.ColorType.BLACK:
+			return CardDisplay.CARD_TEXT_COLOR_BLACK
+		CardColor.ColorType.RED:
+			return CardDisplay.CARD_TEXT_COLOR_RED
+		_:
+			return CardDisplay.CARD_TEXT_COLOR

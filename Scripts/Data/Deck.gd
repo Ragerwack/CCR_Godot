@@ -4,11 +4,18 @@ extends RefCounted
 var id: String
 var deck_def_id: int = 0
 var deck_def_key: String = ""
+var series_definition_id: int = 0
+var deck_asset_id: int = 0
+var series_asset_id: int = 0
 var series_name: String
 var deck_name: String
 var color: CardColor.ColorType
 var card_count: int = 0
 var combat_power: int = 0
+var status: String = "active"
+var created_date_beijing: String = ""
+var created_at_iso: String = ""
+var created_at_unix: float = 0.0
 
 # 已收集的编号 (1-5)
 var collected_numbers: Array[int] = []
@@ -45,10 +52,16 @@ func to_dict() -> Dictionary:
 		"id": id,
 		"deck_def_id": deck_def_id,
 		"deck_def_key": deck_def_key,
+		"series_definition_id": series_definition_id,
+		"deck_asset_id": deck_asset_id,
+		"series_asset_id": series_asset_id,
 		"series_name": series_name,
 		"deck_name": deck_name,
 		"color": color,
 		"card_count": card_count,
 		"combat_power": combat_power,
+		"status": status,
+		"created_date_beijing": created_date_beijing,
+		"created_at": created_at_iso,
 		"collected_numbers": collected_numbers,
 	}

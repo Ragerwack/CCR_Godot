@@ -60,6 +60,13 @@ func _ready() -> void:
 	overlay.setup(sources, Rect2(Vector2(8, 210), Vector2(104, 36)), true)
 	await get_tree().process_frame
 	get_tree().root.add_child(overlay)
+	var relic_landing_events: Array[Dictionary] = []
+	var relic_landing_listener := func(event_name: String) -> void:
+		if event_name == "relic_landing":
+			relic_landing_events.append({
+				"msec": Time.get_ticks_msec(),
+			})
+	AudioManager.sfx_played.connect(relic_landing_listener)
 	await get_tree().process_frame
 	var wait_probe := {"relic_formed_before_payload": false}
 	var expected_relic_height := get_viewport().get_visible_rect().size.y * (3.0 / 5.0) * 1.30
@@ -92,15 +99,25 @@ func _ready() -> void:
 	overlay.add_child(relic_probe)
 	var original_nav_target: Rect2 = overlay.get("_nav_target_rect")
 	overlay.set("_nav_target_rect", Rect2(Vector2(20, 220), Vector2(104, 36)))
+	var relic_probe_start_msec := Time.get_ticks_msec()
+	var relic_probe_events_before := relic_landing_events.size()
 	overlay._send_relic_to_nav(relic_probe)
 	await get_tree().create_timer(SynthesisAnimationOverlayScript.RELIC_TO_NAV_DURATION * 0.80).timeout
 	if not is_instance_valid(relic_probe):
 		return _fail("relic_probe_removed_before_target")
 	if relic_probe.modulate.a < 0.99:
 		return _fail("relic_probe_faded_before_target")
+	if relic_landing_events.size() != relic_probe_events_before:
+		return _fail("relic_landing_played_before_target")
 	await get_tree().create_timer(SynthesisAnimationOverlayScript.RELIC_TO_NAV_DURATION * 0.35).timeout
 	if is_instance_valid(relic_probe):
-		relic_probe.queue_free()
+		return _fail("relic_probe_not_removed_after_target")
+	if relic_landing_events.size() != relic_probe_events_before + 1:
+		return _fail("relic_landing_missing_after_target")
+	var relic_probe_event: Dictionary = relic_landing_events[relic_landing_events.size() - 1]
+	var relic_probe_elapsed := float(int(relic_probe_event.get("msec", 0)) - relic_probe_start_msec) / 1000.0
+	if relic_probe_elapsed < SynthesisAnimationOverlayScript.RELIC_TO_NAV_DURATION * 0.95:
+		return _fail("relic_landing_too_early")
 	overlay.set("_nav_target_rect", original_nav_target)
 	var preview_nodes := overlay._create_card_nodes()
 	overlay._bind_card_nodes(preview_nodes)
@@ -133,6 +150,8 @@ func _ready() -> void:
 			overlay.set_reward_items(reward_entries, true)
 	)
 	await overlay.play()
+	if AudioManager.sfx_played.is_connected(relic_landing_listener):
+		AudioManager.sfx_played.disconnect(relic_landing_listener)
 	await get_tree().process_frame
 	if not bool(wait_probe.get("relic_formed_before_payload", false)):
 		return _fail("relic_did_not_form_before_delayed_server_payload")
@@ -157,7 +176,7 @@ func _ready() -> void:
 	if is_instance_valid(discard_overlay):
 		return _fail("discard_overlay_not_freed")
 
-	print("SYNTHESIS_ANIMATION_OVERLAY ok cards=5 color=purple rewards=5 art_rotation=true key_unlock=true store=true discard=true")
+	print("SYNTHESIS_ANIMATION_OVERLAY ok cards=5 color=purple rewards=5 art_rotation=true relic_landing=true key_unlock=true store=true discard=true")
 	get_tree().quit(0)
 
 

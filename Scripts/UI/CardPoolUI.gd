@@ -4,6 +4,7 @@ class_name CardPoolUI
 signal card_clicked(card: CardInfo)
 signal card_double_clicked(card: CardInfo, slot_index: int)
 signal card_dragged(card: CardInfo, from_slot: int)
+signal draw_presentation_completed(cards: Array)
 
 @export var pool_name: String = "card_pool"
 @export var columns: int = 8
@@ -26,6 +27,7 @@ var auto_warm_enabled: bool = true
 var _roll_ensure_elapsed: float = 0.0
 var _draw_reveal_tweens: Array[Tween] = []
 var _draw_reveal_generation: int = 0
+var _pending_draw_presentation_slots: Dictionary = {}
 var _refresh_column: Control = null
 var _side_button_width: float = 110.0
 var _side_button_height: float = 36.0
@@ -105,6 +107,7 @@ func _create_slot_grid() -> void:
 		slot.slot_clicked.connect(_on_slot_clicked)
 		slot.slot_double_clicked.connect(_on_slot_double_clicked)
 		slot.card_dropped.connect(_on_card_dropped)
+		slot.draw_presentation_finished.connect(_on_slot_draw_presentation_finished.bind(slot))
 		slot.slot_unlock_requested.connect(func(idx: int): GameManager.handle_unlock_slot("pool", idx))
 		slots.append(slot)
 		add_child(slot)
@@ -165,7 +168,7 @@ func _create_refresh_column() -> void:
 	_free_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_free_countdown_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_free_countdown_label.add_theme_font_size_override("font_size", _resource_hint_font_size())
-	_free_countdown_label.add_theme_color_override("font_color", Color(0.75, 0.85, 1.0, 0.9))
+	_free_countdown_label.add_theme_color_override("font_color", Color.BLACK)
 	_refresh_column.add_child(_free_countdown_label)
 	_apply_refresh_column_layout()
 	_update_refresh_buttons()
@@ -175,7 +178,7 @@ func _create_refresh_cost_label() -> Label:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	label.add_theme_font_size_override("font_size", _resource_hint_font_size())
-	label.add_theme_color_override("font_color", Color(0.88, 0.92, 1.0, 0.92))
+	label.add_theme_color_override("font_color", Color.BLACK)
 	return label
 
 func _notification(what: int) -> void:
@@ -262,8 +265,7 @@ func _resource_hint_x() -> float:
 
 func _right_region_center_x() -> float:
 	var viewport_width := get_viewport_rect().size.x
-	var grid_right := _centered_grid_start_x() + _grid_width()
-	var global_center := (grid_right + viewport_width) * 0.5
+	var global_center := viewport_width * (1.0 - MainUI.RIGHT_REGION_WIDTH_RATIO * 0.5)
 	var parent_global_x := global_position.x if is_inside_tree() else 0.0
 	return global_center - parent_global_x
 
@@ -489,6 +491,7 @@ func _on_player_data_changed() -> void:
 
 func _refresh_display(cards: Array, animate_draw: bool = false, rapid_animation: bool = false) -> void:
 	_cancel_scheduled_draw_reveals()
+	_pending_draw_presentation_slots.clear()
 	# 固定 16 槽，无翻页
 	var unlocked_count = GameManager.player_data.pool_slots
 	var draw_delays: Array[float] = []
@@ -503,6 +506,8 @@ func _refresh_display(cards: Array, animate_draw: bool = false, rapid_animation:
 		if i < unlocked_count and i < cards.size():
 			var card = cards[i]
 			if animate_draw and card != null:
+				_pending_draw_presentation_slots[i] = true
+				slots[i].set_meta("draw_reveal_generation", _draw_reveal_generation)
 				slots[i].clear_slot()
 				_schedule_draw_card_reveal(
 					slots[i],
@@ -516,6 +521,26 @@ func _refresh_display(cards: Array, animate_draw: bool = false, rapid_animation:
 		else:
 			slots[i].clear_slot()
 		slots[i].visible = true
+	if animate_draw and _pending_draw_presentation_slots.is_empty():
+		draw_presentation_completed.emit(cards)
+
+func _on_slot_draw_presentation_finished(slot_index: int, slot: CardSlotUI) -> void:
+	if slot == null or int(slot.get_meta("draw_reveal_generation", -1)) != _draw_reveal_generation:
+		return
+	_pending_draw_presentation_slots.erase(slot_index)
+	if _pending_draw_presentation_slots.is_empty():
+		draw_presentation_completed.emit(CardPoolSystem.current_pool)
+
+func get_stamina_draw_button() -> Button:
+	return _btn_free
+
+func get_card_slot_for_card(target: CardInfo) -> CardSlotUI:
+	if target == null:
+		return null
+	for slot in slots:
+		if slot != null and slot.get_card() != null and slot.get_card().get_instance_ref() == target.get_instance_ref():
+			return slot
+	return null
 
 func get_reward_unlock_target(slot_index: int) -> Dictionary:
 	if slot_index < 0 or slot_index >= slots.size():

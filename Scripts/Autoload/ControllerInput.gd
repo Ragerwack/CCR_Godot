@@ -111,6 +111,9 @@ var _last_focus_direction: Vector2 = Vector2.ZERO
 var _primary_mouse_down: bool = false
 var _secondary_mouse_down: bool = false
 
+func is_controller_active() -> bool:
+	return _cursor_hidden_by_controller
+
 func _ready() -> void:
 	_apply_custom_cursor()
 	_load_bindings()

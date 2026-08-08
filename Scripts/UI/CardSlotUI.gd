@@ -10,6 +10,7 @@ signal slot_clicked(index: int)
 signal slot_double_clicked(index: int)
 signal card_dropped(target_index: int, card: CardInfo, source: String, source_index: int)
 signal slot_unlock_requested(index: int)
+signal draw_presentation_finished(index: int)
 
 @export var slot_index: int = 0
 @export var show_empty: bool = true
@@ -33,6 +34,8 @@ var _selected_highlight: Panel = null
 var _focus_highlight: Panel = null
 var _slot_shadow: Panel = null
 var _slot_inner_shadow: Control = null
+var _slot_texture: TextureRect = null
+var _border_rect: ColorRect = null
 
 # ── 拖拽视觉状态 ──
 var _drag_out_overlay: ColorRect = null   # 卡牌被拖出时的灰色遮罩
@@ -50,7 +53,9 @@ const DRAG_OUT_COLOR: Color = Color(0.1, 0.1, 0.12, 0.32)
 const SLOT_SHADOW_COLOR: Color = Color(0, 0, 0, 0.16)
 const LOCK_OVERLAY_COLOR: Color = Color(0, 0, 0, 0.38)
 const LOCK_ICON_ID := "status_lock"
+const OPAQUE_SLOT_TEXTURE_PATH: String = "res://Resources/UI/CardSlots/card_slot_opaque_inset.png"
 static var SLOT_SIZE: Vector2 = Vector2(107, 149)
+static var _slot_inset_shader: Shader = null
 const RETURN_ANIMATION_DURATION: float = 0.25
 const DROP_IN_HEIGHT: float = 72.0
 const DROP_IN_DURATION: float = 0.20
@@ -71,6 +76,39 @@ const BLUE_RARITY_SHINE_DURATION: float = CardDisplay.BLUE_DRAW_SHINE_DURATION
 const PURPLE_DRAW_PRESENTATION_DURATION: float = PurpleCardDrawOverlayScript.TOTAL_DURATION
 const ORANGE_DRAW_PRESENTATION_DURATION: float = OrangeCardDrawOverlayScript.TOTAL_DURATION
 const BLACK_DRAW_PRESENTATION_DURATION: float = BlackCardDrawOverlayScript.TOTAL_DURATION
+const SLOT_INSET_SHADER: String = """
+shader_type canvas_item;
+
+uniform float aspect_ratio = 0.718;
+uniform float radius_ratio = 0.0769230769;
+
+void fragment() {
+	vec2 point = vec2(UV.x - 0.5, (UV.y - 0.5) / aspect_ratio);
+	vec2 half_size = vec2(0.5, 0.5 / aspect_ratio);
+	vec2 distance_to_corner = abs(point) - half_size + vec2(radius_ratio);
+	float signed_distance = length(max(distance_to_corner, vec2(0.0)))
+		+ min(max(distance_to_corner.x, distance_to_corner.y), 0.0)
+		- radius_ratio;
+	float edge = max(fwidth(signed_distance), 0.0005);
+	float rounded_alpha = 1.0 - smoothstep(-edge, edge, signed_distance);
+
+	float top_shadow = smoothstep(0.155, 0.0, UV.y) * 0.26;
+	float left_shadow = smoothstep(0.135, 0.0, UV.x) * 0.17;
+	float bottom_highlight = smoothstep(0.145, 0.0, 1.0 - UV.y) * 0.12;
+	float right_highlight = smoothstep(0.130, 0.0, 1.0 - UV.x) * 0.075;
+
+	vec2 center_point = vec2((UV.x - 0.5) * 0.78, (UV.y - 0.5) * 0.58);
+	float central_well = (1.0 - smoothstep(0.18, 0.58, length(center_point))) * 0.055;
+	float inner_lip = exp(-pow((abs(signed_distance + 0.020) / 0.012), 2.0)) * 0.10;
+
+	float dark_alpha = min(top_shadow + left_shadow + central_well + inner_lip, 0.43);
+	float light_alpha = min(bottom_highlight + right_highlight, 0.18);
+	float total_alpha = max(dark_alpha, light_alpha) * rounded_alpha;
+	vec3 mixed_color = mix(vec3(0.0, 0.0, 0.0), vec3(0.92, 0.97, 1.0), smoothstep(dark_alpha, dark_alpha + 0.001, light_alpha));
+
+	COLOR = vec4(mixed_color, total_alpha);
+}
+"""
 
 var _drop_in_tween: Tween = null
 var _drop_in_glow_tween: Tween = null
@@ -92,6 +130,8 @@ func _ready() -> void:
 		add_to_group("card_slots")
 		add_to_group("controller_focusable")
 	setup_ui()
+	if card_display != null and not card_display.draw_rarity_effect_finished.is_connected(_on_draw_rarity_effect_finished):
+		card_display.draw_rarity_effect_finished.connect(_on_draw_rarity_effect_finished)
 	gui_input.connect(_on_gui_input)
 	focus_entered.connect(_on_focus_entered)
 	focus_exited.connect(_on_focus_exited)
@@ -117,18 +157,23 @@ func setup_ui() -> void:
 	_bg_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_bg_rect)
 
-	var border = ColorRect.new()
-	border.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	border.position = Vector2(1, 1)
-	border.size = SLOT_SIZE - Vector2(2, 2)
-	border.color = border_color
-	border.material = CardDisplay._new_rounded_mask_material(SLOT_SIZE)
-	border.name = "Border"
-	border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(border)
+	_border_rect = ColorRect.new()
+	_border_rect.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_border_rect.position = Vector2(1, 1)
+	_border_rect.size = SLOT_SIZE - Vector2(2, 2)
+	_border_rect.color = border_color
+	_border_rect.material = CardDisplay._new_rounded_mask_material(SLOT_SIZE)
+	_border_rect.name = "Border"
+	_border_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_border_rect)
 
 	_slot_inner_shadow = _make_slot_inner_shadow()
 	add_child(_slot_inner_shadow)
+
+	_slot_texture = _make_opaque_slot_texture()
+	if _slot_texture != null:
+		add_child(_slot_texture)
+		_set_programmatic_slot_layers_visible(false)
 
 	card_display = CardDisplay.new()
 	card_display.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -252,56 +297,68 @@ func _exit_tree() -> void:
 	_hide_hover_preview()
 
 func _make_slot_inner_shadow() -> Control:
-	var root := Control.new()
+	var root := ColorRect.new()
 	root.name = "SlotInsetShadow"
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.color = Color.WHITE
+	root.material = _new_slot_inset_material(SLOT_SIZE)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	var top_shadow := ColorRect.new()
-	top_shadow.name = "TopInsetShadow"
-	top_shadow.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	top_shadow.offset_left = 3
-	top_shadow.offset_top = 3
-	top_shadow.offset_right = -3
-	top_shadow.offset_bottom = 8
-	top_shadow.color = Color(0, 0, 0, 0.20)
-	top_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(top_shadow)
-
-	var left_shadow := ColorRect.new()
-	left_shadow.name = "LeftInsetShadow"
-	left_shadow.set_anchors_preset(Control.PRESET_LEFT_WIDE)
-	left_shadow.offset_left = 3
-	left_shadow.offset_top = 3
-	left_shadow.offset_right = 8
-	left_shadow.offset_bottom = -3
-	left_shadow.color = Color(0, 0, 0, 0.14)
-	left_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(left_shadow)
-
-	var bottom_highlight := ColorRect.new()
-	bottom_highlight.name = "BottomInsetHighlight"
-	bottom_highlight.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bottom_highlight.offset_left = 4
-	bottom_highlight.offset_top = -6
-	bottom_highlight.offset_right = -4
-	bottom_highlight.offset_bottom = -3
-	bottom_highlight.color = Color(1, 1, 1, 0.08)
-	bottom_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(bottom_highlight)
-
-	var right_highlight := ColorRect.new()
-	right_highlight.name = "RightInsetHighlight"
-	right_highlight.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	right_highlight.offset_left = -6
-	right_highlight.offset_top = 4
-	right_highlight.offset_right = -3
-	right_highlight.offset_bottom = -4
-	right_highlight.color = Color(1, 1, 1, 0.06)
-	right_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(right_highlight)
+	for marker_name in ["TopInsetShadow", "LeftInsetShadow", "BottomInsetHighlight", "RightInsetHighlight"]:
+		root.add_child(_make_inset_marker(marker_name))
 
 	return root
+
+static func _new_slot_inset_material(slot_size: Vector2) -> ShaderMaterial:
+	if _slot_inset_shader == null:
+		_slot_inset_shader = Shader.new()
+		_slot_inset_shader.code = SLOT_INSET_SHADER
+	var material := ShaderMaterial.new()
+	material.shader = _slot_inset_shader
+	material.set_shader_parameter("aspect_ratio", slot_size.x / maxf(slot_size.y, 1.0))
+	material.set_shader_parameter("radius_ratio", CardDisplay.CARD_CORNER_RADIUS_RATIO)
+	return material
+
+func _make_inset_marker(marker_name: String) -> ColorRect:
+	var marker := ColorRect.new()
+	marker.name = marker_name
+	marker.set_anchors_preset(Control.PRESET_FULL_RECT)
+	marker.color = Color(1, 1, 1, 0)
+	marker.visible = false
+	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return marker
+
+func _make_opaque_slot_texture() -> TextureRect:
+	var texture := _load_opaque_slot_texture()
+	if texture == null:
+		return null
+	var texture_rect := TextureRect.new()
+	texture_rect.name = "OpaqueSlotTexture"
+	texture_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	texture_rect.texture = texture
+	texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	texture_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return texture_rect
+
+static func _load_opaque_slot_texture() -> Texture2D:
+	var texture := ResourceLoader.load(OPAQUE_SLOT_TEXTURE_PATH) as Texture2D
+	if texture != null:
+		return texture
+	var image := Image.new()
+	if image.load(ProjectSettings.globalize_path(OPAQUE_SLOT_TEXTURE_PATH)) != OK:
+		return null
+	return ImageTexture.create_from_image(image)
+
+func _set_programmatic_slot_layers_visible(is_visible: bool) -> void:
+	if _slot_shadow != null:
+		_slot_shadow.visible = is_visible
+	if _bg_rect != null:
+		_bg_rect.visible = is_visible
+	if _border_rect != null:
+		_border_rect.visible = is_visible
+	if _slot_inner_shadow != null:
+		_slot_inner_shadow.visible = is_visible
 
 func is_controller_focusable() -> bool:
 	return _unlocked and (is_occupied or show_empty)
@@ -472,6 +529,7 @@ func _play_purple_draw_presentation(delay: float) -> void:
 func _on_purple_draw_presentation_finished() -> void:
 	_purple_draw_overlay = null
 	_finish_drop_in_animation()
+	draw_presentation_finished.emit(slot_data_index)
 
 
 func _cancel_purple_draw_overlay() -> void:
@@ -506,6 +564,7 @@ func _play_orange_draw_presentation(delay: float) -> void:
 func _on_orange_draw_presentation_finished() -> void:
 	_orange_draw_overlay = null
 	_finish_drop_in_animation()
+	draw_presentation_finished.emit(slot_data_index)
 
 
 func _cancel_orange_draw_overlay() -> void:
@@ -518,6 +577,7 @@ func _cancel_orange_draw_overlay() -> void:
 func _on_black_draw_presentation_finished() -> void:
 	_black_draw_overlay = null
 	_finish_drop_in_animation()
+	draw_presentation_finished.emit(slot_data_index)
 
 
 func _cancel_black_draw_overlay() -> void:
@@ -556,7 +616,12 @@ func _play_draw_confirm_flash() -> void:
 	_drop_in_glow_tween.finished.connect(func():
 		if _glow_effect != null:
 			_glow_effect.visible = false
+		if card_display == null or card_display.card == null or not [CardColor.ColorType.GREEN, CardColor.ColorType.BLUE].has(card_display.card.color):
+			draw_presentation_finished.emit(slot_data_index)
 	)
+
+func _on_draw_rarity_effect_finished() -> void:
+	draw_presentation_finished.emit(slot_data_index)
 
 
 func _play_draw_rarity_effect() -> void:
@@ -648,7 +713,7 @@ func _hover_preview_center(viewport_size: Vector2, preview_size: Vector2) -> Vec
 		var is_left_group := slot_index % 8 < 4
 		var target_rect := _visible_area_side_rect(["vault"], not is_left_group)
 		if target_rect.size.x > 0.0 and target_rect.size.y > 0.0:
-			return target_rect.get_center()
+			return Vector2(target_rect.get_center().x, viewport_size.y * 0.5)
 
 	var mid_x := viewport_size.x * 0.5
 	if global_position.x < mid_x:

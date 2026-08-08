@@ -6,6 +6,7 @@ const REQUIRED_EVENTS := [
 	"forge_art_flight",
 	"forge_success_white", "forge_success_green", "forge_success_blue", "forge_success_purple",
 	"forge_success_orange", "forge_success_black", "forge_success_red",
+	"relic_landing",
 	"slot_unlock", "currency_gold", "currency_gem",
 	"level_up", "stamina_full",
 ]
@@ -48,6 +49,8 @@ func _ready() -> void:
 		return _fail("orange_fire_ring_gain_%s" % str(AudioManager.get_event_gain("draw_orange_fire_ring")))
 	if absf(AudioManager.get_event_gain("draw_black_hole") - 0.92) > 0.001:
 		return _fail("black_hole_gain_%s" % str(AudioManager.get_event_gain("draw_black_hole")))
+	if absf(AudioManager.get_event_gain("relic_landing") - 0.936) > 0.001:
+		return _fail("relic_landing_gain_%s" % str(AudioManager.get_event_gain("relic_landing")))
 
 	var original_sfx := AudioManager.sfx_volume
 	var original_muted := AudioManager.is_muted
@@ -88,7 +91,7 @@ func _ready() -> void:
 
 	AudioManager.set_sfx_volume(original_sfx)
 	AudioManager.set_muted(original_muted)
-	print("AUDIO_MANAGER ok events=%d sfx_assets=26 music=14 pool=%d playback_enabled=true" % [AudioManager.get_sfx_event_count(), AudioManager.get_sfx_pool_size()])
+	print("AUDIO_MANAGER ok events=%d sfx_assets=27 music=14 pool=%d playback_enabled=true" % [AudioManager.get_sfx_event_count(), AudioManager.get_sfx_pool_size()])
 	get_tree().quit(0)
 
 func _fail(reason: String) -> void:

@@ -94,10 +94,11 @@ static func generate_thumbnail(color_type: int, cache_path: String, cards: Array
 
 static func _get_relic_cards(deck_key: String, deck_def_id: int, series_name: String, deck_name: String) -> Array:
 	var cards: Array = CardDataManager.get_cards_by_deck_key(deck_key) if deck_key != "" else []
-	if cards.is_empty() and deck_def_id > 0:
-		cards = CardDataManager.get_cards_by_deck_id(deck_def_id)
 	if cards.is_empty():
-		cards = CardDataManager.get_cards_by_deck(series_name, deck_name)
+		cards = CardDataManager.get_cards_by_deck_alias(series_name, deck_name)
+	# 数据库关系 ID 不是稳定内容 ID，只作为旧数据完全缺少其他身份时的末级回退。
+	if cards.is_empty() and deck_def_id > 0 and series_name == "" and deck_name == "":
+		cards = CardDataManager.get_cards_by_deck_id(deck_def_id)
 	var ordered := cards.duplicate()
 	ordered.sort_custom(func(a: CardInfo, b: CardInfo): return a.card_number < b.card_number)
 	return ordered.slice(0, mini(5, ordered.size()))

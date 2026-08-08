@@ -20,6 +20,7 @@ const http = require("http");
 
 const port = Number(process.env.CCR_PERSISTENT_HTTP_PORT || 43114);
 let nextSocketId = 0;
+let heartbeatCount = 0;
 const socketIds = new WeakMap();
 const socketRequestCounts = new WeakMap();
 
@@ -44,6 +45,26 @@ const server = http.createServer((req, res) => {
         socket_id: socketIds.get(req.socket),
         opened_sockets: nextSocketId,
         closed_after_response: closeAfterResponse,
+      },
+    }));
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/auth/heartbeat") {
+    heartbeatCount += 1;
+    if (heartbeatCount === 1) {
+      // 模拟半开 keep-alive：服务端已收到复用连接上的请求，但客户端永远收不到响应头。
+      return;
+    }
+    res.writeHead(200, {
+      "content-type": "application/json",
+      "connection": "keep-alive",
+    });
+    res.end(JSON.stringify({
+      success: true,
+      data: {
+        status: "active",
+        socket_id: socketIds.get(req.socket),
       },
     }));
     return;

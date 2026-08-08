@@ -30,6 +30,8 @@ const REWARD_KEY_TEXTURE_PATH := "res://Resources/UI/Icons/Status/status_slot_ke
 const REWARD_KEY_REVERSE_DURATION: float = 0.80
 const REWARD_KEY_TARGET_DURATION: float = 1.20
 const REWARD_KEY_FADE_DURATION: float = 0.08
+const REWARD_KEY_FLIGHT_SFX_LEAD_TIME: float = 0.40
+const REWARD_KEY_TARGET_ACCELERATION_POWER: float = 3.0
 const REWARD_KEY_START_SPINS_PER_SECOND: float = 5.0
 const REWARD_KEY_SCALE: float = 2.0
 
@@ -441,6 +443,9 @@ func _send_relic_to_nav(relic: Control) -> void:
 	tween.tween_property(relic, "position", target_pos, RELIC_TO_NAV_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	tween.tween_property(relic, "scale", Vector2(target_scale, target_scale), RELIC_TO_NAV_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	await tween.finished
+	AudioManager.play_sfx("relic_landing", 1.0, 0.0)
+	if is_instance_valid(relic):
+		relic.queue_free()
 
 
 func _send_relic_and_rewards(relic: Control) -> void:
@@ -457,6 +462,11 @@ func _send_relic_and_rewards(relic: Control) -> void:
 	relic_tween.set_parallel(true)
 	relic_tween.tween_property(relic, "position", target_pos, RELIC_TO_NAV_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	relic_tween.tween_property(relic, "scale", Vector2(target_scale, target_scale), RELIC_TO_NAV_DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	relic_tween.tween_callback(func():
+		AudioManager.play_sfx("relic_landing", 1.0, 0.0)
+		if is_instance_valid(relic):
+			relic.queue_free()
+	).set_delay(RELIC_TO_NAV_DURATION)
 
 	var relic_center := _relic_rect.get_center()
 	var reward_duration := 0.0
@@ -470,8 +480,6 @@ func _send_relic_and_rewards(relic: Control) -> void:
 		_start_reward_flight(icon, item, relic_center, delay)
 
 	await get_tree().create_timer(maxf(RELIC_TO_NAV_DURATION, reward_duration)).timeout
-	if is_instance_valid(relic):
-		relic.queue_free()
 
 
 func _create_reward_icon(item: Dictionary, start_center: Vector2) -> TextureRect:
@@ -600,7 +608,7 @@ func _start_key_reward_flight(icon: TextureRect, item: Dictionary, start_center:
 	tween.tween_method(func(progress: float):
 		if not is_instance_valid(icon):
 			return
-		var accelerated := progress * progress
+		var accelerated := _accelerate_key_target_progress(progress)
 		var center := _quadratic_bezier(reverse_center, control_center, target_center, accelerated)
 		var tangent := _quadratic_bezier_tangent(reverse_center, control_center, target_center, accelerated)
 		if tangent.length() <= 0.01:
@@ -611,6 +619,11 @@ func _start_key_reward_flight(icon: TextureRect, item: Dictionary, start_center:
 		icon.position = center - icon.size * 0.5
 		icon.rotation_degrees = continuous_rotation
 	, 0.0, 1.0, REWARD_KEY_TARGET_DURATION).set_trans(Tween.TRANS_LINEAR)
+	var flight_sfx_tween := create_tween()
+	flight_sfx_tween.tween_interval(delay + REWARD_KEY_REVERSE_DURATION + maxf(REWARD_KEY_TARGET_DURATION - REWARD_KEY_FLIGHT_SFX_LEAD_TIME, 0.0))
+	flight_sfx_tween.tween_callback(func():
+		AudioManager.play_sfx("forge_art_flight", 1.0, 0.0)
+	)
 	tween.tween_callback(func():
 		AudioManager.play_sfx("slot_unlock", 1.0, 0.0)
 		var target_slot = item.get("target_slot", null)
@@ -700,6 +713,9 @@ func _quadratic_bezier(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
 func _quadratic_bezier_tangent(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
 	var p := clampf(t, 0.0, 1.0)
 	return (b - a) * 2.0 * (1.0 - p) + (c - b) * 2.0 * p
+
+static func _accelerate_key_target_progress(progress: float) -> float:
+	return pow(clampf(progress, 0.0, 1.0), REWARD_KEY_TARGET_ACCELERATION_POWER)
 
 
 func _cubic_bezier(a: Vector2, b: Vector2, c: Vector2, d: Vector2, t: float) -> Vector2:

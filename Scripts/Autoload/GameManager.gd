@@ -52,6 +52,8 @@ var _stamina_display_override_max: int = 1
 var profile_cache_version: int = 0
 var relic_inventory_cache_version: int = 0
 var _player_state_cache = PlayerStateCacheScript.new()
+var _account_state_generation: int = 0
+const NEWBIE_STAMINA_DISPLAY_MAX: int = 100
 
 const _LEVEL_REWARD_TOTALS: Dictionary = {
 	1: {"gold": 100, "gems": 50},
@@ -114,6 +116,8 @@ const AvatarCatalog = preload("res://Scripts/Data/AvatarCatalog.gd")
 
 func _ready() -> void:
 	player_data = PlayerData.new()
+	if not Localization.locale_changed.is_connected(_on_locale_changed):
+		Localization.locale_changed.connect(_on_locale_changed)
 	var cached_draw_key = Config.get_value("cache", "draw_key", {})
 	if cached_draw_key is Dictionary and not cached_draw_key.is_empty():
 		apply_draw_key(cached_draw_key)
@@ -127,6 +131,38 @@ func _ready() -> void:
 
 	_update_free_refresh_max()
 
+## 语言切换只改变显示文案，不触碰卡牌所有权、槽位或布局 dirty 状态。
+## 卡池/手牌/保险箱可能分别持有同一卡牌的浅拷贝，因此所有运行时集合都需要刷新。
+func _on_locale_changed(_locale: String) -> void:
+	refresh_cached_card_localization()
+
+func refresh_cached_card_localization() -> void:
+	if player_data == null:
+		return
+	var card_collections: Array = [
+		player_data.pool_cards,
+		player_data.hand_cards,
+		player_data.vault_cards,
+		CardPoolSystem.current_pool,
+	]
+	for cards in card_collections:
+		if not cards is Array:
+			continue
+		for card in cards:
+			if card is CardInfo:
+				CardDataManager.localize_card_in_place(card as CardInfo)
+	for deck in DeckSystem.player_decks:
+		if deck is Deck:
+			CardDataManager.localize_deck_in_place(deck as Deck)
+	for deck in player_data.decks:
+		if deck is Deck:
+			CardDataManager.localize_deck_in_place(deck as Deck)
+
+	# 让仍在树中的卡池、手牌、保险箱和博物馆控件立即重绘；这不是资产变化，
+	# 因此不调用 mark_pool_hand_layout_dirty()。
+	player_data.changed.emit()
+	CardPoolSystem.pool_updated.emit(CardPoolSystem.current_pool)
+
 func _process(delta: float) -> void:
 	if free_refresh_cooldown > 0:
 		free_refresh_cooldown -= delta
@@ -135,14 +171,74 @@ func _process(delta: float) -> void:
 		if free_refresh_cooldown <= 0.0:
 			_recover_one_free_refresh_local()
 
+## 切换账号时原地清空所有账号级内存态。不能替换 player_data，否则常驻 UI
+## 仍会监听旧对象，继而把上一账号的 ID、货币和战力留在画面上。
+func reset_account_state() -> void:
+	_account_state_generation += 1
+	player_data.reset_to_defaults(false)
+	current_scene = Scene.MAIN
+	current_view = "Main"
+	exp_in_level = 0
+	exp_for_next = 400
+	free_refresh_count = 1
+	free_refresh_cooldown = 0.0
+	free_refresh_max_count = 1
+	newbie_free_refresh_count = 0
+	last_free_refresh_time_unix = 0.0
+	_last_free_refresh_attempt_was_newbie = false
+	_last_gold_refresh_attempt_cost = 0
+	_last_gem_refresh_attempt_cost = 0
+	_cache_loaded = {
+		"profile": false,
+		"level": false,
+		"pool": false,
+		"hand": false,
+		"vault": false,
+		"decks": false,
+	}
+	vault_raw_slot_data = []
+	vault_slot_quote = {}
+	_layout_sync_in_flight = false
+	_optional_login_sync_in_flight = false
+	_pool_hand_layout_dirty = false
+	_pool_hand_layout_revision = 0
+	_last_announced_level = 1
+	_pending_level_stamina_refill = {}
+	_stamina_display_override_active = false
+	_stamina_display_override_current = 0
+	_stamina_display_override_max = 1
+	profile_cache_version = 0
+	relic_inventory_cache_version = 0
+	CardPoolSystem.reset_account_state()
+	DeckSystem.reset_account_state()
+	player_data.changed.emit()
+	data_synced.emit()
+
+func get_account_state_generation() -> int:
+	return _account_state_generation
+
+func _is_account_context_current(player_id: int, generation: int) -> bool:
+	return (
+		player_id > 0
+		and player_data.user_id == player_id
+		and _account_state_generation == generation
+		and ApiClient.is_logged_in()
+	)
+
 # ══════════════════════════════════════════════════
 #  服务端数据同步
 # ══════════════════════════════════════════════════
 
 ## 从登录响应设置玩家数据
 func apply_login_user(user_data: Dictionary) -> void:
+	var incoming_user_id := int(user_data.get("id", 0))
+	if incoming_user_id <= 0:
+		FileLogger.warn("忽略缺少有效玩家 ID 的登录响应")
+		return
+	if player_data.user_id != incoming_user_id:
+		reset_account_state()
 	# 映射 login 响应字段到 PlayerData
-	player_data.user_id = int(user_data.get("id", player_data.user_id))
+	player_data.user_id = incoming_user_id
 	player_data.nickname = user_data.get("username", "玩家")
 	player_data.level = user_data.get("level", 1)
 	_last_announced_level = int(player_data.level)
@@ -152,6 +248,8 @@ func apply_login_user(user_data: Dictionary) -> void:
 	player_data.combat_power = int(user_data.get("combatPower", player_data.combat_power))
 	player_data.country = str(user_data.get("country", "EARTH"))
 	player_data.avatar_id = str(user_data.get("avatar", AvatarCatalog.DEFAULT_AVATAR_ID))
+	if user_data.has("equippedTitles") and user_data.get("equippedTitles") is Array:
+		player_data.equipped_titles = user_data.get("equippedTitles", []).duplicate(true)
 	if not AvatarCatalog.is_known_avatar(player_data.avatar_id):
 		player_data.avatar_id = AvatarCatalog.DEFAULT_AVATAR_ID
 	Localization.apply_account_default(player_data.country, player_data.user_id)
@@ -164,6 +262,7 @@ func apply_login_user(user_data: Dictionary) -> void:
 	_update_free_refresh_cooldown_from_state()
 	profile_cache_version = int(user_data.get("profileVersion", 0))
 	relic_inventory_cache_version = int(user_data.get("relicInventoryVersion", 0))
+	_apply_tutorial_profile(user_data)
 	_load_verified_local_player_cache()
 	player_data.changed.emit()
 
@@ -172,8 +271,22 @@ func apply_draw_key(key_data: Dictionary) -> void:
 	draw_key_version = int(draw_key.get("version", 0))
 	Config.set_value("cache", "draw_key", draw_key)
 
+## 合成成功 ACK 已由服务端事务确认战力增量；客户端立即应用以驱动数值动画，
+## 后台 profile 同步仍负责校正最终权威值。
+func apply_confirmed_synthesis_combat_power(deck_data: Dictionary) -> void:
+	if deck_data.is_empty():
+		return
+	var added := int(deck_data.get("combat_power_added", deck_data.get("combat_power", 0)))
+	if added <= 0:
+		return
+	player_data.combat_power += added
+
 	## 从 profile 响应同步完整数据
 func apply_profile(profile: Dictionary) -> void:
+	var response_user_id := int(profile.get("id", 0))
+	if response_user_id > 0 and player_data.user_id > 0 and response_user_id != player_data.user_id:
+		FileLogger.warn("忽略过期账号 profile 响应: response=%d current=%d" % [response_user_id, player_data.user_id])
+		return
 	var old_level := int(player_data.level)
 	var old_profile_cache_version := profile_cache_version
 	player_data.user_id = int(profile.get("id", player_data.user_id))
@@ -185,10 +298,13 @@ func apply_profile(profile: Dictionary) -> void:
 	player_data.combat_power = profile.get("combatPower", player_data.combat_power)
 	player_data.country = str(profile.get("country", player_data.country))
 	player_data.avatar_id = str(profile.get("avatar", player_data.avatar_id))
+	if profile.has("equippedTitles") and profile.get("equippedTitles") is Array:
+		player_data.equipped_titles = profile.get("equippedTitles", []).duplicate(true)
 	if not AvatarCatalog.is_known_avatar(player_data.avatar_id):
 		player_data.avatar_id = AvatarCatalog.DEFAULT_AVATAR_ID
 	profile_cache_version = int(profile.get("profileVersion", profile_cache_version))
 	relic_inventory_cache_version = int(profile.get("relicInventoryVersion", relic_inventory_cache_version))
+	_apply_tutorial_profile(profile)
 
 	# 免费刷新
 	var fc = profile.get("freeRefreshCount", null)
@@ -210,6 +326,25 @@ func apply_profile(profile: Dictionary) -> void:
 	_cache_loaded["profile"] = true
 	if profile_cache_version > 0 and profile_cache_version != old_profile_cache_version and ApiClient.is_logged_in():
 		sync_player_cache_from_server.call_deferred()
+
+func _apply_tutorial_profile(data: Dictionary) -> void:
+	player_data.tutorial_version = int(data.get("tutorialVersion", player_data.tutorial_version))
+	player_data.tutorial_state = str(data.get("tutorialState", player_data.tutorial_state))
+	player_data.tutorial_completed = bool(data.get("tutorialCompleted", player_data.tutorial_completed))
+	# 抽卡 confirm 等局部 profile 响应不会携带教程目标字段。只有服务端明确返回该字段时
+	# 才覆盖本地值；否则会在首抽识别套组后把 definition/color 清空，导致真实拖拽无法推进。
+	if data.has("tutorialTargetDefinitionId"):
+		player_data.tutorial_target_definition_id = int(data.get("tutorialTargetDefinitionId", 0) if data.get("tutorialTargetDefinitionId") != null else 0)
+	if data.has("tutorialTargetColor"):
+		player_data.tutorial_target_color = str(data.get("tutorialTargetColor", "") if data.get("tutorialTargetColor") != null else "")
+	var target_refs = data.get("tutorialTargetCardInstanceIds", player_data.tutorial_target_card_instance_ids)
+	if target_refs is Array:
+		player_data.tutorial_target_card_instance_ids = target_refs.duplicate()
+	var collected = data.get("tutorialCollectedNumbers", player_data.tutorial_collected_numbers)
+	if collected is Array:
+		player_data.tutorial_collected_numbers = collected.duplicate()
+	if data.has("tutorialRelicInstanceId"):
+		player_data.tutorial_relic_instance_id = str(data.get("tutorialRelicInstanceId", "") if data.get("tutorialRelicInstanceId") != null else "")
 
 ## 从 /user/level API 响应应用等级阈值信息
 func _apply_level_info(level_info: Dictionary) -> void:
@@ -443,7 +578,6 @@ func _load_verified_local_player_cache() -> void:
 		_apply_cached_identity(payload.get("identity", {}))
 	if (
 		int(snapshot.get("relic_inventory_version", 0)) == relic_inventory_cache_version
-		and str(snapshot.get("relic_locale", "")) == Localization.get_http_locale()
 	):
 		var cached_relics = payload.get("relics", [])
 		if cached_relics is Array:
@@ -462,16 +596,20 @@ func _apply_cached_identity(identity: Dictionary) -> void:
 func sync_player_cache_from_server() -> Dictionary:
 	if not ApiClient.is_logged_in() or player_data.user_id <= 0:
 		return {"success": false, "error": "玩家尚未登录"}
+	var expected_player_id := player_data.user_id
+	var expected_generation := _account_state_generation
 	var locale := Localization.get_http_locale()
-	var request := _player_state_cache.build_sync_request(player_data.user_id, locale)
+	var request := _player_state_cache.build_sync_request(expected_player_id, locale)
 	var response := await ApiClient.sync_player_cache(request)
+	if not _is_account_context_current(expected_player_id, expected_generation):
+		return {"success": false, "error": "账号已切换，忽略过期缓存响应", "stale_account": true}
 	if not response.get("success", false):
 		FileLogger.warn("玩家缓存条件同步失败: " + str(response.get("error", "")))
 		return response
 	var data: Dictionary = response.get("data", {})
-	if int(data.get("player_id", 0)) != player_data.user_id:
+	if int(data.get("player_id", 0)) != expected_player_id:
 		return {"success": false, "error": "玩家缓存响应账号不一致"}
-	var old_snapshot := _player_state_cache.load_snapshot(player_data.user_id)
+	var old_snapshot := _player_state_cache.load_snapshot(expected_player_id)
 	var old_payload: Dictionary = old_snapshot.get("payload", {})
 	var identity: Dictionary = old_payload.get("identity", {}) if old_payload.get("identity", {}) is Dictionary else {}
 	var relics: Array = old_payload.get("relics", []) if old_payload.get("relics", []) is Array else []
@@ -487,10 +625,10 @@ func sync_player_cache_from_server() -> Dictionary:
 	if identity.is_empty() or not (relics is Array):
 		return {"success": false, "error": "玩家缓存响应缺少可用快照"}
 	_player_state_cache.save_snapshot(
-		player_data.user_id,
+		expected_player_id,
 		profile_cache_version,
 		relic_inventory_cache_version,
-		str(data.get("relic_locale", locale)),
+		str(data.get("content_contract", "asset-id-v1")),
 		identity,
 		relics
 	)
@@ -507,6 +645,8 @@ func sync_player_cache_from_server() -> Dictionary:
 
 ## 同步全量数据（profile + level + 卡牌 + 套牌）
 func sync_all_from_server() -> void:
+	var expected_player_id := player_data.user_id
+	var expected_generation := _account_state_generation
 	var started := Time.get_ticks_msec()
 	FileLogger.log("开始同步服务端数据 (6路并行请求)")
 	FileLogger.perf("full_sync_start")
@@ -515,11 +655,14 @@ func sync_all_from_server() -> void:
 	var results := await ApiClient.batch_request([
 		{"key": "profile", "url": base + "/user/profile"},
 		{"key": "level", "url": base + "/player/level"},
-		{"key": "pool", "url": base + "/game/cards?type=pool"},
-		{"key": "hand", "url": base + "/game/cards?type=hand"},
-		{"key": "vault", "url": base + "/game/cards?type=vault"},
-		{"key": "decks", "url": base + "/game/decks"},
+		{"key": "pool", "url": ApiClient.get_localized_api_url("/game/cards?type=pool")},
+		{"key": "hand", "url": ApiClient.get_localized_api_url("/game/cards?type=hand")},
+		{"key": "vault", "url": ApiClient.get_localized_api_url("/game/cards?type=vault")},
+		{"key": "decks", "url": ApiClient.get_localized_api_url("/game/decks")},
 	])
+	if not _is_account_context_current(expected_player_id, expected_generation):
+		FileLogger.warn("账号已切换，忽略过期全量同步响应")
+		return
 
 	if results.get("profile", {}).get("success", false):
 		apply_profile(results["profile"]["data"])
@@ -551,6 +694,8 @@ func sync_all_from_server() -> void:
 ## 登录后首屏同步：只加载进入抽卡页必需的数据。
 ## 保险箱和博物馆在玩家进入对应页面时再加载，避免阻塞首屏。
 func sync_initial_card_pool_from_server() -> Dictionary:
+	var expected_player_id := player_data.user_id
+	var expected_generation := _account_state_generation
 	var started := Time.get_ticks_msec()
 	FileLogger.log("开始首屏同步 (profile + level + pool + hand 并行)")
 	FileLogger.perf("login_initial_sync_start")
@@ -559,9 +704,11 @@ func sync_initial_card_pool_from_server() -> Dictionary:
 	var results := await ApiClient.batch_request([
 		{"key": "profile", "url": base + "/user/profile"},
 		{"key": "level", "url": base + "/player/level"},
-		{"key": "pool", "url": base + "/game/cards?type=pool"},
-		{"key": "hand", "url": base + "/game/cards?type=hand"},
+		{"key": "pool", "url": ApiClient.get_localized_api_url("/game/cards?type=pool")},
+		{"key": "hand", "url": ApiClient.get_localized_api_url("/game/cards?type=hand")},
 	])
+	if not _is_account_context_current(expected_player_id, expected_generation):
+		return {"success": false, "error": "账号已切换，忽略过期首屏同步响应", "stale_account": true}
 
 	if results.get("profile", {}).get("success", false):
 		apply_profile(results["profile"]["data"])
@@ -595,42 +742,82 @@ func sync_optional_login_data_background(include_config: bool = true) -> void:
 	if _optional_login_sync_in_flight or not ApiClient.is_logged_in():
 		return
 	_optional_login_sync_in_flight = true
+	var expected_player_id := player_data.user_id
+	var expected_generation := _account_state_generation
 	var started := Time.get_ticks_msec()
 	FileLogger.perf("login_optional_tasks_start", {"include_config": include_config})
 	# 先完成轻量版本握手；新设备可尽早拿到 relic，命中设备只收到 current。
 	var decks_resp := await sync_player_cache_from_server()
+	if not _is_account_context_current(expected_player_id, expected_generation):
+		return
 
 	var base := ApiClient.get_api_base_url()
 	var requests: Array[Dictionary] = [
 		{"key": "level", "url": base + "/player/level", "timeout": 20.0},
+		{"key": "vault", "url": ApiClient.get_localized_api_url("/game/cards?type=vault"), "timeout": 20.0},
+		{"key": "vault_quote", "url": ApiClient.get_localized_api_url("/game/vault-slot-quote"), "timeout": 20.0},
 	]
 	if include_config:
 		requests.append({"key": "config", "url": base + "/game/config", "timeout": 20.0})
 
 	var results := await ApiClient.batch_request(requests)
-
-	var level_resp: Dictionary = results.get("level", {})
-	if level_resp.get("success", false):
-		_apply_level_info(level_resp["data"])
-	else:
-		FileLogger.warn("登录后台等级同步失败: " + level_resp.get("error", ""))
-
-	if include_config:
-		var config_resp: Dictionary = results.get("config", {})
-		if config_resp.get("success", false):
-			FileLogger.log("登录后台卡牌配置加载成功")
-		else:
-			FileLogger.warn("登录后台卡牌配置加载失败: " + config_resp.get("error", ""))
+	if not _is_account_context_current(expected_player_id, expected_generation):
+		return
+	var optional_summary := _apply_optional_login_batch_results(results, include_config)
 
 	_optional_login_sync_in_flight = false
 	FileLogger.perf("login_optional_tasks_done", {
 		"success": true,
 		"total_ms": Time.get_ticks_msec() - started,
 		"decks": decks_resp.get("success", false),
-		"level": level_resp.get("success", false),
-		"config": results.get("config", {}).get("success", false) if include_config else null,
+		"level": optional_summary.get("level", false),
+		"config": optional_summary.get("config", null),
+		"vault": optional_summary.get("vault", false),
+		"vault_quote": optional_summary.get("vault_quote", false),
 	})
 	data_synced.emit()
+
+func _apply_optional_login_batch_results(results: Dictionary, include_config: bool = true) -> Dictionary:
+	var summary := {
+		"level": false,
+		"config": null,
+		"vault": false,
+		"vault_quote": false,
+	}
+
+	var level_resp: Dictionary = results.get("level", {})
+	if level_resp.get("success", false):
+		_apply_level_info(level_resp["data"])
+		summary["level"] = true
+	else:
+		FileLogger.warn("登录后台等级同步失败: " + level_resp.get("error", ""))
+
+	var vault_resp: Dictionary = results.get("vault", {})
+	if vault_resp.get("success", false):
+		_apply_card_slots("vault", vault_resp["data"])
+		summary["vault"] = true
+		FileLogger.log("登录后台保险箱预取成功, 槽位数=" + str(player_data.vault_cards.size()))
+	else:
+		FileLogger.warn("登录后台保险箱预取失败: " + vault_resp.get("error", ""))
+
+	var vault_quote_resp: Dictionary = results.get("vault_quote", {})
+	if vault_quote_resp.get("success", false):
+		vault_slot_quote = vault_quote_resp["data"]
+		summary["vault_quote"] = true
+		player_data.changed.emit()
+	else:
+		FileLogger.warn("登录后台保险箱槽位价格预取失败: " + vault_quote_resp.get("error", ""))
+
+	if include_config:
+		var config_resp: Dictionary = results.get("config", {})
+		if config_resp.get("success", false):
+			FileLogger.log("登录后台卡牌配置加载成功")
+			summary["config"] = true
+		else:
+			FileLogger.warn("登录后台卡牌配置加载失败: " + config_resp.get("error", ""))
+			summary["config"] = false
+
+	return summary
 
 func sync_decks_from_server() -> void:
 	var started := Time.get_ticks_msec()
@@ -641,6 +828,22 @@ func sync_decks_from_server() -> void:
 	else:
 		FileLogger.warn("博物馆套牌同步失败: " + decks_resp.get("error", ""))
 	FileLogger.perf("new_data_request_done", {"page": "deck_panel", "success": decks_resp.get("success", false), "total_ms": Time.get_ticks_msec() - started})
+	data_synced.emit()
+
+func sync_career_from_server() -> void:
+	var started := Time.get_ticks_msec()
+	FileLogger.perf("new_data_request_start", {"page": "career"})
+	var profile_resp := await ApiClient.get_profile()
+	if profile_resp.get("success", false):
+		apply_profile(profile_resp["data"])
+	else:
+		FileLogger.warn("个人生涯 profile 同步失败: " + str(profile_resp.get("error", "")))
+	var relic_resp := await sync_player_cache_from_server()
+	FileLogger.perf("new_data_request_done", {
+		"page": "career",
+		"success": profile_resp.get("success", false) and relic_resp.get("success", false),
+		"total_ms": Time.get_ticks_msec() - started,
+	})
 	data_synced.emit()
 
 func sync_vault_from_server() -> void:
@@ -678,9 +881,9 @@ func sync_reward_state_from_server() -> void:
 	var results := await ApiClient.batch_request([
 		{"key": "profile", "url": base + "/user/profile"},
 		{"key": "level", "url": base + "/player/level"},
-		{"key": "pool", "url": base + "/game/cards?type=pool"},
-		{"key": "hand", "url": base + "/game/cards?type=hand"},
-		{"key": "vault", "url": base + "/game/cards?type=vault"},
+		{"key": "pool", "url": ApiClient.get_localized_api_url("/game/cards?type=pool")},
+		{"key": "hand", "url": ApiClient.get_localized_api_url("/game/cards?type=hand")},
+		{"key": "vault", "url": ApiClient.get_localized_api_url("/game/cards?type=vault")},
 	])
 
 	if results.get("profile", {}).get("success", false):
@@ -823,6 +1026,8 @@ func get_stamina_display_current() -> int:
 func get_stamina_display_max() -> int:
 	if _stamina_display_override_active:
 		return _stamina_display_override_max
+	if newbie_free_refresh_count > 0:
+		return maxi(NEWBIE_STAMINA_DISPLAY_MAX, newbie_free_refresh_count)
 	return maxi(player_data.level, 1)
 
 func is_using_newbie_free_refreshes() -> bool:

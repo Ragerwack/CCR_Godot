@@ -66,3 +66,7 @@ static func from_string(s: String) -> ColorType:
 		"黑", "BLACK": return ColorType.BLACK
 		"红", "RED": return ColorType.RED
 	return ColorType.WHITE
+
+static func to_api_string(c: ColorType) -> String:
+	const API_NAMES: Array[String] = ["white", "green", "blue", "purple", "orange", "black", "red"]
+	return API_NAMES[clampi(int(c), 0, API_NAMES.size() - 1)]

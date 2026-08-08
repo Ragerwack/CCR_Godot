@@ -6,8 +6,12 @@ extends Node
 ## 这里保留少量 HTTPClient 连接，让后续指令复用已完成的 TCP/TLS 握手。
 
 const DEFAULT_POOL_SIZE: int = 2
+const DEFAULT_REUSED_FIRST_BYTE_TIMEOUT_SECONDS: float = 6.0
 
 var _slots: Array[Dictionary] = []
+## 复用连接写出请求后长时间收不到响应头时，优先把它视为半开连接并重连。
+## 资产写会复用 operation_id，因此即使服务端已成功执行，重试也只会回放同一结果。
+var reused_first_byte_timeout_seconds: float = DEFAULT_REUSED_FIRST_BYTE_TIMEOUT_SECONDS
 
 
 func _ready() -> void:
@@ -141,6 +145,21 @@ func _request_on_slot(
 
 	while client.get_status() == HTTPClient.STATUS_REQUESTING:
 		client.poll()
+		if (
+			reused_connection
+			and Time.get_ticks_msec() - request_started
+				>= int(maxf(0.1, reused_first_byte_timeout_seconds) * 1000.0)
+		):
+			client.close()
+			slot["origin"] = ""
+			return _failure(
+				HTTPRequest.RESULT_TIMEOUT,
+				pool_wait_ms,
+				slot_index,
+				connect_ms,
+				true,
+				true
+			)
 		if _timed_out(started, timeout_seconds):
 			client.close()
 			slot["origin"] = ""
@@ -185,6 +204,7 @@ func _request_on_slot(
 		"pool_wait_ms": pool_wait_ms,
 		"connect_ms": connect_ms,
 		"ttfb_ms": ttfb_ms,
+		"reused_first_byte_timeout": false,
 	}
 
 
@@ -253,7 +273,8 @@ func _failure(
 	pool_wait_ms: int,
 	slot_index: int,
 	connect_ms: int = 0,
-	reused_connection: bool = false
+	reused_connection: bool = false,
+	reused_first_byte_timeout: bool = false
 ) -> Dictionary:
 	return {
 		"result": result,
@@ -265,4 +286,5 @@ func _failure(
 		"pool_wait_ms": pool_wait_ms,
 		"connect_ms": connect_ms,
 		"ttfb_ms": 0,
+		"reused_first_byte_timeout": reused_first_byte_timeout,
 	}

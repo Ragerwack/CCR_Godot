@@ -2,6 +2,7 @@ extends Node
 
 const LoadingScreenScene := preload("res://Scenes/UI/LoadingScreen.tscn")
 const LoadingTutorialUIScript := preload("res://Scripts/UI/LoadingTutorialUI.gd")
+const CCRVisualStyle := preload("res://Scripts/UI/CCRVisualStyle.gd")
 
 var _failed := false
 
@@ -143,7 +144,8 @@ func _test_loading_tutorial_background() -> void:
 				_fail("Chinese tutorial tip exposes an unreleased feature: " + str(tip.get("id", "unknown")))
 				return
 	for tip in LoadingTutorialUIScript.LOADING_TUTORIAL_TIPS_EN:
-		if JSON.stringify(tip).to_lower().contains("red"):
+		var english_tip_text := JSON.stringify(tip).to_lower()
+		if english_tip_text.contains("red card") or english_tip_text.contains("red-card"):
 			_fail("English tutorial tip exposes red-card wording: " + str(tip.get("id", "unknown")))
 			return
 	var background := tutorial.find_child("BackgroundImage", true, false) as TextureRect
@@ -156,6 +158,18 @@ func _test_loading_tutorial_background() -> void:
 	tutorial.queue_free()
 
 func _test_loading_tutorial_locales() -> void:
+	for tip in LoadingTutorialUIScript.LOADING_TUTORIAL_TIPS_JA:
+		var ja_tip_text := JSON.stringify(tip)
+		for forbidden_term in ["レリック", "カタログ"]:
+			if ja_tip_text.contains(str(forbidden_term)):
+				_fail("Japanese loading tip contains forbidden term %s: %s" % [forbidden_term, str(tip.get("id", "unknown"))])
+				return
+	for tip in LoadingTutorialUIScript.LOADING_TUTORIAL_TIPS_KO:
+		var ko_tip_text := JSON.stringify(tip)
+		for forbidden_term in ["렐릭", "카탈로그"]:
+			if ko_tip_text.contains(str(forbidden_term)):
+				_fail("Korean loading tip contains forbidden term %s: %s" % [forbidden_term, str(tip.get("id", "unknown"))])
+				return
 	for locale in Localization.get_supported_locales():
 		Localization.set_locale(str(locale))
 		var tutorial := LoadingTutorialUIScript.new()
@@ -180,7 +194,9 @@ func _test_loading_tutorial_locales() -> void:
 	Localization.set_locale("en")
 
 func _test_splash_background() -> void:
-	ApiClient.logout()
+	# 测试只隔离当前进程的登录态，不改写开发者本机保存的 token。
+	ApiClient._auth_token = ""
+	ApiClient._refresh_token = ""
 	var splash := SplashScreenUI.new()
 	add_child(splash)
 	await get_tree().process_frame
@@ -238,8 +254,23 @@ func _test_main_background() -> void:
 	if splash == null:
 		_fail("main did not show splash login screen")
 		return
+	main.call("_show_splash_screen")
+	var splash_count := 0
+	for child in main.get_children():
+		if child.name == "SplashScreenUI":
+			splash_count += 1
+	if splash_count != 1:
+		_fail("main created duplicate splash after login failure")
+		return
+	if splash.z_index != 4096:
+		_fail("login splash is not above game button icons")
+		return
 	if background.visible:
 		_fail("main background is visible behind login screen")
+		return
+	var nav_buttons := main.get("_nav_buttons") as NavButtons
+	if nav_buttons == null or nav_buttons.is_visible_in_tree():
+		_fail("navigation is visible behind login screen")
 		return
 	var center_area := main.find_child("CenterArea", false, false) as Control
 	if center_area == null:
@@ -247,6 +278,20 @@ func _test_main_background() -> void:
 		return
 	if center_area.visible:
 		_fail("card slots are visible behind login screen")
+		return
+	for icon_node in main.find_children(CCRVisualStyle.BUTTON_ICON_NODE_NAME, "TextureRect", true, false):
+		var icon := icon_node as TextureRect
+		if icon != null and icon.is_visible_in_tree():
+			_fail("game button icon is visible behind login: " + str(icon.get_parent().name))
+			return
+	if bool(ApiClient.call("_should_invalidate_access_token", "https://ccrgame.com/api/auth/login")):
+		_fail("login 401 invalidates an existing access token")
+		return
+	if bool(ApiClient.call("_should_emit_auth_expired", "https://ccrgame.com/api/auth/login")):
+		_fail("login 401 emits global auth expired")
+		return
+	if not bool(ApiClient.call("_should_emit_auth_expired", "https://ccrgame.com/api/user/profile")):
+		_fail("protected endpoint 401 does not emit auth expired")
 		return
 	if background.stretch_mode != TextureRect.STRETCH_SCALE:
 		_fail("main background is not stretch scale")

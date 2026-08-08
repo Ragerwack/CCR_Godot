@@ -40,12 +40,12 @@ const LOADING_TUTORIAL_TIPS: Array[Dictionary] = [
 ]
 
 const LOADING_TUTORIAL_TIPS_EN: Array[Dictionary] = [
-	{"id": "loading_tip_basic_en", "min_level": 1, "max_level": 999, "title": "Card Pool and Hand", "body": "Drawn cards appear in the card pool. Move cards you want to keep into your hand before drawing again, forging a relic, or organizing your collection.", "short_tip": "Moving cards from the pool to your hand is the basic collection action."},
-	{"id": "loading_tip_craft_en", "min_level": 1, "max_level": 999, "title": "Forging Relics", "body": "A relic requires five cards from the same series, deck, and color, with one card for each number from 1 to 5. Those five cards are consumed when the relic is forged.", "short_tip": "Same deck, same color, five different numbers: one relic."},
-	{"id": "loading_tip_vault_en", "min_level": 5, "max_level": 999, "title": "The Vault", "body": "The vault is long-term storage. Cards placed there cannot return to your hand, but complete groups of five can still be forged inside the vault.", "short_tip": "Use your vault slots carefully; storing a card is a one-way action."},
+	{"id": "loading_tip_basic_en", "min_level": 1, "max_level": 999, "title": "Card Pool and Hand", "body": "Drawn cards appear in the card pool. Move cards you want to keep into your hand before drawing again, forging a Relic, or organizing your collection.", "short_tip": "Moving cards from the pool to your hand is the basic collection action."},
+	{"id": "loading_tip_craft_en", "min_level": 1, "max_level": 999, "title": "Forging Relics", "body": "A Relic requires five cards from the same series, deck, and color, with one card numbered 1 through 5. Those five cards are consumed when the Relic is forged.", "short_tip": "Five cards from one deck, in one color, numbered 1–5, form one Relic."},
+	{"id": "loading_tip_vault_en", "min_level": 5, "max_level": 999, "title": "The Vault", "body": "The Vault is long-term storage. Cards placed there cannot return to your hand, but complete groups of five can still be forged inside the Vault.", "short_tip": "Use your Vault slots carefully; storing a card is a one-way action."},
 	{"id": "loading_tip_rarity_en", "min_level": 10, "max_level": 999, "title": "Card Rarity", "body": "Card colors range from white through green, blue, purple, orange, and black. Each draw is independent, and exact rates follow the current server configuration.", "short_tip": "Rarer colors are harder to complete, but every collection choice is yours."},
-	{"id": "loading_tip_caps_en", "min_level": 20, "max_level": 999, "title": "Relic Supply Limits", "body": "Higher-rarity relics have global supply limits. The server validates supply and assigns collectible serial numbers when eligible relics are created.", "short_tip": "Advanced relics are long-term collectibles, not routine consumables."},
-	{"id": "loading_tip_history_en", "min_level": 30, "max_level": 999, "title": "A Persistent Collection", "body": "CCR records when a relic was created and who created it. A relic is part of the world's history, even if its owner changes in future systems.", "short_tip": "Relics preserve history as well as rarity."},
+	{"id": "loading_tip_caps_en", "min_level": 20, "max_level": 999, "title": "Relic Supply Limits", "body": "Higher-rarity Relics have global supply limits. The server validates supply and assigns collectible serial numbers when eligible Relics are created.", "short_tip": "Advanced Relics are long-term collectibles, not routine consumables."},
+	{"id": "loading_tip_history_en", "min_level": 30, "max_level": 999, "title": "A Persistent Collection", "body": "CCR records when a Relic was created and who created it. Even if its owner changes, that Relic remains part of the world's history.", "short_tip": "Relics preserve history as well as rarity."},
 ]
 
 const LOADING_TUTORIAL_TIPS_ZH_TW: Array[Dictionary] = [
@@ -58,21 +58,21 @@ const LOADING_TUTORIAL_TIPS_ZH_TW: Array[Dictionary] = [
 ]
 
 const LOADING_TUTORIAL_TIPS_JA: Array[Dictionary] = [
-	{"id": "loading_tip_basic_ja", "min_level": 1, "max_level": 999, "category": "basic", "title": "カードプールと手札", "body": "引いたカードはカードプールに表示されます。残したいカードを手札に移してから、次のドロー、レリックの鍛造、コレクション整理を判断できます。", "short_tip": "プールから手札へ移すことが、CCR の基本的な収集操作です。"},
-	{"id": "loading_tip_forge_ja", "min_level": 1, "max_level": 999, "category": "forge", "title": "レリックの鍛造", "body": "レリックには、同じシリーズ、デッキ、色で、1 から 5 までの番号がそろった 5 枚のカードが必要です。鍛造時にその 5 枚は消費されます。", "short_tip": "同じデッキ、同じ色、5 つの異なる番号で 1 つのレリックになります。"},
+	{"id": "loading_tip_basic_ja", "min_level": 1, "max_level": 999, "category": "basic", "title": "カードプールと手札", "body": "引いたカードはカードプールに表示されます。残したいカードを手札へ移してから、次のドローや聖物の鍛造、コレクションの整理を選べます。", "short_tip": "プールから手札へ移すことが、CCR の基本的な収集操作です。"},
+	{"id": "loading_tip_forge_ja", "min_level": 1, "max_level": 999, "category": "forge", "title": "聖物の鍛造", "body": "聖物には、同じシリーズ・デッキ・色で、1 から 5 までの番号がそろった 5 枚のカードが必要です。鍛造時にその 5 枚は消費されます。", "short_tip": "同じデッキ、同じ色の1～5番で、1つの聖物になります。"},
 	{"id": "loading_tip_vault_ja", "min_level": 5, "max_level": 999, "category": "vault", "title": "保管庫", "body": "保管庫は長期保存用の場所です。入れたカードは手札へ戻せませんが、5 枚の組み合わせがそろえば保管庫内でも鍛造できます。", "short_tip": "保管庫スロットは慎重に使ってください。保存は一方通行です。"},
-	{"id": "loading_tip_rarity_ja", "min_level": 10, "max_level": 999, "category": "rarity", "title": "カードのレアリティ", "body": "カードの色は白、緑、青、紫、橙、黒の順に希少になります。各ドローは独立しており、正確な確率は現在のサーバー設定に従います。", "short_tip": "希少な色ほど完成は難しくなりますが、何を集めるかはあなた次第です。"},
-	{"id": "loading_tip_caps_ja", "min_level": 20, "max_level": 999, "category": "cap", "title": "レリック供給上限", "body": "高レアリティのレリックには全体の供給上限があります。サーバーが上限を検証し、対象となるレリックには収集番号を割り当てます。", "short_tip": "高位レリックは長期収集品であり、日常消耗品ではありません。"},
-	{"id": "loading_tip_history_ja", "min_level": 30, "max_level": 999, "category": "history", "title": "残り続けるコレクション", "body": "CCR はレリックがいつ、誰によって作られたかを記録します。将来所有者が変わっても、そのレリックは世界の歴史の一部です。", "short_tip": "レリックは希少性だけでなく、歴史も保存します。"},
+	{"id": "loading_tip_rarity_ja", "min_level": 10, "max_level": 999, "category": "rarity", "title": "カードのレアリティ", "body": "カードの色は白、緑、青、紫、橙、黒の順に希少になります。各ドローは独立しており、具体的な確率は現在のサーバー設定によります。", "short_tip": "希少な色ほど完成は難しくなりますが、何を集めるかはあなた次第です。"},
+	{"id": "loading_tip_caps_ja", "min_level": 20, "max_level": 999, "category": "cap", "title": "聖物の供給上限", "body": "高レアリティの聖物には全体の供給上限があります。サーバーが上限を検証し、対象となる聖物には収集番号を割り当てます。", "short_tip": "高レアリティの聖物は長期収集品であり、日常的な消耗品ではありません。"},
+	{"id": "loading_tip_history_ja", "min_level": 30, "max_level": 999, "category": "history", "title": "時を越えるコレクション", "body": "CCR は聖物がいつ、誰によって鍛造されたかを記録します。所有者が変わっても、その聖物は世界の歴史の一部です。", "short_tip": "聖物は希少性だけでなく、歴史も残します。"},
 ]
 
 const LOADING_TUTORIAL_TIPS_KO: Array[Dictionary] = [
-	{"id": "loading_tip_basic_ko", "min_level": 1, "max_level": 999, "category": "basic", "title": "카드 풀과 손패", "body": "뽑은 카드는 카드 풀에 표시됩니다. 남기고 싶은 카드를 손패로 옮긴 뒤 다음 뽑기, 렐릭 제작, 컬렉션 정리를 결정할 수 있습니다.", "short_tip": "풀에서 손패로 카드를 옮기는 것이 CCR의 기본 수집 행동입니다."},
-	{"id": "loading_tip_forge_ko", "min_level": 1, "max_level": 999, "category": "forge", "title": "렐릭 제작", "body": "렐릭을 만들려면 같은 시리즈, 같은 덱, 같은 색의 1번부터 5번까지 카드 다섯 장이 필요합니다. 제작 시 그 다섯 장은 소비됩니다.", "short_tip": "같은 덱, 같은 색, 서로 다른 다섯 번호가 하나의 렐릭이 됩니다."},
-	{"id": "loading_tip_vault_ko", "min_level": 5, "max_level": 999, "category": "vault", "title": "보관함", "body": "보관함은 장기 보관 공간입니다. 넣은 카드는 손패로 되돌릴 수 없지만, 다섯 장 조합이 완성되면 보관함 안에서도 렐릭을 제작할 수 있습니다.", "short_tip": "보관함 슬롯은 신중하게 사용하세요. 저장은 되돌릴 수 없는 행동입니다."},
-	{"id": "loading_tip_rarity_ko", "min_level": 10, "max_level": 999, "category": "rarity", "title": "카드 희귀도", "body": "카드 색은 흰색, 초록, 파랑, 보라, 주황, 검정 순으로 희귀해집니다. 각 뽑기는 독립적이며 정확한 확률은 현재 서버 설정을 따릅니다.", "short_tip": "희귀한 색일수록 완성은 어렵지만, 무엇을 수집할지는 당신의 선택입니다."},
-	{"id": "loading_tip_caps_ko", "min_level": 20, "max_level": 999, "category": "cap", "title": "렐릭 공급 한도", "body": "높은 희귀도의 렐릭에는 전체 공급 한도가 있습니다. 서버가 한도를 검증하고, 조건에 맞는 렐릭에는 수집 번호를 부여합니다.", "short_tip": "상위 렐릭은 장기 수집품이지 일상 소모품이 아닙니다."},
-	{"id": "loading_tip_history_ko", "min_level": 30, "max_level": 999, "category": "history", "title": "지속되는 컬렉션", "body": "CCR은 렐릭이 언제, 누가 만들었는지 기록합니다. 미래에 소유자가 바뀌더라도 그 렐릭은 세계의 역사 일부입니다.", "short_tip": "렐릭은 희귀도뿐 아니라 역사도 보존합니다."},
+	{"id": "loading_tip_basic_ko", "min_level": 1, "max_level": 999, "category": "basic", "title": "카드 풀과 손패", "body": "뽑은 카드는 카드 풀에 표시됩니다. 남기고 싶은 카드를 손패로 옮긴 뒤 다음 뽑기나 성물 단조, 컬렉션 정리를 선택할 수 있습니다.", "short_tip": "풀에서 손패로 카드를 옮기는 것이 CCR의 기본 수집 행동입니다."},
+	{"id": "loading_tip_forge_ko", "min_level": 1, "max_level": 999, "category": "forge", "title": "성물 단조", "body": "성물을 단조하려면 같은 시리즈·덱·색의 1번부터 5번까지 카드 다섯 장이 필요합니다. 단조할 때 그 다섯 장은 소비됩니다.", "short_tip": "같은 덱과 색의 1~5번 카드 다섯 장이 하나의 성물이 됩니다."},
+	{"id": "loading_tip_vault_ko", "min_level": 5, "max_level": 999, "category": "vault", "title": "보관함", "body": "보관함은 장기 보관 공간입니다. 넣은 카드는 손패로 되돌릴 수 없지만, 다섯 장 조합이 완성되면 보관함 안에서도 성물을 단조할 수 있습니다.", "short_tip": "보관함 슬롯은 신중하게 사용하세요. 저장은 되돌릴 수 없는 행동입니다."},
+	{"id": "loading_tip_rarity_ko", "min_level": 10, "max_level": 999, "category": "rarity", "title": "카드 희귀도", "body": "카드 색은 흰색, 초록색, 파란색, 보라색, 주황색, 검은색 순으로 희귀해집니다. 각 뽑기는 독립적이며 정확한 확률은 현재 서버 설정을 따릅니다.", "short_tip": "희귀한 색일수록 완성은 어렵지만, 무엇을 수집할지는 당신의 선택입니다."},
+	{"id": "loading_tip_caps_ko", "min_level": 20, "max_level": 999, "category": "cap", "title": "성물 공급 한도", "body": "희귀도가 높은 성물에는 전체 공급 한도가 있습니다. 서버가 한도를 검증하고, 조건에 맞는 성물에는 수집 번호를 부여합니다.", "short_tip": "상위 성물은 장기 수집품이지 일상 소모품이 아닙니다."},
+	{"id": "loading_tip_history_ko", "min_level": 30, "max_level": 999, "category": "history", "title": "시간을 이어가는 컬렉션", "body": "CCR은 성물이 언제, 누가 단조했는지 기록합니다. 소유자가 바뀌더라도 그 성물은 세계 역사의 일부입니다.", "short_tip": "성물은 희귀도뿐 아니라 역사도 보존합니다."},
 ]
 
 const LOADING_BACKGROUND_PATHS: Array[String] = [

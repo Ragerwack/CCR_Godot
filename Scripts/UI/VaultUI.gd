@@ -11,6 +11,7 @@ var slots: Array[CardSlotUI] = []
 var _raw_slot_data: Array = []  # 服务端原始槽位数据（含 unlocked 等信息）
 var _slot_viewport: ScrollContainer = null
 var _slot_canvas: Control = null
+var _vertical_scrollbar: VScrollBar = null
 var _organize_btn: Button = null
 var _organize_cooldown: Control = null
 var _organize_busy: bool = false
@@ -22,8 +23,11 @@ var _unlock_buttons_busy: bool = false
 var _gold_unlock_cooldown: Control = null
 var _gem_unlock_cooldown: Control = null
 var _action_panel: Control = null
-var _side_button_width: float = 110.0
-var _side_button_height: float = 36.0
+var _side_button_width: float = VAULT_ACTION_BUTTON_WIDTH
+var _side_button_height: float = VAULT_ACTION_BUTTON_HEIGHT
+var _scrollbar_top_padding: float = 0.0
+var _session_scroll_vertical: int = 0
+var _restore_scroll_pending: bool = false
 
 # ── 选中合成相关 ──
 var _selected_slots: Array[int] = []     # 单选槽位；保留数组形态便于复用现有高亮逻辑
@@ -37,6 +41,7 @@ const RELIC_VIEW_SCENE = preload("res://Scenes/UI/RelicView.tscn")
 const SynthesisAnimationOverlayScript = preload("res://Scripts/UI/SynthesisAnimationOverlay.gd")
 const AssetActionCooldownScript = preload("res://Scripts/UI/AssetActionCooldown.gd")
 const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
+const CCRLinkedVerticalScrollBarScript = preload("res://Scripts/UI/CCRLinkedVerticalScrollBar.gd")
 const VAULT_COLUMNS: int = 8
 const MAX_VISIBLE_ROWS: int = 4
 const EXTRA_LOCKED_ROWS: int = 1
@@ -47,10 +52,25 @@ const VAULT_GRID_MIN_TOP_Y: float = 58.0
 const UNLOCK_PANEL_WIDTH: float = 130.0
 const UNLOCK_PANEL_RIGHT_MARGIN: float = 10.0
 const BUTTON_LABEL_HEIGHT: float = 24.0
+const ACTION_LABEL_GAP: float = 6.0
+const VAULT_ACTION_REFERENCE_BUTTON_HEIGHT: float = 100.0
+const VAULT_ACTION_BUTTON_WIDTH: float = 194.0
+const VAULT_ACTION_BUTTON_HEIGHT: float = 208.0
+const VAULT_ACTION_CENTER_OFFSET_X: float = 63.0
+const VAULT_ACTION_ICON_SIZE: float = 108.0
+const VAULT_ACTION_ICON_TOP: float = 30.0
+const VAULT_ACTION_TEXT_GAP: float = 22.0
+const VAULT_ACTION_FONT_SIZE: int = 22
+const TODAY_DECK_KEY_ROW_HEIGHT: float = 26.0
+const TODAY_DECK_INFO_ROW_HEIGHT: float = 26.0
+const TODAY_DECK_CARD_ROW_SEPARATOR: float = 4.0
+const TODAY_DECK_SCROLL_BOTTOM_MARGIN: float = 18.0
 const UNLOCK_KEY_TEXTURE_PATH := "res://Resources/UI/Icons/Status/status_slot_key.png"
 const UNLOCK_KEY_REVERSE_DURATION: float = 0.80
 const UNLOCK_KEY_TARGET_DURATION: float = 1.20
 const UNLOCK_KEY_FADE_DURATION: float = 0.08
+const UNLOCK_KEY_FLIGHT_SFX_LEAD_TIME: float = 0.40
+const UNLOCK_KEY_TARGET_ACCELERATION_POWER: float = 3.0
 const UNLOCK_KEY_REVERSE_DISTANCE: float = 58.0
 const UNLOCK_KEY_START_SPINS_PER_SECOND: float = 5.0
 const UNLOCK_KEY_SCALE: float = 2.0
@@ -59,15 +79,31 @@ var _vault_nav_target_rect: Rect2 = Rect2()
 var _stamina_target_rect: Rect2 = Rect2()
 var _gold_target_rect: Rect2 = Rect2()
 var _gems_target_rect: Rect2 = Rect2()
+var _side_button_center_offset_x: float = VAULT_ACTION_CENTER_OFFSET_X
+var _side_button_icon_size: float = VAULT_ACTION_ICON_SIZE
+var _side_button_icon_top: float = VAULT_ACTION_ICON_TOP
+var _side_button_text_gap: float = VAULT_ACTION_TEXT_GAP
+var _side_button_font_size: int = VAULT_ACTION_FONT_SIZE
 var _vault_synthesis_animation_running: bool = false
 var _synthesis_hidden_indices: Dictionary = {}
 
 func configure_side_button_metrics(button_width: float, button_height: float) -> void:
-	_side_button_width = maxf(70.0, button_width)
-	_side_button_height = maxf(28.0, button_height)
+	var scale := maxf(0.1, button_height / VAULT_ACTION_REFERENCE_BUTTON_HEIGHT)
+	_side_button_width = maxf(70.0, VAULT_ACTION_BUTTON_WIDTH * scale)
+	_side_button_height = maxf(28.0, VAULT_ACTION_BUTTON_HEIGHT * scale)
+	_side_button_center_offset_x = VAULT_ACTION_CENTER_OFFSET_X * scale
+	_side_button_icon_size = VAULT_ACTION_ICON_SIZE * scale
+	_side_button_icon_top = VAULT_ACTION_ICON_TOP * scale
+	_side_button_text_gap = VAULT_ACTION_TEXT_GAP * scale
+	_side_button_font_size = maxi(10, int(roundf(float(VAULT_ACTION_FONT_SIZE) * scale)))
 	if is_node_ready():
 		_layout_right_actions()
 		_layout_slot_label()
+
+func configure_scrollbar_layout(top_padding: float) -> void:
+	_scrollbar_top_padding = maxf(0.0, top_padding)
+	if is_node_ready():
+		_layout_vertical_scrollbar()
 
 func _ready() -> void:
 	columns = VAULT_COLUMNS
@@ -104,6 +140,7 @@ func setup_ui() -> void:
 	slot_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	slot_label.text = Localization.t("ui.vault.slot_count", [GameManager.player_data.vault_cards.size(), slot_count])
 	slot_label.name = "SlotLabel"
+	slot_label.add_theme_color_override("font_color", Color.BLACK)
 	add_child(slot_label)
 
 	_slot_viewport = ScrollContainer.new()
@@ -115,6 +152,12 @@ func setup_ui() -> void:
 	_slot_canvas.name = "VaultSlotCanvas"
 	_slot_viewport.add_child(_slot_canvas)
 
+	_vertical_scrollbar = CCRLinkedVerticalScrollBarScript.new() as VScrollBar
+	_vertical_scrollbar.name = "VaultVerticalScrollbar"
+	_vertical_scrollbar.z_index = 1
+	add_child(_vertical_scrollbar)
+	_vertical_scrollbar.call("bind_scroll_container", _slot_viewport)
+
 	_create_relic_preview()
 
 	# ── 合成按钮（初始隐藏） ──
@@ -123,7 +166,7 @@ func setup_ui() -> void:
 	_synthesize_btn.text = Localization.t("ui.synthesis.vault.count")
 	_synthesize_btn.visible = true
 	_synthesize_btn.disabled = true
-	CCRVisualStyle.apply_relic_button(_synthesize_btn, "action_synthesize")
+	CCRVisualStyle.apply_relic_button(_synthesize_btn, "vault_synthesize", false, "vault_action")
 	_synthesize_cooldown = _attach_action_cooldown(_synthesize_btn)
 	_synthesize_btn.pressed.connect(_on_synthesize_pressed)
 
@@ -138,6 +181,7 @@ func _notification(what: int) -> void:
 		_layout_relic_preview()
 		_layout_slot_label()
 		_layout_right_actions()
+		_layout_vertical_scrollbar()
 
 func _create_relic_preview() -> void:
 	_relic_preview = RELIC_VIEW_SCENE.instantiate() as RelicView
@@ -167,7 +211,7 @@ func _create_unlock_panel() -> void:
 	_organize_btn.name = "VaultOrganizeButton"
 	_organize_btn.text = Localization.t("ui.vault.organize")
 	_organize_btn.pressed.connect(_on_organize_vault_pressed)
-	CCRVisualStyle.apply_relic_button(_organize_btn, "vault_organize")
+	CCRVisualStyle.apply_relic_button(_organize_btn, "vault_organize", false, "vault_action")
 	_action_panel.add_child(_organize_btn)
 	_organize_cooldown = _attach_action_cooldown(_organize_btn)
 
@@ -177,36 +221,40 @@ func _create_unlock_panel() -> void:
 	_gold_unlock_btn.name = "VaultExpandGoldButton"
 	_gold_unlock_btn.text = Localization.t("ui.vault.unlock_gold")
 	_gold_unlock_btn.pressed.connect(func(): _on_unlock_slot_pressed("gold"))
-	CCRVisualStyle.apply_relic_button(_gold_unlock_btn, "vault_expand_gold")
+	CCRVisualStyle.apply_relic_button(_gold_unlock_btn, "vault_expand_gold", false, "vault_action")
 	_action_panel.add_child(_gold_unlock_btn)
 	_gold_unlock_cooldown = _attach_action_cooldown(_gold_unlock_btn)
 
 	_gold_unlock_cost_label = Label.new()
 	_gold_unlock_cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_gold_unlock_cost_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_gold_unlock_cost_label.add_theme_color_override("font_color", Color.BLACK)
 	_action_panel.add_child(_gold_unlock_cost_label)
 
 	_gem_unlock_btn = Button.new()
 	_gem_unlock_btn.name = "VaultExpandGemButton"
 	_gem_unlock_btn.text = Localization.t("ui.vault.unlock_gem")
 	_gem_unlock_btn.pressed.connect(func(): _on_unlock_slot_pressed("gem"))
-	CCRVisualStyle.apply_relic_button(_gem_unlock_btn, "vault_expand_gem")
+	CCRVisualStyle.apply_relic_button(_gem_unlock_btn, "vault_expand_gem", false, "vault_action")
 	_action_panel.add_child(_gem_unlock_btn)
 	_gem_unlock_cooldown = _attach_action_cooldown(_gem_unlock_btn)
 
 	_gem_unlock_cost_label = Label.new()
 	_gem_unlock_cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_gem_unlock_cost_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_gem_unlock_cost_label.add_theme_color_override("font_color", Color.BLACK)
 	_action_panel.add_child(_gem_unlock_cost_label)
 
 func _layout_slot_label() -> void:
 	var label := get_node_or_null("SlotLabel") as Label
 	if label == null:
 		return
-	var label_size := Vector2(maxf(_side_button_width, 120.0), 28.0)
+	# 与今日卡组的密匙重置倒计时复用同一左上安全边距和卡组宽度。
+	var label_size := Vector2(_grid_width(), TODAY_DECK_KEY_ROW_HEIGHT)
 	label.size = label_size
 	label.custom_minimum_size = label_size
-	label.position = Vector2(_right_region_center_x() - label_size.x * 0.5, maxf(0.0, _grid_side_width() * 0.5 - label_size.y * 0.5))
+	label.position = Vector2(_scrollbar_top_padding, _scrollbar_top_padding)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 func _layout_right_actions() -> void:
 	if _action_panel == null:
@@ -217,40 +265,164 @@ func _layout_right_actions() -> void:
 		if typed_button != null:
 			typed_button.custom_minimum_size = button_size
 			typed_button.size = button_size
-			var icon_ratio := 2.0 / 3.0 if typed_button == _synthesize_btn else 0.5
-			CCRVisualStyle.configure_relic_button_metrics(typed_button, _side_button_height, icon_ratio)
-			typed_button.add_theme_font_size_override("font_size", _action_font_size())
+			CCRVisualStyle.configure_relic_button_vertical_metrics(
+				typed_button,
+				_side_button_icon_size,
+				_side_button_icon_top,
+				_side_button_text_gap,
+				_side_button_font_size,
+				CCRVisualStyle.RELIC_BUTTON_VAULT_TEXT
+			)
+			var cooldown := typed_button.get_node_or_null("AssetActionCooldown") as Control
+			if cooldown != null:
+				cooldown.custom_minimum_size = button_size
 	for label in [_gold_unlock_cost_label, _gem_unlock_cost_label]:
 		var typed_label := label as Label
 		if typed_label != null:
-			typed_label.custom_minimum_size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
+			typed_label.add_theme_font_size_override("font_size", _resource_hint_font_size())
+			typed_label.custom_minimum_size = Vector2(_resource_hint_width(), BUTTON_LABEL_HEIGHT)
+			typed_label.size = typed_label.custom_minimum_size
 
-	var button_step := _side_button_height + BUTTON_LABEL_HEIGHT + 8.0
-	var content_height := _side_button_height + button_step * 3.0 + BUTTON_LABEL_HEIGHT
-	_action_panel.size = Vector2(_side_button_width, content_height)
-	_action_panel.position = Vector2(_right_region_center_x() - _side_button_width * 0.5, maxf(0.0, (size.y - content_height) * 0.5))
+	_layout_vertical_scrollbar()
+	# 两端按钮分别贴齐滚动条首尾，中间两个按钮在剩余空间内等距分布。
+	# 这样整理保险箱与宝石扩展始终为这一列提供清晰的上下边界。
+	var scrollbar_top := _vertical_scrollbar.position.y if _vertical_scrollbar != null else _vault_first_card_top()
+	var scrollbar_bottom := scrollbar_top + _vertical_scrollbar.size.y if _vertical_scrollbar != null else scrollbar_top + _side_button_height * 4.0
+	var available_gap := maxf(0.0, (scrollbar_bottom - scrollbar_top - _side_button_height * 4.0) / 3.0)
+	var first_button_top := scrollbar_top
+	_action_panel.position = Vector2(_right_region_center_x() + _side_button_center_offset_x - _side_button_width * 0.5, first_button_top)
 
 	var button_rows := [_organize_btn, _synthesize_btn, _gold_unlock_btn, _gem_unlock_btn]
 	for i in range(button_rows.size()):
 		var button := button_rows[i] as Button
 		if button != null:
-			button.position = Vector2(0.0, button_step * float(i))
+			button.position = Vector2(0.0, float(i) * (_side_button_height + available_gap))
+	_layout_unlock_hint_labels()
+	_refresh_action_button_captions()
+	_update_action_panel_size()
+
+func _layout_unlock_hint_labels() -> void:
+	if _gold_unlock_btn == null or _gem_unlock_btn == null:
+		return
+	var label_height := maxf(1.0, BUTTON_LABEL_HEIGHT)
 	if _gold_unlock_cost_label != null:
-		_gold_unlock_cost_label.size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
-		_gold_unlock_cost_label.position = Vector2(0.0, _gold_unlock_btn.position.y + _side_button_height + 2.0)
+		label_height = maxf(1.0, _gold_unlock_cost_label.size.y)
+	var button_text_gap := _draw_page_button_text_gap(label_height)
+	var label_x := _resource_hint_x()
+	if _gold_unlock_cost_label != null:
+		_gold_unlock_cost_label.size = Vector2(_resource_hint_width(), BUTTON_LABEL_HEIGHT)
+		_gold_unlock_cost_label.position = Vector2(label_x, _gold_unlock_btn.position.y + _side_button_height + button_text_gap)
 	if _gem_unlock_cost_label != null:
-		_gem_unlock_cost_label.size = Vector2(_side_button_width, BUTTON_LABEL_HEIGHT)
-		_gem_unlock_cost_label.position = Vector2(0.0, _gem_unlock_btn.position.y + _side_button_height + 2.0)
+		_gem_unlock_cost_label.size = Vector2(_resource_hint_width(), BUTTON_LABEL_HEIGHT)
+		_gem_unlock_cost_label.position = Vector2(label_x, _gem_unlock_btn.position.y + _side_button_height + button_text_gap)
+
+func _draw_page_button_text_gap(label_height: float) -> float:
+	var first_row_center_y := CardSlotUI.SLOT_SIZE.y * 0.5
+	var second_row_center_y := CardSlotUI.SLOT_SIZE.y + SLOT_SPACING + CardSlotUI.SLOT_SIZE.y * 0.5
+	var gold_center_y := (first_row_center_y + second_row_center_y) * 0.5
+	var free_button_top := first_row_center_y - _side_button_height * 0.5
+	var gold_button_top := gold_center_y - _side_button_height * 0.5
+	var gem_button_top := second_row_center_y - _side_button_height * 0.5
+	var gap_after_free := gold_button_top - (free_button_top + _side_button_height)
+	var gap_after_gold := gem_button_top - (gold_button_top + _side_button_height)
+	var adjacent_button_gap := minf(gap_after_free, gap_after_gold)
+	return maxf(ACTION_LABEL_GAP, (adjacent_button_gap - maxf(1.0, label_height)) * 0.5)
+
+func _update_action_panel_size() -> void:
+	if _action_panel == null:
+		return
+	var min_y := 0.0
+	var max_y := 0.0
+	var initialized := false
+	for child in [_organize_btn, _synthesize_btn, _gold_unlock_btn, _gem_unlock_btn, _gold_unlock_cost_label, _gem_unlock_cost_label]:
+		var control := child as Control
+		if control == null:
+			continue
+		if not initialized:
+			min_y = control.position.y
+			max_y = control.position.y + control.size.y
+			initialized = true
+		else:
+			min_y = minf(min_y, control.position.y)
+			max_y = maxf(max_y, control.position.y + control.size.y)
+	_action_panel.size = Vector2(_side_button_width, maxf(1.0, max_y - min_y))
+
+func _vault_row_center_y(row_index: int) -> float:
+	var viewport_y := _slot_viewport.position.y if _slot_viewport != null else _centered_slot_viewport_y(size.y, _visible_slot_viewport_height_with_shadow())
+	return viewport_y + VAULT_GRID_SHADOW_SAFE_PADDING.y + float(row_index) * (CardSlotUI.SLOT_SIZE.y + SLOT_SPACING) + CardSlotUI.SLOT_SIZE.y * 0.5
+
+func _visible_slot_viewport_height_with_shadow() -> float:
+	# 保险箱页面的四排布局框从首帧起固定。服务端槽位尚未返回时也不能按
+	# 临时行数缩短可视区，否则数据回来后重新居中会带动按钮和滚动条跳位。
+	var viewport_height := MAX_VISIBLE_ROWS * CardSlotUI.SLOT_SIZE.y + (MAX_VISIBLE_ROWS - 1) * SLOT_SPACING
+	return viewport_height + VAULT_GRID_SHADOW_SAFE_PADDING.y * 2.0
 
 func _action_font_size() -> int:
 	if _side_button_width < 120.0:
 		return 12 if Localization.locale == "en" else 13
 	return 15 if Localization.locale == "en" else 16
 
+func _resource_hint_font_size() -> int:
+	return 18
+
+func _resource_hint_width() -> float:
+	return maxf(_side_button_width, 190.0 if Localization.locale == "zh-CN" else 210.0)
+
+func _resource_hint_x() -> float:
+	return (_side_button_width - _resource_hint_width()) * 0.5
+
+func _refresh_action_button_captions() -> void:
+	var text_top := _side_button_icon_top + _side_button_icon_size + _side_button_text_gap
+	for button in [_organize_btn, _synthesize_btn, _gold_unlock_btn, _gem_unlock_btn]:
+		var typed_button := button as Button
+		if typed_button != null:
+			CCRVisualStyle.refresh_relic_button_caption(typed_button, text_top, _side_button_font_size)
+
+func _layout_vertical_scrollbar() -> void:
+	if _vertical_scrollbar == null:
+		return
+	var first_card_top := _vault_first_card_top()
+	var last_card_bottom := _today_deck_last_card_bottom()
+	var protected_caps_height := float(CCRVisualStyle.SETTINGS_VERTICAL_SCROLLBAR_TRACK_END_MARGIN * 2)
+	var scrollbar_width := CCRLinkedVerticalScrollBarScript.CONTROL_SIZE.x
+	var scrollbar_height := maxf(protected_caps_height, last_card_bottom - first_card_top - scrollbar_width)
+	var scrollbar_size := Vector2(scrollbar_width, scrollbar_height)
+	_vertical_scrollbar.size = scrollbar_size
+	_vertical_scrollbar.custom_minimum_size = scrollbar_size
+	var rightmost_slot_x := _vault_rightmost_slot_right_x()
+	var available_height := size.y if size.y > 0.0 else get_viewport_rect().size.y
+	_vertical_scrollbar.position = Vector2(
+		rightmost_slot_x + scrollbar_width * 0.5 - CCRLinkedVerticalScrollBarScript.TRACK_VISUAL_LEFT_INSET,
+		maxf(0.0, (available_height - scrollbar_height) * 0.5)
+	)
+
+func _vault_rightmost_slot_right_x() -> float:
+	# 使用固定八列网格公式，不读取尚在载入或重建中的卡槽 / ScrollContainer 坐标。
+	return _fixed_grid_start_x(_grid_width()) + _grid_width()
+
+func _vault_first_card_top() -> float:
+	if _slot_viewport != null:
+		return _slot_viewport.position.y + VAULT_GRID_SHADOW_SAFE_PADDING.y
+	var available_height := size.y if size.y > 0.0 else get_viewport_rect().size.y
+	return _centered_slot_viewport_y(available_height, _visible_slot_viewport_height_with_shadow()) + VAULT_GRID_SHADOW_SAFE_PADDING.y
+
+func _today_deck_first_card_top() -> float:
+	var scroll_top := _scrollbar_top_padding + TODAY_DECK_KEY_ROW_HEIGHT + 10.0
+	return scroll_top + TODAY_DECK_INFO_ROW_HEIGHT + TODAY_DECK_CARD_ROW_SEPARATOR
+
+func _today_deck_last_card_bottom() -> float:
+	var scroll_top := _scrollbar_top_padding + TODAY_DECK_KEY_ROW_HEIGHT + 10.0
+	var available_height := size.y if size.y > 0.0 else get_viewport_rect().size.y
+	var scroll_bottom := maxf(scroll_top, available_height - TODAY_DECK_SCROLL_BOTTOM_MARGIN)
+	return scroll_bottom - _today_deck_card_shadow_bottom_bleed()
+
+func _today_deck_card_shadow_bottom_bleed() -> float:
+	return float(CardDisplay.CARD_SHADOW_SIZE) + maxf(0.0, CardDisplay.CARD_SHADOW_OFFSET.y)
+
 func _create_slot_grid() -> void:
 	var slot_size = CardSlotUI.SLOT_SIZE
 	var render_rows := maxi(1, int(ceil(float(slot_count) / float(columns))))
-	var visible_rows := mini(MAX_VISIBLE_ROWS, render_rows)
+	var visible_rows := MAX_VISIBLE_ROWS
 	var total_width = columns * slot_size.x + (columns - 1) * SLOT_SPACING
 	var content_height = render_rows * slot_size.y + (render_rows - 1) * SLOT_SPACING
 	var viewport_height = visible_rows * slot_size.y + (visible_rows - 1) * SLOT_SPACING
@@ -260,17 +432,14 @@ func _create_slot_grid() -> void:
 	viewport_height_with_shadow = minf(viewport_height_with_shadow, _max_slot_viewport_height(available_height))
 	var canvas_width_with_shadow = total_width + VAULT_GRID_SHADOW_SAFE_PADDING.x * 2.0
 	var canvas_height_with_shadow = content_height + VAULT_GRID_SHADOW_SAFE_PADDING.y * 2.0
-	var available_width = size.x if size.x > 0.0 else get_viewport_rect().size.x
-	var right_reserved = _right_region_width()
-	var start_x = _centered_grid_start_x(total_width)
-	if start_x + total_width + right_reserved > available_width:
-		start_x = maxf(VAULT_GRID_LEFT_MARGIN, available_width - total_width - right_reserved)
+	var start_x := _fixed_grid_start_x(total_width)
 	var viewport_y := _centered_slot_viewport_y(available_height, viewport_height_with_shadow)
 
 	if _slot_viewport != null:
 		_slot_viewport.position = Vector2(start_x - VAULT_GRID_SHADOW_SAFE_PADDING.x, viewport_y)
 		_slot_viewport.size = Vector2(viewport_width_with_shadow, viewport_height_with_shadow)
 		_slot_viewport.custom_minimum_size = _slot_viewport.size
+	_layout_vertical_scrollbar()
 	if _slot_canvas != null:
 		_slot_canvas.size = Vector2(canvas_width_with_shadow, canvas_height_with_shadow)
 		_slot_canvas.custom_minimum_size = _slot_canvas.size
@@ -313,22 +482,25 @@ func _centered_grid_start_x(total_width: float) -> float:
 	var parent_global_x := global_position.x if is_inside_tree() else 0.0
 	return maxf(0.0, centered_global_left - parent_global_x)
 
+func _fixed_grid_start_x(total_width: float) -> float:
+	var available_width := size.x if size.x > 0.0 else get_viewport_rect().size.x
+	var start_x := _centered_grid_start_x(total_width)
+	var right_reserved := _right_region_width()
+	if start_x + total_width + right_reserved > available_width:
+		start_x = maxf(VAULT_GRID_LEFT_MARGIN, available_width - total_width - right_reserved)
+	return start_x
+
 func _grid_width() -> float:
 	return VAULT_COLUMNS * CardSlotUI.SLOT_SIZE.x + (VAULT_COLUMNS - 1) * SLOT_SPACING
 
-func _grid_side_width() -> float:
-	var viewport_width := get_viewport_rect().size.x
-	return maxf(0.0, (viewport_width - _grid_width()) * 0.5)
-
 func _right_region_left_x() -> float:
 	var parent_global_x := global_position.x if is_inside_tree() else 0.0
-	var grid_global_left := _grid_side_width()
-	return grid_global_left + _grid_width() - parent_global_x
+	var viewport_width := get_viewport_rect().size.x
+	return viewport_width * (1.0 - MainUI.RIGHT_REGION_WIDTH_RATIO) - parent_global_x
 
 func _right_region_width() -> float:
 	var viewport_width := get_viewport_rect().size.x
-	var parent_global_x := global_position.x if is_inside_tree() else 0.0
-	return maxf(0.0, viewport_width - parent_global_x - _right_region_left_x())
+	return maxf(0.0, viewport_width * MainUI.RIGHT_REGION_WIDTH_RATIO)
 
 func _right_region_center_x() -> float:
 	return _right_region_left_x() + _right_region_width() * 0.5
@@ -459,10 +631,12 @@ func _resolve_card_index(cards: Array, card: CardInfo, preferred_idx: int) -> in
 func refresh_display() -> void:
 	var render_started := Time.get_ticks_msec()
 	FileLogger.perf("ui_render_start", {"page": "vault", "component": "slot_grid"})
+	_capture_scroll_vertical()
 	var cards = GameManager.player_data.vault_cards
 	_raw_slot_data = GameManager.vault_raw_slot_data
 	_update_slot_count_from_server()
 	_create_slot_grid()
+	_layout_right_actions()
 	for i in range(slot_count):
 		if i >= slots.size():
 			continue
@@ -488,12 +662,43 @@ func refresh_display() -> void:
 
 	# 更新合成按钮状态
 	_update_synthesize_button()
+	_schedule_scroll_restore()
 	FileLogger.perf("ui_render_done", {"page": "vault", "component": "slot_grid", "slots": slot_count, "total_ms": Time.get_ticks_msec() - render_started})
+
+func get_session_scroll_vertical() -> int:
+	if _slot_viewport != null:
+		return _slot_viewport.scroll_vertical
+	return _session_scroll_vertical
+
+func set_session_scroll_vertical(value: int) -> void:
+	_session_scroll_vertical = maxi(0, value)
+	_schedule_scroll_restore()
+
+func _capture_scroll_vertical() -> void:
+	if _slot_viewport == null or _restore_scroll_pending:
+		return
+	_session_scroll_vertical = _slot_viewport.scroll_vertical
+
+func _schedule_scroll_restore() -> void:
+	if _slot_viewport == null or _restore_scroll_pending:
+		return
+	_restore_scroll_pending = true
+	_restore_session_scroll_vertical.call_deferred()
+
+func _restore_session_scroll_vertical() -> void:
+	if not is_inside_tree():
+		_restore_scroll_pending = false
+		return
+	await get_tree().process_frame
+	if is_instance_valid(_slot_viewport):
+		_slot_viewport.scroll_vertical = _session_scroll_vertical
+	_restore_scroll_pending = false
 
 func _update_organize_button() -> void:
 	if _organize_btn == null:
 		return
 	_organize_btn.disabled = _organize_busy or _is_organize_cooling_down() or not ApiClient.is_logged_in()
+	_refresh_action_button_captions()
 
 func _update_unlock_buttons() -> void:
 	var quote: Dictionary = GameManager.vault_slot_quote
@@ -510,6 +715,7 @@ func _update_unlock_buttons() -> void:
 		_gold_unlock_cost_label.text = Localization.t("ui.vault.unlock_gold_cost", [gold_cost]) if has_quote else Localization.t("ui.vault.unlock_cost_loading")
 	if _gem_unlock_cost_label != null:
 		_gem_unlock_cost_label.text = Localization.t("ui.vault.unlock_gem_cost", [gem_cost]) if has_quote else Localization.t("ui.vault.unlock_cost_loading")
+	_refresh_action_button_captions()
 
 func _on_organize_vault_pressed() -> void:
 	if _organize_busy or not ApiClient.is_logged_in():
@@ -709,7 +915,7 @@ func _play_unlock_key_animation(currency: String, slot_index: int) -> void:
 	tween.tween_method(func(progress: float):
 		if not is_instance_valid(icon):
 			return
-		var accelerated := progress * progress
+		var accelerated := _accelerate_key_target_progress(progress)
 		var center := _quadratic_bezier(reverse_center, control_center, target_center, accelerated)
 		var tangent := _quadratic_bezier_tangent(reverse_center, control_center, target_center, accelerated)
 		if tangent.length() <= 0.01:
@@ -720,6 +926,11 @@ func _play_unlock_key_animation(currency: String, slot_index: int) -> void:
 		icon.position = center - icon.size * 0.5
 		icon.rotation_degrees = continuous_rotation
 	, 0.0, 1.0, UNLOCK_KEY_TARGET_DURATION).set_trans(Tween.TRANS_LINEAR)
+	var flight_sfx_tween := create_tween()
+	flight_sfx_tween.tween_interval(UNLOCK_KEY_REVERSE_DURATION + maxf(UNLOCK_KEY_TARGET_DURATION - UNLOCK_KEY_FLIGHT_SFX_LEAD_TIME, 0.0))
+	flight_sfx_tween.tween_callback(func():
+		AudioManager.play_sfx("forge_art_flight", 1.0, 0.0)
+	)
 	tween.tween_callback(func():
 		if is_instance_valid(target_slot):
 			target_slot.consume_reward_key_unlock()
@@ -808,6 +1019,7 @@ func _update_synthesize_button() -> void:
 		_synthesize_btn.visible = true
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count")
 		_synthesize_btn.disabled = true
+		_refresh_action_button_captions()
 		return
 
 	var vault = GameManager.player_data.vault_cards
@@ -816,6 +1028,7 @@ func _update_synthesize_button() -> void:
 		_synthesize_btn.visible = true
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count")
 		_synthesize_btn.disabled = true
+		_refresh_action_button_captions()
 		return
 
 	var synthesis_indices := _find_synthesizable_indices_for_card(vault[selected_idx], selected_idx)
@@ -826,6 +1039,7 @@ func _update_synthesize_button() -> void:
 	else:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count")
 		_synthesize_btn.disabled = true
+	_refresh_action_button_captions()
 
 func controller_synthesize() -> void:
 	_on_synthesize_pressed()
@@ -877,6 +1091,7 @@ func _on_synthesize_pressed() -> void:
 
 	_synthesize_btn.disabled = true
 	_synthesize_btn.text = Localization.t("ui.synthesis.vault.done")
+	_refresh_action_button_captions()
 
 	var animation_sources := get_synthesis_animation_sources(selected_slots)
 	hide_synthesis_slots_for_animation(selected_slots)
@@ -1082,6 +1297,7 @@ func _apply_vault_synthesis_pending_removal(selected_slots: Array) -> void:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.count")
 		_synthesize_btn.visible = true
 		_synthesize_btn.disabled = true
+		_refresh_action_button_captions()
 
 func _apply_vault_synthesis_confirmed_result(result_data: Dictionary) -> void:
 	var rewards: Dictionary = result_data.get("rewards", {})
@@ -1100,6 +1316,7 @@ func _apply_vault_synthesis_confirmed_result(result_data: Dictionary) -> void:
 	var deck_data = result_data.get("deck", {})
 	if not deck_data.is_empty():
 		DeckSystem.add_synthesized_deck(deck_data)
+		GameManager.apply_confirmed_synthesis_combat_power(deck_data)
 
 	GameManager.player_data.changed.emit()
 
@@ -1113,6 +1330,7 @@ func _recover_after_vault_synthesis_failure() -> void:
 	if _synthesize_btn != null:
 		_synthesize_btn.text = Localization.t("ui.synthesis.vault.failed")
 		_synthesize_btn.disabled = false
+		_refresh_action_button_captions()
 	await GameManager.sync_vault_from_server()
 	await GameManager.sync_decks_from_server()
 	if is_inside_tree():
@@ -1199,6 +1417,9 @@ func _quadratic_bezier(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
 func _quadratic_bezier_tangent(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
 	var p := clampf(t, 0.0, 1.0)
 	return (b - a) * 2.0 * (1.0 - p) + (c - b) * 2.0 * p
+
+static func _accelerate_key_target_progress(progress: float) -> float:
+	return pow(clampf(progress, 0.0, 1.0), UNLOCK_KEY_TARGET_ACCELERATION_POWER)
 
 func _key_rotation_for_direction(direction: Vector2) -> float:
 	if direction.length() <= 0.01:

@@ -209,8 +209,7 @@ func _action_font_size() -> int:
 
 func _right_region_center_x() -> float:
 	var viewport_width := get_viewport_rect().size.x
-	var grid_right := _centered_grid_start_x() + _grid_size().x
-	var global_center := (grid_right + viewport_width) * 0.5
+	var global_center := viewport_width * (1.0 - MainUI.RIGHT_REGION_WIDTH_RATIO * 0.5)
 	var parent_global_x := global_position.x if is_inside_tree() else 0.0
 	return global_center - parent_global_x
 
@@ -511,6 +510,35 @@ func _is_point_over_action_button(global_point: Vector2) -> bool:
 func get_selected_hand_index() -> int:
 	_ensure_selection_valid()
 	return _selected_hand_index
+
+func get_synthesize_button() -> Button:
+	return _btn_synth
+
+func get_card_slot_for_card(target: CardInfo) -> CardSlotUI:
+	if target == null:
+		return null
+	for slot in slots:
+		if slot != null and slot.get_card() != null and slot.get_card().get_instance_ref() == target.get_instance_ref():
+			return slot
+	return null
+
+func get_first_empty_drop_slot() -> CardSlotUI:
+	var start_idx := current_page * slot_count
+	for local_idx in range(slots.size()):
+		var global_idx := start_idx + local_idx
+		if global_idx >= GameManager.player_data.hand_slots:
+			continue
+		var slot := slots[local_idx]
+		if slot != null and not slot.is_occupied and slot.is_unlocked():
+			return slot
+	return null
+
+## 手柄教程的“两次确认”最终仍调用真实的卡池→手牌业务迁移入口。
+func controller_move_from_pool(card: CardInfo, source_pool_index: int, target_slot: CardSlotUI) -> bool:
+	if card == null or target_slot == null or target_slot not in slots:
+		return false
+	_on_card_dropped(target_slot.slot_index, card, "pool", source_pool_index)
+	return _resolve_card_index(GameManager.player_data.hand_cards, card, -1) >= 0
 
 
 func get_selected_synthesis_indices() -> Array[int]:

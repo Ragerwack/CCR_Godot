@@ -31,6 +31,8 @@ func _ready() -> void:
 		return _fail("draw_page_areas_missing")
 	if not _assert_slot_title_color(pool_ui.slots[0], CardDisplay.CARD_TEXT_COLOR_PURPLE, "draw_page"):
 		return
+	if not _assert_draw_section_labels(center_area, pool_ui, hand_ui):
+		return
 
 	var pool_margins := _assert_slot_area_centered("pool", pool_ui.slots, viewport_size.x)
 	if pool_margins.is_empty():
@@ -188,7 +190,7 @@ func _assert_nav_buttons_layout(main: MainUI, side_width: float) -> bool:
 		_fail("center_area_blocks_nav_buttons")
 		return false
 	var expected_width := side_width * 0.8
-	var expected_height := float(main.call("_target_player_avatar_height")) * 0.25
+	var expected_height := float(main.call("_nav_button_height", EXPECTED_VIEWPORT_SIZE))
 	for button in buttons:
 		var btn := button as Button
 		if btn == null:
@@ -235,6 +237,63 @@ func _assert_pool_draw_button_positions(pool_ui: CardPoolUI) -> bool:
 		return false
 	if absf(gem_center_y - expected_gem_center_y) > CENTER_TOLERANCE:
 		_fail("gem_draw_not_on_second_row_center")
+		return false
+	return true
+
+func _assert_draw_section_labels(center_area: Control, pool_ui: CardPoolUI, hand_ui: HandAreaUI) -> bool:
+	var pool_label := center_area.find_child("CardPoolSectionLabel", false, false) as Label
+	var hand_label := center_area.find_child("HandSectionLabel", false, false) as Label
+	if pool_label == null or hand_label == null:
+		_fail("draw_section_labels_missing")
+		return false
+	if pool_label.text != "卡池" or hand_label.text != "手牌":
+		_fail("draw_section_label_text_wrong")
+		return false
+	for label in [pool_label, hand_label]:
+		var typed_label := label as Label
+		if typed_label.get_theme_font_size("font_size") != MainUI.PLAYER_INFO_FONT_SIZE:
+			_fail("draw_section_label_font_size_wrong")
+			return false
+		if not typed_label.get_theme_color("font_color").is_equal_approx(Color.BLACK):
+			_fail("draw_section_label_color_wrong")
+			return false
+		if typed_label.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+			_fail("draw_section_label_blocks_mouse")
+			return false
+		if absf(typed_label.get_global_rect().get_center().x - EXPECTED_VIEWPORT_SIZE.x * 0.5) > CENTER_TOLERANCE:
+			_fail("draw_section_label_not_centered")
+			return false
+	var pool_container := pool_ui.get_parent() as Control
+	var hand_container := hand_ui.get_parent() as Control
+	if pool_container == null or hand_container == null:
+		_fail("draw_section_containers_missing")
+		return false
+	var pool_label_rect := pool_label.get_global_rect()
+	var hand_label_rect := hand_label.get_global_rect()
+	var pool_rect := pool_container.get_global_rect()
+	var hand_rect := hand_container.get_global_rect()
+	var center_rect := center_area.get_global_rect()
+	if pool_label_rect.position.y < center_rect.position.y or pool_label_rect.end.y > pool_rect.position.y + CENTER_TOLERANCE:
+		_fail("pool_section_label_not_above_pool")
+		return false
+	if hand_label_rect.position.y < pool_rect.end.y - CENTER_TOLERANCE or hand_label_rect.end.y > hand_rect.position.y + CENTER_TOLERANCE:
+		_fail("hand_section_label_not_between_pool_and_hand")
+		return false
+	if hand_label.get_index() >= hand_container.get_index():
+		_fail("hand_section_label_above_hand_cards")
+		return false
+	if pool_label.get_index() >= pool_container.get_index():
+		_fail("pool_section_label_above_pool_cards")
+		return false
+	var pool_gap := pool_rect.position.y - center_rect.position.y
+	var hand_gap := hand_rect.position.y - pool_rect.end.y
+	var expected_pool_label_center_y := center_rect.position.y + maxf(0.0, pool_gap - pool_label_rect.size.y) * 0.75 + pool_label_rect.size.y * 0.5
+	var expected_hand_label_center_y := pool_rect.end.y + maxf(0.0, hand_gap - hand_label_rect.size.y) * 0.75 + hand_label_rect.size.y * 0.5
+	if absf(pool_label_rect.get_center().y - expected_pool_label_center_y) > CENTER_TOLERANCE:
+		_fail("pool_section_label_vertical_distance_wrong")
+		return false
+	if absf(hand_label_rect.get_center().y - expected_hand_label_center_y) > CENTER_TOLERANCE:
+		_fail("hand_section_label_vertical_distance_wrong")
 		return false
 	return true
 
@@ -285,16 +344,18 @@ func _assert_vault_right_region(vault_ui: VaultUI, side_width: float) -> bool:
 	if label == null:
 		_fail("vault_slot_label_missing")
 		return false
-	var expected_center_x := EXPECTED_VIEWPORT_SIZE.x - side_width * 0.5
-	if absf(label.get_global_rect().get_center().x - expected_center_x) > CENTER_TOLERANCE:
-		_fail("vault_slot_label_not_centered_right_region")
+	var top_padding := float(vault_ui.get("_scrollbar_top_padding"))
+	var expected_label_position := vault_ui.global_position + Vector2(top_padding, top_padding)
+	if label.global_position.distance_to(expected_label_position) > CENTER_TOLERANCE or label.horizontal_alignment != HORIZONTAL_ALIGNMENT_LEFT:
+		_fail("vault_slot_label_not_aligned_with_today_deck_countdown")
 		return false
 	var action_panel := vault_ui.find_child("VaultActionPanel", true, false) as Control
 	if action_panel == null:
 		_fail("vault_action_panel_missing")
 		return false
-	if absf(action_panel.get_global_rect().get_center().x - expected_center_x) > CENTER_TOLERANCE:
-		_fail("vault_action_panel_not_centered_right_region")
+	var expected_action_center_x := vault_ui.global_position.x + float(vault_ui.call("_right_region_center_x")) + float(vault_ui.get("_side_button_center_offset_x"))
+	if absf(action_panel.get_global_rect().get_center().x - expected_action_center_x) > CENTER_TOLERANCE:
+		_fail("vault_action_panel_not_centered_on_action_column")
 		return false
 	return true
 

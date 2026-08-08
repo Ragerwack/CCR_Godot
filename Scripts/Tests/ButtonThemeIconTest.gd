@@ -8,7 +8,7 @@ const ICON_EXPECTED_SIZES := {
 	"nav_mail": 50, "nav_settings": 50, "nav_exit": 50,
 	"draw_stamina": 50, "draw_gold": 50, "draw_gem": 50,
 	"action_page": 67, "action_synthesize": 67, "action_discard": 67, "action_store_vault": 67,
-	"vault_organize": 50, "vault_expand_gold": 50, "vault_expand_gem": 50,
+	"vault_organize": 216, "vault_synthesize": 216, "vault_expand_gold": 216, "vault_expand_gem": 216,
 	"status_stamina": 50, "status_gold": 50, "status_gem": 50,
 	"status_roll_green": 50, "status_roll_yellow": 50, "status_roll_red": 50,
 	"status_level": 18, "status_combat_power": 18, "status_experience": 14,
@@ -32,6 +32,8 @@ func _ready() -> void:
 	add_child(main)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	if not _assert_login_overlay_isolated(main):
+		return
 	main.call("_set_game_ui_visible", true)
 
 	if not _assert_navigation(main):
@@ -91,6 +93,40 @@ func _ready() -> void:
 	print("BUTTON_THEME_ICON ok assets=37 nav=9 draw=3 card_actions=4 vault=4 status=10")
 	get_tree().quit(0)
 
+func _assert_login_overlay_isolated(main: MainUI) -> bool:
+	var splash_count := 0
+	var splash: Control = null
+	for child in main.get_children():
+		if child.name == "SplashScreenUI":
+			splash_count += 1
+			splash = child as Control
+	if splash_count != 1 or splash == null:
+		return _fail("login_splash_initial_count_wrong=%d" % splash_count)
+	main.call("_show_splash_screen")
+	splash_count = 0
+	for child in main.get_children():
+		if child.name == "SplashScreenUI":
+			splash_count += 1
+	if splash_count != 1:
+		return _fail("login_splash_not_idempotent=%d" % splash_count)
+	if splash.z_index != 4096:
+		return _fail("login_splash_not_above_game_icons")
+	var nav_buttons := main.get("_nav_buttons") as NavButtons
+	var center := main.get("_center_area") as Control
+	if nav_buttons == null or center == null or nav_buttons.is_visible_in_tree() or center.is_visible_in_tree():
+		return _fail("game_ui_visible_behind_login")
+	for icon_node in main.find_children(CCRVisualStyle.BUTTON_ICON_NODE_NAME, "TextureRect", true, false):
+		var icon := icon_node as TextureRect
+		if icon != null and icon.is_visible_in_tree():
+			return _fail("game_button_icon_visible_on_login=" + str(icon.get_parent().name))
+	if bool(ApiClient.call("_should_invalidate_access_token", "https://ccrgame.com/api/auth/login")):
+		return _fail("login_401_invalidates_existing_access_token")
+	if bool(ApiClient.call("_should_emit_auth_expired", "https://ccrgame.com/api/auth/login")):
+		return _fail("login_401_emits_global_auth_expired")
+	if not bool(ApiClient.call("_should_emit_auth_expired", "https://ccrgame.com/api/user/profile")):
+		return _fail("protected_401_does_not_emit_auth_expired")
+	return true
+
 func _prepare_player_data() -> void:
 	GameManager.player_data.user_id = 0
 	GameManager.player_data.level = 8
@@ -112,11 +148,11 @@ func _prepare_player_data() -> void:
 	GameManager.vault_raw_slot_data = []
 
 func _assert_source_assets() -> bool:
-	for variant in ["navigation", "action"]:
+	for variant in ["navigation", "action", "vault_action"]:
 		var paths: Dictionary = CCRVisualStyle.BUTTON_TEXTURE_PATHS[variant]
-		var expected_size := Vector2i(256, 64) if variant == "navigation" else Vector2i(192, 64)
+		var expected_size := Vector2i(256, 64) if variant == "navigation" else (Vector2i(194, 208) if variant == "vault_action" else Vector2i(192, 64))
 		for state in ["normal", "hover", "pressed", "disabled"]:
-			var texture := load(str(paths[state])) as Texture2D
+			var texture := CCRVisualStyle._load_texture_png_source(str(paths[state]))
 			if texture == null or texture.get_size() != Vector2(expected_size):
 				return _fail("button_asset_wrong_%s_%s" % [variant, state])
 			var image := texture.get_image()
@@ -206,19 +242,17 @@ func _assert_vault(main: MainUI) -> bool:
 	var center := main.get("_center_area") as Control
 	var targets := {
 		"VaultOrganizeButton": "vault_organize",
-		"VaultSynthesizeButton": "action_synthesize",
+		"VaultSynthesizeButton": "vault_synthesize",
 		"VaultExpandGoldButton": "vault_expand_gold",
 		"VaultExpandGemButton": "vault_expand_gem",
 	}
 	for node_name in targets:
 		var button := center.find_child(str(node_name), true, false) as Button
-		if button == null or not _assert_button(button, str(targets[node_name]), "action"):
+		if button == null or not _assert_button(button, str(targets[node_name]), "vault_action"):
 			return _fail("vault_button_missing_%s" % str(node_name))
 		if not _assert_action_cooldown(button):
 			return false
-		if button.get_theme_font_size("font_size") < 15:
-			return _fail("vault_action_button_font_not_increased_%s" % button.name)
-		if not _assert_button_text_shifted(button):
+		if not _assert_vault_button_vertical_layout(button):
 			return false
 	var locked_slot_icon := center.find_child("LockedSlotIcon", true, false) as TextureRect
 	if locked_slot_icon == null or locked_slot_icon.texture == null:
@@ -258,13 +292,13 @@ func _assert_status_icons(main: MainUI) -> bool:
 func _assert_steam_deck_metrics(main: MainUI) -> bool:
 	var nav_buttons := main.get("_nav_buttons") as NavButtons
 	var expected_width := 102.0
-	var expected_nav_height := 25.0
+	var expected_nav_height := 800.0 * MainUI.NAV_BUTTON_HEIGHT_RATIO
 	nav_buttons.configure_button_metrics(expected_width, expected_nav_height)
 	nav_buttons.call("_layout_buttons")
 	for button in nav_buttons.buttons:
 		if absf(button.size.x - expected_width) > 1.0 or absf(button.size.y - expected_nav_height) > 1.0:
 			return _fail("steam_deck_navigation_size_changed_by_icon_%s" % str(button.size))
-		if button.get_theme_constant("icon_max_width") != 17:
+		if button.get_theme_constant("icon_max_width") != 27:
 			return _fail("steam_deck_navigation_icon_not_two_thirds")
 	var center := main.get("_center_area") as Control
 	var vault_ui := center.find_child("VaultActionPanel", true, false).get_parent() as VaultUI
@@ -276,23 +310,26 @@ func _assert_steam_deck_metrics(main: MainUI) -> bool:
 		var button := center.find_child(node_name, true, false) as Button
 		if button == null or button.size.x > expected_width + 1.0:
 			return _fail("steam_deck_action_button_overflow_%s" % node_name)
-		var expected_icon_width := 22 if node_name == "VaultSynthesizeButton" else 17
+		var expected_icon_width := 36
 		if button.get_theme_constant("icon_max_width") != expected_icon_width:
 			return _fail("steam_deck_action_icon_ratio_wrong_%s" % node_name)
+		if not _assert_vault_button_vertical_layout(button):
+			return false
 	return true
 
 func _assert_max_resolution_metrics(main: MainUI) -> bool:
 	# CI 主机可能把窗口尺寸限制在物理屏幕内，因此直接用正式最大分辨率驱动布局公式。
 	main.call("_configure_card_slot_size", Vector2(2560, 1440))
 	var nav_height := float(main.call("_nav_button_height", Vector2(2560, 1440)))
-	if nav_height != 75.0:
-		return _fail("max_resolution_navigation_height_not_75px_%s" % nav_height)
+	var expected_nav_height := 1440.0 * MainUI.NAV_BUTTON_HEIGHT_RATIO
+	if absf(nav_height - expected_nav_height) > 0.01:
+		return _fail("max_resolution_navigation_height_ratio_wrong_%s" % nav_height)
 	var nav_buttons := main.get("_nav_buttons") as NavButtons
 	nav_buttons.configure_button_metrics(260.0, nav_height)
 	nav_buttons.call("_layout_buttons")
 	for button in nav_buttons.buttons:
-		if button.get_theme_constant("icon_max_width") != 50:
-			return _fail("max_resolution_navigation_icon_not_50px")
+		if button.get_theme_constant("icon_max_width") != 49:
+			return _fail("max_resolution_navigation_icon_ratio_wrong")
 	main.call("_apply_currency_layout", Vector2(2560, 1440))
 	var stamina_icon := main.find_child("StaminaIcon", true, false) as TextureRect
 	if stamina_icon == null or stamina_icon.custom_minimum_size != Vector2(50, 50):
@@ -304,12 +341,17 @@ func _assert_max_resolution_metrics(main: MainUI) -> bool:
 	var synthesize := center.find_child("VaultSynthesizeButton", true, false) as Button
 	var gold_expand := center.find_child("VaultExpandGoldButton", true, false) as Button
 	var organize := center.find_child("VaultOrganizeButton", true, false) as Button
-	if synthesize.get_theme_constant("icon_max_width") != 67:
-		return _fail("max_resolution_action_icon_not_67px")
-	if gold_expand.get_theme_constant("icon_max_width") != 50:
-		return _fail("max_resolution_currency_button_icon_not_50px")
+	if synthesize.size != Vector2(VaultUI.VAULT_ACTION_BUTTON_WIDTH, VaultUI.VAULT_ACTION_BUTTON_HEIGHT):
+		return _fail("max_resolution_vault_action_size_wrong")
+	if synthesize.get_theme_constant("icon_max_width") != int(VaultUI.VAULT_ACTION_ICON_SIZE):
+		return _fail("max_resolution_action_icon_not_108px")
+	if gold_expand.get_theme_constant("icon_max_width") != int(VaultUI.VAULT_ACTION_ICON_SIZE):
+		return _fail("max_resolution_currency_button_icon_not_108px")
 	if organize == null or organize.position.y >= synthesize.position.y:
 		return _fail("vault_organize_button_not_above_synthesize")
+	for button in [organize, synthesize, gold_expand, center.find_child("VaultExpandGemButton", true, false) as Button]:
+		if not _assert_vault_button_vertical_layout(button):
+			return false
 	return true
 
 func _assert_button(button: Button, icon_id: String, variant: String) -> bool:
@@ -336,6 +378,50 @@ func _assert_button_text_shifted(button: Button) -> bool:
 	var icon_width := float(button.get_theme_constant("icon_max_width"))
 	if style == null or absf((style.content_margin_left - style.content_margin_right) - icon_width) > 0.1:
 		return _fail("button_text_margin_not_shifted_%s" % button.name)
+	return true
+
+func _assert_vault_button_vertical_layout(button: Button) -> bool:
+	if button.alignment != HORIZONTAL_ALIGNMENT_CENTER:
+		return _fail("vault_button_text_not_center_aligned_%s" % button.name)
+	var icon := CCRVisualStyle.get_button_icon(button)
+	var caption := CCRVisualStyle.get_button_text_label(button)
+	if icon == null or caption == null or not caption.visible:
+		return _fail("vault_button_vertical_nodes_missing_%s" % button.name)
+	if icon.texture == null or icon.texture.get_size().x < VaultUI.VAULT_ACTION_ICON_SIZE * 2.0:
+		return _fail("vault_button_icon_source_not_high_resolution_%s" % button.name)
+	var scale := button.size.y / VaultUI.VAULT_ACTION_BUTTON_HEIGHT
+	var expected_icon_size := roundf(VaultUI.VAULT_ACTION_ICON_SIZE * scale)
+	var expected_icon_top := VaultUI.VAULT_ACTION_ICON_TOP * scale
+	var expected_text_top := (VaultUI.VAULT_ACTION_ICON_TOP + VaultUI.VAULT_ACTION_ICON_SIZE + VaultUI.VAULT_ACTION_TEXT_GAP) * scale
+	if icon.size.distance_to(Vector2(expected_icon_size, expected_icon_size)) > 1.0:
+		return _fail("vault_button_icon_size_wrong_%s" % button.name)
+	if absf(icon.position.x - (button.size.x - icon.size.x) * 0.5) > 1.0:
+		return _fail("vault_button_icon_not_centered_%s" % button.name)
+	if absf(icon.position.y - expected_icon_top) > 1.0:
+		return _fail("vault_button_icon_top_wrong_%s" % button.name)
+	if caption.text != CCRVisualStyle.get_relic_button_caption_text(button):
+		return _fail("vault_button_caption_not_synced_%s" % button.name)
+	if button.text != "":
+		return _fail("vault_button_native_text_not_empty_%s" % button.name)
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color", "font_disabled_color"]:
+		if button.get_theme_color(state).a > 0.001:
+			return _fail("vault_button_native_text_visible_%s_%s" % [button.name, state])
+	if absf(caption.position.x) > 0.1 or absf(caption.size.x - button.size.x) > 0.1:
+		return _fail("vault_button_caption_not_centered_%s" % button.name)
+	if absf(caption.position.y - expected_text_top) > 1.0:
+		return _fail("vault_button_caption_top_wrong_%s" % button.name)
+	if button.disabled:
+		if not _color_close(caption.get_theme_color("font_color"), CCRVisualStyle.RELIC_BUTTON_DISABLED_TEXT):
+			return _fail("vault_button_caption_not_gray_when_disabled_%s" % button.name)
+	else:
+		if not _color_close(caption.get_theme_color("font_color"), CCRVisualStyle.RELIC_BUTTON_VAULT_TEXT):
+			return _fail("vault_button_caption_not_navigation_normal_color_%s" % button.name)
+		button.mouse_entered.emit()
+		if not _color_close(caption.get_theme_color("font_color"), CCRVisualStyle.RELIC_BUTTON_HOVER_TEXT):
+			return _fail("vault_button_caption_not_white_on_hover_%s" % button.name)
+		button.mouse_exited.emit()
+		if not _color_close(caption.get_theme_color("font_color"), CCRVisualStyle.RELIC_BUTTON_NAV_TEXT):
+			return _fail("vault_button_caption_not_navigation_color_after_hover_%s" % button.name)
 	return true
 
 func _assert_action_cooldown(button: Button) -> bool:
@@ -389,6 +475,9 @@ func _assert_button_icon_hover_motion(main: MainUI) -> bool:
 		return _fail("button_icon_hover_restore_failed")
 
 	return true
+
+func _color_close(a: Color, b: Color, tolerance: float = 0.001) -> bool:
+	return absf(a.r - b.r) <= tolerance and absf(a.g - b.g) <= tolerance and absf(a.b - b.b) <= tolerance and absf(a.a - b.a) <= tolerance
 
 func _fail(reason: String) -> bool:
 	if _failed:

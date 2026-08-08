@@ -11,6 +11,7 @@ const ALL_RELIC_COLORS := [
 ]
 const ALL_RELIC_NAMES := ["white", "green", "blue", "purple", "orange", "black", "red"]
 const THUMBNAIL_CACHE = preload("res://Scripts/UI/MuseumRelicThumbnailCache.gd")
+const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
 
 
 func _ready() -> void:
@@ -84,39 +85,116 @@ func _ready() -> void:
 	add_child(museum)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	var color_filter := museum.find_child("MuseumColorFilter", true, false) as MenuButton
+	var color_filter := museum.find_child("MuseumColorFilter", true, false) as HBoxContainer
 	if color_filter == null:
 		return _fail("filter_color_missing")
-	if color_filter.get_popup().get_item_count() != ALL_RELIC_COLORS.size():
+	if color_filter.get_child_count() != ALL_RELIC_COLORS.size():
 		return _fail("filter_color_count_wrong")
-	if color_filter.text != "稀有度：全部":
-		return _fail("filter_rarity_label_wrong")
-	if color_filter.get_popup().get_item_text(color_filter.get_popup().get_item_index(CardColor.ColorType.WHITE)) != "普通":
+	var white_filter := museum.find_child("MuseumColorFilter%d" % CardColor.ColorType.WHITE, true, false) as CheckBox
+	var red_filter := museum.find_child("MuseumColorFilter%d" % CardColor.ColorType.RED, true, false) as CheckBox
+	if white_filter == null or not white_filter.visible:
+		return _fail("filter_white_checkbox_not_visible")
+	if red_filter == null or not red_filter.visible:
+		return _fail("filter_red_checkbox_not_visible")
+	if white_filter.text != "普通":
 		return _fail("filter_white_name_not_tier")
-	if color_filter.get_popup().get_item_text(color_filter.get_popup().get_item_index(CardColor.ColorType.RED)) != "宇宙":
+	if red_filter.text != "宇宙":
 		return _fail("filter_red_name_not_cosmic")
+	if color_filter.get_child(0) != red_filter or color_filter.get_child(color_filter.get_child_count() - 1) != white_filter:
+		return _fail("rarity_filter_order_not_high_to_low")
 	var sort_option := museum.find_child("MuseumSortOption", true, false) as OptionButton
 	if sort_option == null or sort_option.get_item_count() != 3:
 		return _fail("filter_sort_missing")
+	var expected_filter_control_size := Vector2(DeckCollectionUI.FILTER_OPTION_WIDTH, DeckCollectionUI.FILTER_CONTROL_HEIGHT)
+	if sort_option.custom_minimum_size != expected_filter_control_size:
+		return _fail("sort_filter_not_scaled_to_collection_height")
 	var series_option := museum.find_child("MuseumSeriesOption", true, false) as OptionButton
 	if series_option == null or series_option.get_item_count() < 3:
 		return _fail("filter_series_missing")
+	if series_option.custom_minimum_size != expected_filter_control_size:
+		return _fail("series_filter_not_scaled_to_collection_height")
+	var progress_label := museum.find_child("MuseumCollectionProgress", true, false) as LineEdit
+	var progress_readonly_style := progress_label.get_theme_stylebox("read_only") as StyleBoxTexture if progress_label != null else null
+	var series_normal_style := series_option.get_theme_stylebox("normal") as StyleBoxTexture
+	var progress_visual_bounds := _texture_alpha_bounds(progress_readonly_style.texture if progress_readonly_style != null else null)
+	var series_visual_bounds := _texture_alpha_bounds(series_normal_style.texture if series_normal_style != null else null)
+	if progress_visual_bounds.size.y <= 0 or series_visual_bounds.size.y <= 0:
+		return _fail("filter_visual_bounds_missing")
+	if absi(progress_visual_bounds.size.y - series_visual_bounds.size.y) > 1 or absi(progress_visual_bounds.position.y - series_visual_bounds.position.y) > 1:
+		return _fail("dropdown_visual_height_not_collection_visual_height")
+	var series_popup := series_option.get_popup()
+	CCRVisualStyle._configure_settings_popup_asset_and_size(series_popup)
+	if series_popup.min_size.x != int(roundf(series_option.size.x)) or series_popup.max_size.x != int(roundf(series_option.size.x)):
+		return _fail("series_popup_width_not_dropdown_width")
+	var expected_popup_divider_x := int(roundf(float(CCRVisualStyle.SETTINGS_POPUP_DIVIDER_END_X) * series_option.size.x / float(CCRVisualStyle.SETTINGS_DROPDOWN_SIZE.x)))
+	if int(series_popup.get_meta("ccr_settings_popup_divider_x", -1)) != expected_popup_divider_x:
+		return _fail("series_popup_divider_not_aligned_to_dropdown_divider")
 	if series_option.get_item_text(1) != "今日可见系列" or str(series_option.get_item_metadata(1)) != DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER:
 		return _fail("today_visible_series_filter_missing")
 	if str(series_option.get_item_metadata(series_option.selected)) != DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER:
 		return _fail("today_visible_series_filter_not_default")
 	var filter_bar := museum.find_child("MuseumFilterBar", true, false) as HBoxContainer
-	if filter_bar == null or filter_bar.get_child_count() != DeckCollectionUI.RELICS_PER_ROW:
-		return _fail("filter_bar_not_aligned_to_relic_columns")
-	if sort_option.get_parent() != filter_bar.get_child(3):
-		return _fail("sort_filter_not_in_fourth_column")
-	if filter_bar.get_child(4).name != "MuseumFilterBarSpacer":
-		return _fail("filter_bar_spacer_missing")
-	var progress_label := museum.find_child("MuseumCollectionProgress", true, false) as Label
+	if filter_bar == null or filter_bar.get_child_count() != 4:
+		return _fail("filter_bar_four_modules_missing")
+	if filter_bar.get_child(0) != progress_label:
+		return _fail("collection_progress_not_first_module")
+	if filter_bar.get_child(1) != series_option:
+		return _fail("series_filter_not_second_module")
+	if filter_bar.get_child(2) != color_filter:
+		return _fail("rarity_filter_not_third_module")
+	if filter_bar.get_child(3) != sort_option:
+		return _fail("sort_filter_not_fourth_module")
 	var total_decks := _total_deck_defs()
 	if progress_label == null or progress_label.text != "已收藏 7/7":
 		return _fail("collection_progress_wrong")
+	if progress_label.editable:
+		return _fail("collection_progress_not_readonly")
+	if not _color_close(progress_label.get_theme_color("font_readonly_color"), CCRVisualStyle.SETTINGS_TEXT):
+		return _fail("collection_progress_text_color_not_settings_text")
+	if not _color_close(progress_label.get_theme_color("font_uneditable_color"), CCRVisualStyle.SETTINGS_TEXT):
+		return _fail("collection_progress_uneditable_text_color_not_settings_text")
+	var dropdown_height := series_option.size.y
+	if absf(progress_label.size.y - dropdown_height) > 0.1:
+		return _fail("collection_progress_height_not_dropdown_height")
+	if absf(white_filter.size.y - dropdown_height) > 0.1 or absf(red_filter.size.y - dropdown_height) > 0.1:
+		return _fail("rarity_checkbox_height_not_dropdown_height")
+	var checked_icon := white_filter.get_theme_icon("checked")
+	if checked_icon == null or absf(checked_icon.get_size().y - float(DeckCollectionUI.FILTER_RARITY_ICON_HEIGHT)) > 0.1:
+		return _fail("rarity_checkbox_icon_not_scaled_to_dropdown_height")
+	var checked_hover_icon := white_filter.get_theme_icon("checked_hover")
+	var unchecked_hover_icon := white_filter.get_theme_icon("unchecked_hover")
+	if checked_hover_icon == null or unchecked_hover_icon == null:
+		return _fail("rarity_checkbox_hover_icons_missing")
+	if absf(checked_hover_icon.get_size().y - float(DeckCollectionUI.FILTER_RARITY_ICON_HEIGHT)) > 0.1 or absf(unchecked_hover_icon.get_size().y - float(DeckCollectionUI.FILTER_RARITY_ICON_HEIGHT)) > 0.1:
+		return _fail("rarity_checkbox_hover_icons_not_scaled")
+	if _texture_pixels_equal(checked_hover_icon, checked_icon):
+		return _fail("rarity_checkbox_checked_hover_matches_normal")
+	if _texture_pixels_equal(checked_hover_icon, unchecked_hover_icon):
+		return _fail("rarity_checkbox_checked_hover_missing_checkmark")
+	if series_option.get_theme_font_size("font_size") != progress_label.get_theme_font_size("font_size") or sort_option.get_theme_font_size("font_size") != progress_label.get_theme_font_size("font_size"):
+		return _fail("filter_main_font_size_not_collection_size")
+	if series_option.get_popup().get_theme_font_size("font_size") != progress_label.get_theme_font_size("font_size") or sort_option.get_popup().get_theme_font_size("font_size") != progress_label.get_theme_font_size("font_size"):
+		return _fail("filter_popup_font_size_not_collection_size")
+	if white_filter.get_theme_font_size("font_size") != progress_label.get_theme_font_size("font_size") or red_filter.get_theme_font_size("font_size") != progress_label.get_theme_font_size("font_size"):
+		return _fail("rarity_filter_font_size_not_collection_size")
+	if not _color_close(white_filter.get_theme_color("font_color"), DeckCollectionUI.MUSEUM_RARITY_CHECK_TEXT) or not _color_close(red_filter.get_theme_color("font_color"), DeckCollectionUI.MUSEUM_RARITY_CHECK_TEXT):
+		return _fail("rarity_filter_text_not_black")
+	for state_color_name in ["font_hover_color", "font_pressed_color", "font_focus_color"]:
+		if not _color_close(white_filter.get_theme_color(state_color_name), DeckCollectionUI.MUSEUM_RARITY_CHECK_TEXT):
+			return _fail("rarity_filter_text_state_not_black_%s" % state_color_name)
+	var expected_gap := float(DeckCollectionUI.FILTER_BAR_GAP)
+	var gap_progress_to_series := series_option.position.x - progress_label.get_rect().end.x
+	var gap_series_to_rarity := color_filter.position.x - series_option.get_rect().end.x
+	var gap_rarity_to_sort := sort_option.position.x - color_filter.get_rect().end.x
+	if absf(gap_progress_to_series - expected_gap) > 0.1:
+		return _fail("museum_filter_gap_progress_series_wrong")
+	if absf(gap_series_to_rarity - expected_gap) > 0.1:
+		return _fail("museum_filter_gap_series_rarity_wrong")
+	if absf(gap_rarity_to_sort - expected_gap) > 0.1:
+		return _fail("museum_filter_gap_rarity_sort_wrong")
 	var relic_grid := museum.find_child("MuseumRelicGrid", true, false) as HFlowContainer
+	if not _assert_latest_vertical_scrollbar(museum):
+		return
 	var visible_relics := museum._apply_relic_filters(museum._aggregate_relics(DeckSystem.get_player_decks()))
 	museum._sort_relic_list(visible_relics)
 	var expected_first_row_count := museum._get_relics_that_fit_first_row(visible_relics)
@@ -157,9 +235,9 @@ func _ready() -> void:
 		var series_label := relic_card.find_child("RelicCardSeries", true, false) as Label
 		var name_label := relic_card.find_child("RelicCardName", true, false) as Label
 		var count_label := relic_card.find_child("RelicCardCount", true, false) as Label
-		if series_label == null or series_label.text != "Solar System":
+		if series_label == null or series_label.text != "太阳系":
 			return _fail("relic_series_label_wrong_%d" % color_type)
-		if name_label == null or name_label.text != "Sun":
+		if name_label == null or name_label.text != "太阳":
 			return _fail("relic_name_label_wrong_%d" % color_type)
 		if count_label == null or count_label.text == "":
 			return _fail("relic_count_label_missing_%d" % color_type)
@@ -221,6 +299,9 @@ func _ready() -> void:
 		"count": 1,
 	}
 	Localization.set_locale("en")
+	await get_tree().process_frame
+	first_relic = museum.find_child("RelicCard0", true, false) as Control
+	first_thumb = first_relic.find_child("RelicThumbnail", true, false) as TextureRect
 	museum._start_relic_view(test_relic, first_thumb, first_relic)
 	await get_tree().create_timer(0.55).timeout
 	if museum._view_state != museum.ViewState.RELIC_CENTERED:
@@ -295,7 +376,7 @@ func _ready() -> void:
 	var filtered_white := museum.find_child("RelicCard0", true, false) as Control
 	if filtered_white != null:
 		return _fail("filter_color_white_visible")
-	progress_label = museum.find_child("MuseumCollectionProgress", true, false) as Label
+	progress_label = museum.find_child("MuseumCollectionProgress", true, false) as LineEdit
 	if progress_label == null or progress_label.text != "已收藏 6/6":
 		return _fail("filtered_collection_progress_wrong")
 	museum._selected_colors[CardColor.ColorType.WHITE] = true
@@ -330,7 +411,7 @@ func _ready() -> void:
 	museum.render_decks()
 	await get_tree().process_frame
 	var today_grid := museum.find_child("MuseumRelicGrid", true, false) as HFlowContainer
-	progress_label = museum.find_child("MuseumCollectionProgress", true, false) as Label
+	progress_label = museum.find_child("MuseumCollectionProgress", true, false) as LineEdit
 	if today_grid == null or today_grid.get_child_count() != ALL_RELIC_COLORS.size():
 		return _fail("today_visible_filter_did_not_keep_draw_key_relics")
 	if progress_label == null or progress_label.text != "已收藏 7/7":
@@ -339,15 +420,33 @@ func _ready() -> void:
 	museum._selected_series = "地球"
 	museum.render_decks()
 	await get_tree().process_frame
-	color_filter = museum.find_child("MuseumColorFilter", true, false) as MenuButton
+	color_filter = museum.find_child("MuseumColorFilter", true, false) as HBoxContainer
 	if color_filter == null:
 		return _fail("series_rarity_filter_missing")
-	if color_filter.get_popup().get_item_count() != 2:
+	if color_filter.get_child_count() != 2:
 		return _fail("series_rarity_filter_count_wrong")
-	if color_filter.get_popup().get_item_index(CardColor.ColorType.WHITE) < 0 or color_filter.get_popup().get_item_index(CardColor.ColorType.GREEN) < 0:
+	if museum.find_child("MuseumColorFilter%d" % CardColor.ColorType.WHITE, true, false) == null or museum.find_child("MuseumColorFilter%d" % CardColor.ColorType.GREEN, true, false) == null:
 		return _fail("series_rarity_filter_missing_owned_rarity")
-	if color_filter.get_popup().get_item_index(CardColor.ColorType.BLUE) >= 0:
+	if museum.find_child("MuseumColorFilter%d" % CardColor.ColorType.BLUE, true, false) != null:
 		return _fail("series_rarity_filter_kept_unowned_rarity")
+	for color_type in [CardColor.ColorType.WHITE, CardColor.ColorType.GREEN]:
+		museum._selected_colors[color_type] = false
+	museum.render_decks()
+	await get_tree().process_frame
+	var no_rarity_grid := museum.find_child("MuseumRelicGrid", true, false) as HFlowContainer
+	if no_rarity_grid != null:
+		return _fail("all_rarity_unchecked_still_shows_relics")
+	var empty_label := museum.find_child("MuseumEmpty", true, false) as Label
+	if empty_label == null or not empty_label.visible:
+		return _fail("museum_empty_label_not_visible")
+	var viewport_center := get_viewport().get_visible_rect().size * 0.5
+	if empty_label.get_global_rect().get_center().distance_to(viewport_center) > 0.5:
+		return _fail("museum_empty_label_not_screen_centered")
+	progress_label = museum.find_child("MuseumCollectionProgress", true, false) as LineEdit
+	if progress_label == null or progress_label.text != "已收藏 0/0":
+		return _fail("all_rarity_unchecked_progress_wrong")
+	for color_type in [CardColor.ColorType.WHITE, CardColor.ColorType.GREEN]:
+		museum._selected_colors[color_type] = true
 	museum._selected_series = DeckCollectionUI.TODAY_VISIBLE_SERIES_FILTER
 	museum.render_decks()
 	await get_tree().process_frame
@@ -387,7 +486,7 @@ func _ready() -> void:
 	var restored_grid := restored_museum.find_child("MuseumRelicGrid", true, false) as HFlowContainer
 	if restored_grid == null or restored_grid.get_child_count() != ALL_RELIC_COLORS.size() - 1:
 		return _fail("session_filtered_grid_not_restored")
-	progress_label = restored_museum.find_child("MuseumCollectionProgress", true, false) as Label
+	progress_label = restored_museum.find_child("MuseumCollectionProgress", true, false) as LineEdit
 	if progress_label == null or progress_label.text != "已收藏 6/6":
 		return _fail("session_progress_not_restored")
 	DeckCollectionUI.reset_session_filter_state()
@@ -406,3 +505,71 @@ func _total_deck_defs() -> int:
 		if series is CardSeries:
 			total += (series as CardSeries).get_deck_names().size()
 	return total
+
+func _color_close(a: Color, b: Color, epsilon: float = 0.005) -> bool:
+	return absf(a.r - b.r) <= epsilon and absf(a.g - b.g) <= epsilon and absf(a.b - b.b) <= epsilon and absf(a.a - b.a) <= epsilon
+
+func _texture_alpha_bounds(texture: Texture2D) -> Rect2i:
+	if texture == null:
+		return Rect2i()
+	var image := texture.get_image()
+	if image == null or image.is_empty():
+		return Rect2i()
+	var min_point := Vector2i(image.get_width(), image.get_height())
+	var max_point := Vector2i(-1, -1)
+	for y in range(image.get_height()):
+		for x in range(image.get_width()):
+			if image.get_pixel(x, y).a <= 0.001:
+				continue
+			min_point.x = mini(min_point.x, x)
+			min_point.y = mini(min_point.y, y)
+			max_point.x = maxi(max_point.x, x)
+			max_point.y = maxi(max_point.y, y)
+	if max_point.x < min_point.x or max_point.y < min_point.y:
+		return Rect2i()
+	return Rect2i(min_point, max_point - min_point + Vector2i.ONE)
+
+func _texture_pixels_equal(a: Texture2D, b: Texture2D) -> bool:
+	if a == null or b == null:
+		return false
+	var a_image := a.get_image()
+	var b_image := b.get_image()
+	if a_image == null or b_image == null or a_image.is_empty() or b_image.is_empty():
+		return false
+	if a_image.get_size() != b_image.get_size():
+		return false
+	for y in range(a_image.get_height()):
+		for x in range(a_image.get_width()):
+			if not _color_close(a_image.get_pixel(x, y), b_image.get_pixel(x, y), 0.001):
+				return false
+	return true
+
+func _assert_latest_vertical_scrollbar(museum: DeckCollectionUI) -> bool:
+	var scrollbar := museum.find_child("MuseumVerticalScrollbar", true, false) as VScrollBar
+	if scrollbar == null or not scrollbar.visible:
+		_fail("museum_latest_vertical_scrollbar_missing")
+		return false
+	var track := scrollbar.find_child("CCRVerticalScrollbarTrack", false, false) as NinePatchRect
+	if track == null or track.patch_margin_top != 78 or track.patch_margin_bottom != 78:
+		_fail("museum_vertical_scrollbar_end_caps_unprotected")
+		return false
+	var expected_top := float(museum.call("_today_deck_first_card_top"))
+	var expected_bottom := float(museum.call("_today_deck_last_card_bottom"))
+	var expected_height := maxf(
+		float(CCRVisualStyle.SETTINGS_VERTICAL_SCROLLBAR_TRACK_END_MARGIN * 2),
+		expected_bottom - expected_top
+	)
+	if absf(scrollbar.size.y - expected_height) > 0.1:
+		_fail("museum_vertical_scrollbar_length_not_today_deck_length")
+		return false
+	if absf(scrollbar.position.y - expected_top) > 0.1:
+		_fail("museum_vertical_scrollbar_top_not_today_deck_top")
+		return false
+	if absf(scrollbar.get_rect().end.y - expected_bottom) > 0.1:
+		_fail("museum_vertical_scrollbar_bottom_not_today_deck_bottom")
+		return false
+	var expected_right := museum.size.x - DeckCollectionUI.MUSEUM_SCROLLBAR_RESOURCE_ICON_HALF_WIDTH
+	if absf(scrollbar.get_rect().end.x - expected_right) > 0.1:
+		_fail("museum_vertical_scrollbar_not_shifted_left_by_gold_icon_half_width")
+		return false
+	return true

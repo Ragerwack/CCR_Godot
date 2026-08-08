@@ -42,9 +42,13 @@ func apply_resolution(size: Vector2i, persist: bool = true) -> bool:
 	if not is_supported_resolution(size):
 		return false
 	current_resolution = size
-	if not fullscreen_enabled:
-		DisplayServer.window_set_size(size)
-		_center_window(size)
+	# Godot 的全屏模式始终使用显示器原生尺寸，不能通过 window_set_size()
+	# 切换显示器视频模式。玩家主动选择具体分辨率时切回对应大小的窗口，
+	# 避免设置被保存却没有任何可见效果。
+	if fullscreen_enabled:
+		apply_window_mode(false, persist)
+	else:
+		_apply_windowed_resolution(size)
 	if persist:
 		Config.set_value(CONFIG_SECTION, CONFIG_RESOLUTION_KEY, resolution_to_key(size))
 	resolution_changed.emit(size)
@@ -56,8 +60,7 @@ func apply_window_mode(fullscreen: bool, persist: bool = true) -> bool:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-		DisplayServer.window_set_size(current_resolution)
-		_center_window(current_resolution)
+		_apply_windowed_resolution(current_resolution)
 	if persist:
 		Config.set_value(CONFIG_SECTION, CONFIG_WINDOW_MODE_KEY, window_mode_to_key(fullscreen))
 	window_mode_changed.emit(fullscreen)
@@ -149,3 +152,7 @@ func _center_window(size: Vector2i) -> void:
 	var offset := (usable_rect.size - size) / 2
 	var position := usable_rect.position + Vector2i(max(0, offset.x), max(0, offset.y))
 	DisplayServer.window_set_position(position)
+
+func _apply_windowed_resolution(size: Vector2i) -> void:
+	DisplayServer.window_set_size(size)
+	_center_window(size)

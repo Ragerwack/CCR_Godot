@@ -1,6 +1,8 @@
 extends Control
 class_name TodayDecksUI
 
+const CCRLinkedVerticalScrollBarScript = preload("res://Scripts/UI/CCRLinkedVerticalScrollBar.gd")
+
 const ROW_COUNT: int = 8
 const CARDS_PER_DECK: int = 5
 const ROW_GAP: int = 14
@@ -8,6 +10,7 @@ const TOP_PAD: int = 18
 const CARD_SPACING: int = 8
 const INFO_ROW_HEIGHT: int = 26
 const KEY_ROW_HEIGHT: int = 26
+const CARD_ROW_SEPARATOR: float = 4.0
 const BASE_COLORS: Array[CardColor.ColorType] = [
 	CardColor.ColorType.GREEN,
 	CardColor.ColorType.BLUE,
@@ -18,12 +21,16 @@ const BASE_COLORS: Array[CardColor.ColorType] = [
 const COLOR_API_NAMES: Array[String] = ["green", "blue", "purple", "orange", "black"]
 
 var _content: VBoxContainer = null
+var _scroll_container: ScrollContainer = null
+var _vertical_scrollbar: VScrollBar = null
 var _status_label: Label = null
 var _reset_countdown_label: Label = null
 var _hover_preview: CardDisplay = null
 var _hover_preview_source: CardDisplay = null
 var _top_pad: float = TOP_PAD
 var _left_pad: float = 0.0
+var _session_scroll_vertical: int = 0
+var _restore_scroll_pending: bool = false
 
 func configure_layout(top_padding: float) -> void:
 	_top_pad = maxf(0.0, top_padding)
@@ -40,13 +47,25 @@ func _ready() -> void:
 	_build_shell()
 	_render()
 	set_process(true)
+	if not Localization.locale_changed.is_connected(_on_locale_changed):
+		Localization.locale_changed.connect(_on_locale_changed)
 	_ensure_draw_key.call_deferred()
 
+func _on_locale_changed(_locale: String) -> void:
+	if not is_inside_tree():
+		return
+	# 抽卡密匙的稳定 ID 不变，页面可以先用本地资源立即重建；
+	# MainUI 随后会请求当前语言的密匙以更新服务端回传文案。
+	_render()
+
 func _build_shell() -> void:
+	_capture_scroll_vertical()
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
 	_content = null
+	_scroll_container = null
+	_vertical_scrollbar = null
 	_status_label = null
 	_reset_countdown_label = null
 
@@ -72,7 +91,7 @@ func _build_shell() -> void:
 	_reset_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_reset_countdown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_reset_countdown_label.add_theme_font_size_override("font_size", 16)
-	_reset_countdown_label.add_theme_color_override("font_color", Color(0.72, 0.80, 0.92, 1.0))
+	_reset_countdown_label.add_theme_color_override("font_color", Color.BLACK)
 	key_row.add_child(_reset_countdown_label)
 
 	_status_label = Label.new()
@@ -94,10 +113,13 @@ func _build_shell() -> void:
 	scroll.offset_bottom = -18
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	root.add_child(scroll)
+	_scroll_container = scroll
 
 	var content_margin := MarginContainer.new()
 	content_margin.name = "TodayDeckContentMargin"
 	content_margin.add_theme_constant_override("margin_left", int(ceil(_left_pad)))
+	# 最后一排卡牌本体之后保留完整的向下柔影空间，避免被滚动视口裁掉。
+	content_margin.add_theme_constant_override("margin_bottom", int(ceil(_card_shadow_bottom_bleed())))
 	content_margin.custom_minimum_size = Vector2(_left_pad + cards_width, 0)
 	scroll.add_child(content_margin)
 
@@ -105,6 +127,14 @@ func _build_shell() -> void:
 	_content.custom_minimum_size = Vector2(cards_width, 0)
 	_content.add_theme_constant_override("separation", ROW_GAP)
 	content_margin.add_child(_content)
+
+	_vertical_scrollbar = CCRLinkedVerticalScrollBarScript.new() as VScrollBar
+	_vertical_scrollbar.name = "TodayDeckVerticalScrollbar"
+	_vertical_scrollbar.z_index = 8
+	root.add_child(_vertical_scrollbar)
+	_vertical_scrollbar.call("bind_scroll_container", scroll)
+	_layout_vertical_scrollbar()
+	_schedule_scroll_restore()
 
 func _ensure_draw_key() -> void:
 	if not GameManager.draw_key.is_empty():
@@ -123,6 +153,7 @@ func _ensure_draw_key() -> void:
 func _render() -> void:
 	if _content == null:
 		return
+	_capture_scroll_vertical()
 	_hide_hover_preview()
 	for child in _content.get_children():
 		_content.remove_child(child)
@@ -140,12 +171,42 @@ func _render() -> void:
 		if row_index < decks.size() and decks[row_index] is Dictionary:
 			deck_data = decks[row_index]
 		_content.add_child(_build_deck_row(row_index, deck_data))
+	_schedule_scroll_restore()
+
+func get_session_scroll_vertical() -> int:
+	if _scroll_container != null:
+		return _scroll_container.scroll_vertical
+	return _session_scroll_vertical
+
+func set_session_scroll_vertical(value: int) -> void:
+	_session_scroll_vertical = maxi(0, value)
+	_schedule_scroll_restore()
+
+func _capture_scroll_vertical() -> void:
+	if _scroll_container == null or _restore_scroll_pending:
+		return
+	_session_scroll_vertical = _scroll_container.scroll_vertical
+
+func _schedule_scroll_restore() -> void:
+	if _scroll_container == null or _restore_scroll_pending:
+		return
+	_restore_scroll_pending = true
+	_restore_session_scroll_vertical.call_deferred()
+
+func _restore_session_scroll_vertical() -> void:
+	if not is_inside_tree():
+		_restore_scroll_pending = false
+		return
+	await get_tree().process_frame
+	if is_instance_valid(_scroll_container):
+		_scroll_container.scroll_vertical = _session_scroll_vertical
+	_restore_scroll_pending = false
 
 func _build_deck_row(row_index: int, deck_data: Dictionary) -> Control:
 	var row := VBoxContainer.new()
 	row.name = "TodayDeckRow%d" % (row_index + 1)
-	row.custom_minimum_size = Vector2(_cards_width(), INFO_ROW_HEIGHT + CardSlotUI.SLOT_SIZE.y + 4.0)
-	row.add_theme_constant_override("separation", 4)
+	row.custom_minimum_size = Vector2(_cards_width(), INFO_ROW_HEIGHT + CardSlotUI.SLOT_SIZE.y + CARD_ROW_SEPARATOR)
+	row.add_theme_constant_override("separation", int(CARD_ROW_SEPARATOR))
 
 	var info := _build_deck_info(row_index, deck_data)
 	row.add_child(info)
@@ -189,8 +250,33 @@ func _exit_tree() -> void:
 	_hide_hover_preview()
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_RESIZED and _hover_preview != null:
-		_layout_hover_preview()
+	if what == NOTIFICATION_RESIZED:
+		_layout_vertical_scrollbar()
+		if _hover_preview != null:
+			_layout_hover_preview()
+
+func _layout_vertical_scrollbar() -> void:
+	if _vertical_scrollbar == null:
+		return
+	var scroll_top := _top_pad + KEY_ROW_HEIGHT + 10.0
+	var first_card_top := scroll_top + INFO_ROW_HEIGHT + CARD_ROW_SEPARATOR
+	var scroll_bottom := maxf(scroll_top, size.y - 18.0)
+	# 滚到底时，底部安全留白会让末排卡牌本体下缘停在这个位置；
+	# 因而轨道首尾可分别严格对应首排上缘与末排下缘。
+	var last_card_bottom := scroll_bottom - _card_shadow_bottom_bleed()
+	var protected_caps_height := float(CCRVisualStyle.SETTINGS_VERTICAL_SCROLLBAR_TRACK_END_MARGIN * 2)
+	var scrollbar_height := maxf(protected_caps_height, last_card_bottom - first_card_top)
+	var scrollbar_size := Vector2(CCRLinkedVerticalScrollBarScript.CONTROL_SIZE.x, scrollbar_height)
+	_vertical_scrollbar.size = scrollbar_size
+	_vertical_scrollbar.custom_minimum_size = scrollbar_size
+	var cards_right := _left_pad + _cards_width()
+	_vertical_scrollbar.position = Vector2(
+		cards_right + _top_pad,
+		first_card_top
+	)
+
+func _card_shadow_bottom_bleed() -> float:
+	return float(CardDisplay.CARD_SHADOW_SIZE) + maxf(0.0, CardDisplay.CARD_SHADOW_OFFSET.y)
 
 func _on_card_hover_changed(card_view: CardDisplay, active: bool) -> void:
 	if active:
@@ -237,6 +323,8 @@ func _right_blank_preview_rect() -> Rect2:
 		return Rect2()
 	var cards_rect := Rect2(cards_box.global_position, cards_box.size)
 	var left := cards_rect.end.x + 18.0
+	if _vertical_scrollbar != null:
+		left = maxf(left, _vertical_scrollbar.get_global_rect().end.x + 18.0)
 	var right := viewport_size.x - 24.0
 	if right <= left:
 		return Rect2()
@@ -256,19 +344,19 @@ func _build_deck_info(row_index: int, deck_data: Dictionary) -> HBoxContainer:
 
 	var type_label := _info_label(_deck_type_text(row_index))
 	type_label.name = "DeckTypeLabel"
-	type_label.add_theme_color_override("font_color", Color(0.90, 0.78, 0.46, 1.0))
+	type_label.add_theme_color_override("font_color", Color.BLACK)
 	type_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	info.add_child(type_label)
 
 	var name_label := _info_label(_series_deck_title(row_index, deck_data))
 	name_label.name = "DeckNameLabel"
-	name_label.add_theme_color_override("font_color", Color(0.88, 0.92, 1.0, 1.0))
+	name_label.add_theme_color_override("font_color", Color.BLACK)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	info.add_child(name_label)
 
 	var level_label := _info_label(Localization.t("ui.today_decks.visible_level", [_visible_level_for_row(row_index)]))
 	level_label.name = "DeckVisibleLevelLabel"
-	level_label.add_theme_color_override("font_color", Color(0.68, 0.78, 0.92, 1.0))
+	level_label.add_theme_color_override("font_color", Color.BLACK)
 	level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	info.add_child(level_label)
 	return info
@@ -314,6 +402,10 @@ func _series_deck_title(row_index: int, deck_data: Dictionary) -> String:
 		return Localization.t("ui.today_decks.empty_row", [row_index + 1])
 	var series_name := str(deck_data.get("series_name", ""))
 	var deck_name := str(deck_data.get("deck_name", ""))
+	var local_cards := _local_cards_for_deck(deck_data)
+	if not local_cards.is_empty():
+		series_name = local_cards[0].series_name
+		deck_name = local_cards[0].deck_name
 	if series_name != "" and deck_name != "":
 		return "%s-%s" % [series_name, deck_name]
 	if deck_name != "":
@@ -344,6 +436,11 @@ func _card_for_number(deck_data: Dictionary, number: int, color: CardColor.Color
 	var local_cards: Array[CardInfo] = []
 	if deck_key != "":
 		local_cards = CardDataManager.get_cards_by_deck_key(deck_key)
+	if local_cards.is_empty():
+		local_cards = CardDataManager.get_cards_by_deck_alias(
+			str(deck_data.get("series_name", "")),
+			str(deck_data.get("deck_name", ""))
+		)
 	if local_cards.is_empty() and deck_def_id > 0:
 		local_cards = CardDataManager.get_cards_by_deck_id(deck_def_id)
 	if local_cards.is_empty():
@@ -355,6 +452,59 @@ func _card_for_number(deck_data: Dictionary, number: int, color: CardColor.Color
 			return copy
 	return null
 
+func _local_cards_for_deck(deck_data: Dictionary) -> Array[CardInfo]:
+	var series_asset_id := int(deck_data.get("series_asset_id", 0))
+	var deck_asset_id := int(deck_data.get("deck_asset_id", 0))
+	if series_asset_id > 0 and deck_asset_id > 0:
+		var by_asset := CardDataManager.get_cards_by_asset_ids(series_asset_id, deck_asset_id)
+		if not by_asset.is_empty():
+			return by_asset
+	var deck_def_id := int(deck_data.get("deck_def_id", deck_data.get("id", 0)))
+	if deck_def_id > 0:
+		var by_id := CardDataManager.get_cards_by_deck_id(deck_def_id)
+		if _draw_key_names_match_local_deck(deck_data, by_id):
+			return by_id
+	var deck_key := str(deck_data.get("deck_def_key", deck_data.get("deck_key", "")))
+	if deck_key != "":
+		var by_key := CardDataManager.get_cards_by_deck_key(deck_key)
+		if _draw_key_names_match_local_deck(deck_data, by_key):
+			return by_key
+	var by_alias := CardDataManager.get_cards_by_deck_alias(
+		str(deck_data.get("series_name", "")),
+		str(deck_data.get("deck_name", ""))
+	)
+	if not by_alias.is_empty():
+		return by_alias
+	return []
+
+func _draw_key_names_match_local_deck(deck_data: Dictionary, cards: Array[CardInfo]) -> bool:
+	if cards.is_empty():
+		return false
+	var source := cards[0]
+	if source == null:
+		return false
+	return (
+		_known_card_text(source, "series_name", str(deck_data.get("series_name", "")))
+		and _known_card_text(source, "deck_name", str(deck_data.get("deck_name", "")))
+	)
+
+func _known_card_text(card: CardInfo, field: String, value: String) -> bool:
+	if value == "":
+		return true
+	var candidates: Array[String] = []
+	if field == "series_name":
+		candidates.append(card.series_name)
+		candidates.append(card.series_name_zh)
+		candidates.append(card.series_name_en)
+	else:
+		candidates.append(card.deck_name)
+		candidates.append(card.deck_name_zh)
+		candidates.append(card.deck_name_en)
+	for locale_texts in card.localized_texts.values():
+		if locale_texts is Dictionary:
+			candidates.append(str(locale_texts.get(field, "")))
+	return value in candidates
+
 func _card_from_draw_key(deck_data: Dictionary, number: int, color: CardColor.ColorType) -> CardInfo:
 	var cards: Array = deck_data.get("cards", [])
 	for raw in cards:
@@ -362,16 +512,17 @@ func _card_from_draw_key(deck_data: Dictionary, number: int, color: CardColor.Co
 			continue
 		if int(raw.get("number", 1)) != number:
 			continue
-		return CardInfo.new({
+		var card := CardInfo.new({
 			"id": str(raw.get("card_def_id", raw.get("id", 0))),
-			"series_name": str(deck_data.get("series_name", "")),
-			"deck_name": str(deck_data.get("deck_name", "")),
+			"card_asset_id": int(raw.get("card_asset_id", raw.get("number", number))),
+			"deck_asset_id": int(deck_data.get("deck_asset_id", 0)),
+			"series_asset_id": int(deck_data.get("series_asset_id", 0)),
+			"deck_definition_id": int(deck_data.get("deck_def_id", deck_data.get("id", 0))),
+			"series_definition_id": int(deck_data.get("series_id", 0)),
 			"card_number": number,
 			"color": color,
-			"card_name": str(raw.get("name", "")),
-			"description": str(raw.get("description", "")),
-			"image_path": str(raw.get("image_url", raw.get("image", ""))),
 		})
+		return CardDataManager.localize_card_in_place(card)
 	return null
 
 func _display_colors(deck_data: Dictionary) -> Array[CardColor.ColorType]:

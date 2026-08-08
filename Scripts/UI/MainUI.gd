@@ -1,13 +1,22 @@
 extends Control
 class_name MainUI
 
+signal tutorial_forge_started
+signal tutorial_forge_confirmed(result: Dictionary)
+signal tutorial_forge_finished(success: bool, result: Dictionary)
+
 @export var enable_debug: bool = false
 
 const TodayDecksUIScript = preload("res://Scripts/UI/TodayDecksUI.gd")
+const CareerUIScript = preload("res://Scripts/UI/CareerUI.gd")
 const LevelUpPopupUIScript = preload("res://Scripts/UI/LevelUpPopupUI.gd")
 const SynthesisAnimationOverlayScript = preload("res://Scripts/UI/SynthesisAnimationOverlay.gd")
+const TutorialOverlayScript = preload("res://Scripts/UI/TutorialOverlay.gd")
+const TutorialControllerScript = preload("res://Scripts/Systems/TutorialController.gd")
 const CCRVisualStyle = preload("res://Scripts/UI/CCRVisualStyle.gd")
 const AvatarCatalog = preload("res://Scripts/Data/AvatarCatalog.gd")
+const AccountInputValidationScript = preload("res://Scripts/Data/AccountInputValidation.gd")
+const CAREER_PAGE_ENABLED := false
 const MAIN_BACKGROUND_PATH := "res://Resources/Backgrounds/main_background.png"
 const EXIT_DIALOG_PANEL_PATH := CCRVisualStyle.DIALOG_PANEL_PATH
 const EXIT_DIALOG_CONFIRM_BUTTON_PATH := CCRVisualStyle.DIALOG_CONFIRM_BUTTON_PATH
@@ -15,17 +24,28 @@ const EXIT_DIALOG_CANCEL_BUTTON_PATH := CCRVisualStyle.DIALOG_CANCEL_BUTTON_PATH
 const EXIT_DIALOG_PANEL_SIZE := CCRVisualStyle.DIALOG_PANEL_SIZE
 const SETTINGS_PAGE_FRAME_WIDTH_RATIO := 0.90
 const SETTINGS_PAGE_CONTENT_WIDTH_RATIO := 0.80
+const SETTINGS_TEXTURE_FIELD_SIZE := Vector2(220, 60)
+const SETTINGS_TEXTURE_DROPDOWN_SIZE := Vector2(340, 60)
+const SETTINGS_REGION_POPUP_BOTTOM_CLEARANCE := 4.0
+const SETTINGS_TEXTURE_BUTTON_SIZE := Vector2(220, 60)
+const SETTINGS_TEXTURE_TOGGLE_SIZE := Vector2(122, 60)
+const SETTINGS_TEXTURE_SLIDER_SIZE := Vector2(340, 40)
 
 const LEFT_PANEL_WIDTH: int = 120
 const TOP_BAR_HEIGHT: int = 90
 const EXP_BAR_RATIO: float = 0.024   # 接近 MMORPG 底部细经验条的屏占比
 const EXP_BAR_MIN_HEIGHT: int = 16
 const EXP_BAR_MAX_HEIGHT: int = 24
-const CARD_SLOT_HEIGHT_RATIO: float = 0.21
 const CARD_GRID_COLUMNS: int = 8
 const CARD_GRID_SPACING: float = 8.0
+const CARD_SLOT_ASPECT_RATIO: float = 107.0 / 149.0
+const LEFT_REGION_WIDTH_RATIO: float = 7.0 / 48.0
+const CENTER_REGION_WIDTH_RATIO: float = 34.0 / 48.0
+const RIGHT_REGION_WIDTH_RATIO: float = 7.0 / 48.0
 const PLAYER_INFO_FONT_SIZE: int = 18
+const DRAW_SECTION_LABEL_HEIGHT: float = 28.0
 const PLAYER_INFO_VERTICAL_PADDING: float = 70.0
+const NAV_BUTTON_HEIGHT_RATIO: float = 0.051
 const LEVEL_STAMINA_FLIGHT_DURATION: float = 1.0
 const LEVEL_STAMINA_REVERSE_RATIO: float = 0.20
 const LEVEL_STAMINA_START_SCALE: float = 3.0
@@ -49,6 +69,7 @@ var _hand_area_ui: HandAreaUI = null
 var _vault_ui: VaultUI = null
 var _synthesis_panel: SynthesisPanelUI = null
 var _deck_collection_ui: DeckCollectionUI = null
+var _career_ui: CareerUI = null
 
 # 加载遮罩
 var _loading_overlay: ColorRect = null
@@ -59,6 +80,16 @@ var _synthesis_animation_running: bool = false
 var _hand_action_animation_running: bool = false
 var _layout_refresh_queued: bool = false
 var _settings_tab: String = "basic"
+var _page_scroll_positions: Dictionary = {}
+var _museum_filter_controls_rect: Rect2 = Rect2()
+var _tutorial_overlay: TutorialOverlay = null
+var _tutorial_controller: TutorialController = null
+var _splash_screen: Control = null
+var _profile_name_field: LineEdit = null
+var _profile_name_status: Label = null
+var _profile_name_save_button: Button = null
+var _profile_name_check_revision := 0
+var _profile_name_available := false
 
 func _ready() -> void:
 	setup_ui()
@@ -80,6 +111,43 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED and is_node_ready():
 		_queue_layout_refresh()
 
+func _ensure_tutorial_overlay() -> void:
+	if is_instance_valid(_tutorial_overlay):
+		return
+	_tutorial_overlay = TutorialOverlayScript.new()
+	_tutorial_overlay.name = "TutorialOverlay"
+	add_child(_tutorial_overlay)
+	_tutorial_overlay.clear()
+
+func _start_tutorial_after_login() -> void:
+	if GameManager.player_data.user_id <= 0 or not ApiClient.is_logged_in():
+		return
+	_ensure_tutorial_overlay()
+	if is_instance_valid(_tutorial_controller):
+		_tutorial_controller.queue_free()
+	_tutorial_controller = TutorialControllerScript.new()
+	_tutorial_controller.name = "TutorialController"
+	add_child(_tutorial_controller)
+	_tutorial_controller.setup(self, _tutorial_overlay)
+	if is_instance_valid(_card_pool_ui) and is_instance_valid(_hand_area_ui):
+		_tutorial_controller.bind_page(_card_pool_ui, _hand_area_ui, _nav_buttons)
+	if not tutorial_forge_started.is_connected(_tutorial_controller.on_forge_started):
+		tutorial_forge_started.connect(_tutorial_controller.on_forge_started)
+	if not tutorial_forge_confirmed.is_connected(_tutorial_controller.on_forge_confirmed):
+		tutorial_forge_confirmed.connect(_tutorial_controller.on_forge_confirmed)
+	if not tutorial_forge_finished.is_connected(_tutorial_controller.on_forge_finished):
+		tutorial_forge_finished.connect(_tutorial_controller.on_forge_finished)
+
+func _reset_tutorial_controller() -> void:
+	if is_instance_valid(_tutorial_controller):
+		_tutorial_controller.queue_free()
+	_tutorial_controller = null
+	if is_instance_valid(_tutorial_overlay):
+		_tutorial_overlay.clear()
+
+func get_current_view_id() -> String:
+	return _current_view_id
+
 # ══════════════════════════════════════════════════
 #  开机界面（Splash Screen）
 # ══════════════════════════════════════════════════
@@ -87,11 +155,22 @@ func _notification(what: int) -> void:
 func _show_splash_screen() -> void:
 	# 隐藏所有游戏UI组件（导航栏、PlayerInfo、经验条等）
 	_set_game_ui_visible(false)
+	if is_instance_valid(_splash_screen):
+		_splash_screen.visible = true
+		_splash_screen.move_to_front()
+		return
 
 	var splash := Control.new()
 	splash.name = "SplashScreenUI"
 	splash.set_script(load("res://Scripts/UI/SplashScreenUI.gd"))
+	# 登录界面必须压住所有游戏内独立图标，即使未来某个游戏 UI 节点误恢复为 visible。
+	splash.z_index = 4096
 	splash.connect("login_completed", _on_splash_completed)
+	_splash_screen = splash
+	splash.tree_exited.connect(func():
+		if _splash_screen == splash:
+			_splash_screen = null
+	)
 	add_child(splash)
 
 func _set_game_ui_visible(visible: bool) -> void:
@@ -103,14 +182,18 @@ func _set_game_ui_visible(visible: bool) -> void:
 	if _nav_buttons: _nav_buttons.visible = visible
 	if _exp_bar_ui: _exp_bar_ui.visible = visible
 	if _menu_button: _menu_button.visible = visible
+	if visible:
+		_update_museum_currency_visibility.call_deferred()
 
 func _on_splash_completed() -> void:
+	_splash_screen = null
 	# 显示游戏UI，进入主界面
 	_set_game_ui_visible(true)
 	AudioManager.play_game_music_loop()
 	SessionManager.start_session()
 	_initialize_card_pool.call_deferred()
 	refresh_current_view.call_deferred()
+	_start_tutorial_after_login.call_deferred()
 
 func _deferred_server_sync() -> void:
 	_show_loading_light(true)
@@ -210,6 +293,7 @@ func _on_login_completed() -> void:
 	SessionManager.start_session()
 	_initialize_card_pool()
 	refresh_current_view()
+	_start_tutorial_after_login.call_deferred()
 
 func _on_auth_expired() -> void:
 	SessionManager.stop_session()
@@ -401,12 +485,9 @@ func _level_reward_quadratic_bezier(a: Vector2, b: Vector2, c: Vector2, t: float
 func _on_logout_pressed() -> void:
 	SessionManager.stop_session()
 	ApiClient.logout()
-	GameManager.player_data = PlayerData.new()
-	GameManager.free_refresh_count = 1
-	GameManager.free_refresh_cooldown = 0.0
-	GameManager.newbie_free_refresh_count = 0
-	GameManager.last_free_refresh_time_unix = 0.0
-	CardPoolSystem.current_pool.clear()
+	GameManager.reset_account_state()
+	_page_scroll_positions.clear()
+	_reset_tutorial_controller()
 	_show_splash_screen()
 
 func _restore_current_nav_selection() -> void:
@@ -536,14 +617,14 @@ func _apply_exit_game_dialog_style(dialog: Control) -> void:
 	var title := dialog.get_node_or_null("Panel/TitleLabel") as Label
 	if title != null:
 		title.add_theme_font_size_override("font_size", 26)
-		title.add_theme_color_override("font_color", Color.WHITE)
+		title.add_theme_color_override("font_color", CCRVisualStyle.SETTINGS_TEXT)
 		title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.88))
 		title.add_theme_constant_override("shadow_offset_x", 0)
 		title.add_theme_constant_override("shadow_offset_y", 2)
 	var message := dialog.get_node_or_null("Panel/MessageLabel") as Label
 	if message != null:
 		message.add_theme_font_size_override("font_size", 20)
-		message.add_theme_color_override("font_color", Color(0.94, 0.98, 1.0, 1.0))
+		message.add_theme_color_override("font_color", CCRVisualStyle.SETTINGS_TEXT)
 		message.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.82))
 		message.add_theme_constant_override("shadow_offset_x", 0)
 		message.add_theme_constant_override("shadow_offset_y", 1)
@@ -552,12 +633,12 @@ func _apply_exit_game_dialog_style(dialog: Control) -> void:
 		if button == null:
 			continue
 		button.add_theme_font_size_override("font_size", 20)
-		button.add_theme_color_override("font_color", Color.WHITE)
-		button.add_theme_color_override("font_hover_color", Color(0.90, 0.98, 1.0, 1.0))
-		button.add_theme_color_override("font_pressed_color", Color(0.88, 0.96, 1.0, 1.0))
-		button.add_theme_color_override("font_hover_pressed_color", Color(0.88, 0.96, 1.0, 1.0))
-		button.add_theme_color_override("font_focus_color", Color.WHITE)
-		button.add_theme_color_override("font_disabled_color", Color(0.78, 0.84, 0.90, 0.94))
+		button.add_theme_color_override("font_color", CCRVisualStyle.SETTINGS_TEXT)
+		button.add_theme_color_override("font_hover_color", CCRVisualStyle.SETTINGS_TEXT)
+		button.add_theme_color_override("font_pressed_color", Color(1.0, 0.78, 0.48, 1.0))
+		button.add_theme_color_override("font_hover_pressed_color", Color(1.0, 0.78, 0.48, 1.0))
+		button.add_theme_color_override("font_focus_color", CCRVisualStyle.SETTINGS_TEXT)
+		button.add_theme_color_override("font_disabled_color", CCRVisualStyle.SETTINGS_TEXT_DISABLED)
 		button.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.90))
 		button.add_theme_constant_override("outline_size", 2)
 
@@ -611,6 +692,9 @@ func setup_ui() -> void:
 	_player_info.size = _player_info_size(vp_size)
 	_player_info.configure_text_font_size(PLAYER_INFO_FONT_SIZE)
 	_player_info.configure_avatar_size(avatar_height)
+	_player_info.set_avatar_career_enabled(CAREER_PAGE_ENABLED)
+	if CAREER_PAGE_ENABLED:
+		_player_info.avatar_pressed.connect(_on_player_avatar_pressed)
 	add_child(_player_info)
 
 	_currency = CurrencyUI.new()
@@ -618,6 +702,7 @@ func setup_ui() -> void:
 	# 体力、金币、宝石和 Roll 状态灯按导航按钮高度响应式缩放，文字仍由客户端实时绘制。
 	_currency.configure_icon_size(_currency_icon_size(vp_size))
 	add_child(_currency)
+	_currency.resized.connect(_on_currency_resized)
 	_apply_currency_layout(vp_size)
 
 	# ── 左侧导航 ──
@@ -646,7 +731,7 @@ func setup_ui() -> void:
 
 	# 默认视图
 	_show_card_pool()
-	_apply_game_text_color()
+	_ensure_tutorial_overlay()
 
 	if enable_debug:
 		_setup_debug_panel()
@@ -666,7 +751,8 @@ func _refresh_layout_after_resize() -> void:
 		return
 	_apply_shell_layout()
 	_rebuild_current_view()
-	_apply_game_text_color()
+	if _current_view_id == "settings" and is_instance_valid(_center_area):
+		_apply_settings_visuals(_center_area)
 
 func _apply_shell_layout() -> void:
 	var vp_size := get_viewport_rect().size
@@ -697,17 +783,21 @@ func _rebuild_current_view() -> void:
 		"card_pool": _show_card_pool()
 		"vault": _show_vault()
 		"deck_panel": _show_deck_collection()
+		"career": _show_career()
 		"synthesis": _show_synthesis_panel()
 		"settings": _show_settings()
 		_: pass
 
 func _configure_card_slot_size(vp_size: Vector2) -> void:
-	var aspect := CardSlotUI.SLOT_SIZE.x / CardSlotUI.SLOT_SIZE.y
-	var slot_h_by_height := maxf(1.0, vp_size.y * CARD_SLOT_HEIGHT_RATIO)
-	var available_width := maxf(320.0, vp_size.x - 64.0)
-	var max_slot_width := maxf(1.0, (available_width - 7.0 * 8.0) / 8.0)
-	var slot_h := minf(slot_h_by_height, max_slot_width / aspect)
-	var slot_size := Vector2(roundf(slot_h * aspect), roundf(slot_h))
+	var center_width := maxf(float(CARD_GRID_COLUMNS), _center_region_width(vp_size))
+	var total_spacing := float(CARD_GRID_COLUMNS - 1) * CARD_GRID_SPACING
+	var slot_width_by_region := maxf(1.0, (center_width - total_spacing) / float(CARD_GRID_COLUMNS))
+	var vertical_spacing := CARD_GRID_SPACING * 2.0
+	var available_height := maxf(4.0, vp_size.y - float(_exp_bar_height(vp_size)) - vertical_spacing)
+	var slot_width_by_height := maxf(1.0, available_height * 0.25 * CARD_SLOT_ASPECT_RATIO)
+	var slot_width := minf(slot_width_by_region, slot_width_by_height)
+	# 横向保留精确分区宽度；高度取整可避免滚动容器对小数像素取整后裁掉卡牌阴影。
+	var slot_size := Vector2(slot_width, roundf(slot_width / CARD_SLOT_ASPECT_RATIO))
 	CardSlotUI.configure_slot_size(slot_size)
 
 func _exp_bar_height(vp_size: Vector2) -> int:
@@ -718,7 +808,11 @@ func _card_grid_width() -> float:
 
 func _left_region_width(vp_size: Vector2 = Vector2.ZERO) -> float:
 	var size_for_calc := vp_size if vp_size.x > 0.0 else get_viewport_rect().size
-	return maxf(0.0, (size_for_calc.x - _card_grid_width()) * 0.5)
+	return maxf(0.0, size_for_calc.x * LEFT_REGION_WIDTH_RATIO)
+
+func _center_region_width(vp_size: Vector2 = Vector2.ZERO) -> float:
+	var size_for_calc := vp_size if vp_size.x > 0.0 else get_viewport_rect().size
+	return maxf(0.0, size_for_calc.x * CENTER_REGION_WIDTH_RATIO)
 
 func _content_region_rect(vp_size: Vector2 = Vector2.ZERO) -> Rect2:
 	var size_for_calc := vp_size if vp_size.x > 0.0 else get_viewport_rect().size
@@ -735,13 +829,15 @@ func _target_player_avatar_height(vp_size: Vector2 = Vector2.ZERO) -> float:
 	return roundf(clampf(desired, 52.0, max_fit))
 
 func _nav_button_height(vp_size: Vector2 = Vector2.ZERO) -> float:
-	return roundf(_target_player_avatar_height(vp_size) * 0.25)
+	var size_for_calc := vp_size if vp_size.y > 0.0 else get_viewport_rect().size
+	return size_for_calc.y * NAV_BUTTON_HEIGHT_RATIO
 
 func _right_button_height(vp_size: Vector2 = Vector2.ZERO) -> float:
 	return roundf(_target_player_avatar_height(vp_size) / 3.0)
 
 func _currency_icon_size(vp_size: Vector2 = Vector2.ZERO) -> float:
-	return roundf(_nav_button_height(vp_size) * 2.0 / 3.0)
+	# 资源栏保持既有的头像/卡槽响应式尺寸；本轮导航按钮高度标准不应改变其他 UI。
+	return roundf(_target_player_avatar_height(vp_size) * 0.25 * 2.0 / 3.0)
 
 func _apply_currency_layout(vp_size: Vector2 = Vector2.ZERO) -> void:
 	if not is_instance_valid(_currency):
@@ -809,11 +905,21 @@ func _on_nav_button(id: String) -> void:
 	FileLogger.perf("scene_switch_done", {"target": id, "total_ms": Time.get_ticks_msec() - switch_started})
 	_refresh_page_data_background.call_deferred(id)
 
+func _on_player_avatar_pressed() -> void:
+	if not CAREER_PAGE_ENABLED or not _game_ui_active:
+		return
+	if _current_view_id != "career" and (_card_pool_ui != null or _hand_area_ui != null):
+		GameManager.sync_pool_hand_layout_background("leave_card_pool_to_career")
+	AudioManager.play_game_music_loop()
+	_show_career()
+	_refresh_page_data_background.call_deferred("career")
+
 # ══════════════════════════════════════════════════
 #  中央视图切换
 # ══════════════════════════════════════════════════
 
 func _show_card_pool() -> void:
+	_save_current_navigation_scroll_position()
 	_current_view_id = "card_pool"
 	_nav_buttons.select_by_id("card_pool")
 	_clear_center()
@@ -837,8 +943,18 @@ func _show_card_pool() -> void:
 	var hand_total_h = 2 * slot_h + slot_spacing
 	var vertical_gap = maxf(0.0, (_center_area.size.y - pool_total_h - hand_total_h) / 3.0)
 
+	# 分区标题先加入 CenterArea，后加入卡牌容器；手牌翻页卡牌会绘制在“手牌”标题上方。
+	var pool_label := _make_draw_section_label("CardPoolSectionLabel", Localization.t("ui.draw.section.pool"))
+	pool_label.position = Vector2(0.0, _draw_section_label_y_before_target(vertical_gap, pool_label.size.y))
+	_center_area.add_child(pool_label)
+
+	var hand_label := _make_draw_section_label("HandSectionLabel", Localization.t("ui.draw.section.hand"))
+	hand_label.position = Vector2(0.0, vertical_gap + pool_total_h + _draw_section_label_y_before_target(vertical_gap, hand_label.size.y))
+	_center_area.add_child(hand_label)
+
 	# 卡池区（上半固定高度，不拉伸）
 	var pool_container = Control.new()
+	pool_container.name = "CardPoolSectionContainer"
 	pool_container.position = Vector2(0, vertical_gap)
 	pool_container.size = Vector2(_center_area.size.x, pool_total_h)
 	_center_area.add_child(pool_container)
@@ -848,6 +964,7 @@ func _show_card_pool() -> void:
 
 	# 手牌区（下半固定高度，不拉伸）
 	var hand_container = Control.new()
+	hand_container.name = "HandSectionContainer"
 	hand_container.position = Vector2(0, vertical_gap * 2.0 + pool_total_h)
 	hand_container.size = Vector2(_center_area.size.x, hand_total_h)
 	_center_area.add_child(hand_container)
@@ -855,9 +972,28 @@ func _show_card_pool() -> void:
 	_hand_area_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hand_container.add_child(_hand_area_ui)
 	_hand_area_ui.refresh_display()
-	_apply_game_text_color(_center_area)
+	if is_instance_valid(_tutorial_controller):
+		_tutorial_controller.bind_page(_card_pool_ui, _hand_area_ui, _nav_buttons)
+		_tutorial_controller.on_view_changed("card_pool")
+
+func _make_draw_section_label(node_name: String, text: String) -> Label:
+	var label := Label.new()
+	label.name = node_name
+	label.text = text
+	label.size = Vector2(_center_area.size.x if is_instance_valid(_center_area) else get_viewport_rect().size.x, DRAW_SECTION_LABEL_HEIGHT)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", PLAYER_INFO_FONT_SIZE)
+	label.add_theme_color_override("font_color", Color.BLACK)
+	return label
+
+func _draw_section_label_y_before_target(gap_height: float, label_height: float) -> float:
+	var available_gap := maxf(0.0, gap_height - label_height)
+	return available_gap * 0.75
 
 func _show_today_decks() -> void:
+	_save_current_navigation_scroll_position()
 	_current_view_id = "today_decks"
 	_nav_buttons.select_by_id("today_decks")
 	_clear_center()
@@ -867,7 +1003,7 @@ func _show_today_decks() -> void:
 	_today_decks_ui.configure_layout(_exp_bar_height(get_viewport_rect().size))
 	_today_decks_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	host.add_child(_today_decks_ui)
-	_apply_game_text_color(_center_area)
+	_restore_navigation_scroll_position("today_decks", _today_decks_ui)
 
 func _sync_before_leaving_card_pool() -> Dictionary:
 	if _card_pool_ui == null and _hand_area_ui == null:
@@ -875,6 +1011,7 @@ func _sync_before_leaving_card_pool() -> Dictionary:
 	return await GameManager.sync_pool_hand_layout()
 
 func _show_vault() -> void:
+	_save_current_navigation_scroll_position()
 	_current_view_id = "vault"
 	_nav_buttons.select_by_id("vault")
 	_clear_center()
@@ -882,6 +1019,7 @@ func _show_vault() -> void:
 	_center_area.add_child(host)
 	_vault_ui = VaultUI.new()
 	_vault_ui.configure_side_button_metrics(_side_button_width(), _right_button_height())
+	_vault_ui.configure_scrollbar_layout(_exp_bar_height(get_viewport_rect().size))
 	_vault_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	if is_instance_valid(_nav_buttons):
 		_vault_ui.set_synthesis_reward_target_rects(
@@ -892,19 +1030,42 @@ func _show_vault() -> void:
 			_currency.get_resource_icon_global_rect("stamina") if is_instance_valid(_currency) else Rect2()
 		)
 	host.add_child(_vault_ui)
-	_apply_game_text_color(_center_area)
+	_restore_navigation_scroll_position("vault", _vault_ui)
 
 func _show_deck_collection() -> void:
+	_save_current_navigation_scroll_position()
 	_current_view_id = "deck_panel"
 	_nav_buttons.select_by_id("deck_panel")
 	_clear_center()
+	# 进入博物馆时先隐藏一帧，等筛选栏完成容器布局并上报真实矩形后再决定是否恢复，
+	# 避免宽筛选配置在首帧短暂盖住资源图标。
+	if is_instance_valid(_currency):
+		_currency.visible = false
 	var host := _make_content_region_host("MuseumContentRegion")
 	_center_area.add_child(host)
 	_deck_collection_ui = DeckCollectionUI.new()
+	_deck_collection_ui.filter_controls_rect_changed.connect(_on_museum_filter_controls_rect_changed)
 	_deck_collection_ui.configure_layout(_exp_bar_height(get_viewport_rect().size))
 	_deck_collection_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	host.add_child(_deck_collection_ui)
-	_apply_game_text_color(_center_area)
+	_restore_navigation_scroll_position("deck_panel", _deck_collection_ui)
+	if is_instance_valid(_tutorial_controller):
+		_tutorial_controller.bind_page(null, null, _nav_buttons, _deck_collection_ui)
+		_tutorial_controller.on_view_changed("deck_panel", _deck_collection_ui)
+
+func _show_career() -> void:
+	if not CAREER_PAGE_ENABLED:
+		return
+	_save_current_navigation_scroll_position()
+	_current_view_id = "career"
+	_nav_buttons.clear_selection()
+	_clear_center()
+	var host := _make_content_region_host("CareerContentRegion")
+	_center_area.add_child(host)
+	_career_ui = CareerUIScript.new()
+	_career_ui.configure_icon_size(_target_player_avatar_height() * 0.5)
+	_career_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+	host.add_child(_career_ui)
 
 func _refresh_page_data_background(id: String) -> void:
 	match id:
@@ -914,15 +1075,21 @@ func _refresh_page_data_background(id: String) -> void:
 				await GameManager.sync_vault_slot_quote_from_server()
 				if is_instance_valid(_vault_ui):
 					_vault_ui.refresh_display()
-					_apply_game_text_color(_vault_ui)
 		"deck_panel":
 			if ApiClient.is_logged_in():
 				await GameManager.sync_decks_from_server()
 				if is_instance_valid(_deck_collection_ui):
 					_deck_collection_ui.render_decks()
-					_apply_game_text_color(_deck_collection_ui)
+					if is_instance_valid(_tutorial_controller):
+						_tutorial_controller.on_museum_page_ready()
+		"career":
+			if ApiClient.is_logged_in():
+				await GameManager.sync_career_from_server()
+				if is_instance_valid(_career_ui):
+					_career_ui.call("_queue_refresh")
 
 func _show_synthesis_panel() -> void:
+	_save_current_navigation_scroll_position()
 	_current_view_id = "synthesis"
 	_clear_center()
 	_synthesis_panel = SynthesisPanelUI.new()
@@ -930,7 +1097,6 @@ func _show_synthesis_panel() -> void:
 	_synthesis_panel.synthesis_completed.connect(_on_synthesis_completed)
 	_synthesis_panel.synthesis_cancelled.connect(_on_synthesis_cancelled)
 	_center_area.add_child(_synthesis_panel)
-	_apply_game_text_color(_center_area)
 
 func _on_synthesis_completed(_result: Dictionary) -> void:
 	pass
@@ -939,6 +1105,7 @@ func _on_synthesis_cancelled() -> void:
 	_show_card_pool()
 
 func _show_message(msg: String) -> void:
+	_save_current_navigation_scroll_position()
 	_current_view_id = "message"
 	_clear_center()
 	var label = Label.new()
@@ -947,12 +1114,12 @@ func _show_message(msg: String) -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.text = msg
 	_center_area.add_child(label)
-	_apply_game_text_color(_center_area)
 
 func _show_menu() -> void:
 	_show_settings()
 
 func _show_settings() -> void:
+	_save_current_navigation_scroll_position()
 	if _current_view_id != "settings":
 		_view_before_menu = _current_view_id
 	_current_view_id = "settings"
@@ -960,8 +1127,25 @@ func _show_settings() -> void:
 	_clear_center()
 	var menu_panel = _build_menu_panel()
 	_center_area.add_child(menu_panel)
-	_apply_game_text_color(_center_area)
 	_apply_settings_visuals(menu_panel)
+
+func _save_current_navigation_scroll_position() -> void:
+	match _current_view_id:
+		"today_decks":
+			if is_instance_valid(_today_decks_ui) and _today_decks_ui.has_method("get_session_scroll_vertical"):
+				_page_scroll_positions["today_decks"] = int(_today_decks_ui.call("get_session_scroll_vertical"))
+		"vault":
+			if is_instance_valid(_vault_ui):
+				_page_scroll_positions["vault"] = _vault_ui.get_session_scroll_vertical()
+		"deck_panel":
+			if is_instance_valid(_deck_collection_ui):
+				_page_scroll_positions["deck_panel"] = _deck_collection_ui.get_session_scroll_vertical()
+
+func _restore_navigation_scroll_position(view_id: String, page_ui: Control) -> void:
+	if page_ui == null or not _page_scroll_positions.has(view_id):
+		return
+	if page_ui.has_method("set_session_scroll_vertical"):
+		page_ui.call("set_session_scroll_vertical", int(_page_scroll_positions.get(view_id, 0)))
 
 func _build_menu_panel() -> Control:
 	var panel = Control.new()
@@ -1010,7 +1194,8 @@ func _build_menu_panel() -> Control:
 		tab_button.text = str(tab_data["text"])
 		tab_button.toggle_mode = true
 		tab_button.button_pressed = _settings_tab == str(tab_data["id"])
-		tab_button.custom_minimum_size = Vector2(150, 36)
+		tab_button.custom_minimum_size = SETTINGS_TEXTURE_FIELD_SIZE
+		tab_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		tab_button.set_meta("ccr_settings_tab", true)
 		CCRVisualStyle.apply_settings_tab_button(tab_button, tab_button.button_pressed)
 		tab_button.pressed.connect(_select_settings_tab.bind(str(tab_data["id"])))
@@ -1095,21 +1280,26 @@ func _select_settings_tab(tab_id: String) -> void:
 
 func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 
-	var music_row = _make_slider_row(Localization.t("ui.menu.music_volume"), AudioManager.bgm_volume, func(v): AudioManager.set_bgm_volume(v))
+	var music_row = _make_slider_row(Localization.t("ui.menu.music_volume"), AudioManager.bgm_volume, func(v): AudioManager.set_bgm_volume(v), "MusicVolumeSlider")
 	vbox.add_child(music_row)
 
-	var sfx_row = _make_slider_row(Localization.t("ui.menu.sfx_volume"), AudioManager.sfx_volume, func(v): AudioManager.set_sfx_volume(v))
+	var sfx_row = _make_slider_row(Localization.t("ui.menu.sfx_volume"), AudioManager.sfx_volume, func(v): AudioManager.set_sfx_volume(v), "SfxVolumeSlider")
 	vbox.add_child(sfx_row)
 
 	var resolution_row := HBoxContainer.new()
+	resolution_row.name = "ResolutionSettingsRow"
+	resolution_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var resolution_label := Label.new()
 	resolution_label.text = Localization.t("ui.menu.resolution")
 	resolution_label.custom_minimum_size = Vector2(120, 30)
+	resolution_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	resolution_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	CCRVisualStyle.apply_settings_label(resolution_label)
 	resolution_row.add_child(resolution_label)
 	var resolution_select := OptionButton.new()
 	resolution_select.name = "ResolutionSelect"
-	resolution_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	resolution_select.size_flags_horizontal = Control.SIZE_SHRINK_END
+	resolution_select.custom_minimum_size = SETTINGS_TEXTURE_DROPDOWN_SIZE
 	var current_resolution := DisplaySettings.get_current_resolution()
 	var selected_resolution_index := 0
 	var resolution_index := 0
@@ -1129,14 +1319,19 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 	vbox.add_child(resolution_row)
 
 	var window_mode_row := HBoxContainer.new()
+	window_mode_row.name = "WindowModeSettingsRow"
+	window_mode_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var window_mode_label := Label.new()
 	window_mode_label.text = Localization.t("ui.menu.window_mode")
 	window_mode_label.custom_minimum_size = Vector2(120, 30)
+	window_mode_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	window_mode_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	CCRVisualStyle.apply_settings_label(window_mode_label)
 	window_mode_row.add_child(window_mode_label)
 	var window_mode_select := OptionButton.new()
 	window_mode_select.name = "WindowModeSelect"
-	window_mode_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	window_mode_select.size_flags_horizontal = Control.SIZE_SHRINK_END
+	window_mode_select.custom_minimum_size = SETTINGS_TEXTURE_DROPDOWN_SIZE
 	window_mode_select.add_item(Localization.t("ui.menu.window_mode.fullscreen"))
 	window_mode_select.set_item_metadata(0, true)
 	window_mode_select.add_item(Localization.t("ui.menu.window_mode.windowed"))
@@ -1151,13 +1346,19 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 	vbox.add_child(window_mode_row)
 
 	var language_row := HBoxContainer.new()
+	language_row.name = "LanguageSettingsRow"
+	language_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var language_label := Label.new()
 	language_label.text = Localization.t("ui.menu.language")
 	language_label.custom_minimum_size = Vector2(120, 30)
+	language_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	language_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	CCRVisualStyle.apply_settings_label(language_label)
 	language_row.add_child(language_label)
 	var language_select := OptionButton.new()
-	language_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	language_select.name = "LanguageSelect"
+	language_select.size_flags_horizontal = Control.SIZE_SHRINK_END
+	language_select.custom_minimum_size = SETTINGS_TEXTURE_DROPDOWN_SIZE
 	var selected_language_index := 0
 	var supported_locales := Localization.get_supported_locales()
 	for i in range(supported_locales.size()):
@@ -1175,24 +1376,47 @@ func _build_basic_settings_page(vbox: VBoxContainer) -> void:
 	language_row.add_child(language_select)
 	vbox.add_child(language_row)
 
-	var mute_btn = Button.new()
-	mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
-	mute_btn.custom_minimum_size = Vector2(0, 42)
-	CCRVisualStyle.apply_settings_button(mute_btn)
+	var mute_row := HBoxContainer.new()
+	mute_row.name = "MuteSettingsRow"
+	mute_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mute_row.add_theme_constant_override("separation", 14)
+	var mute_label := Label.new()
+	mute_label.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
+	mute_label.custom_minimum_size = Vector2(120, 32)
+	mute_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mute_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	CCRVisualStyle.apply_settings_label(mute_label)
+	mute_row.add_child(mute_label)
+	var mute_btn := Button.new()
+	mute_btn.name = "MuteToggleButton"
+	mute_btn.text = ""
+	mute_btn.tooltip_text = mute_label.text
+	mute_btn.custom_minimum_size = SETTINGS_TEXTURE_TOGGLE_SIZE
+	mute_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	mute_btn.set_meta("ccr_settings_toggle", true)
+	CCRVisualStyle.apply_settings_toggle_button(mute_btn, AudioManager.is_muted)
+	var refresh_audio_toggles := func():
+		mute_label.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
+		mute_btn.tooltip_text = mute_label.text
+		CCRVisualStyle.apply_settings_toggle_button(mute_btn, AudioManager.is_muted)
 	mute_btn.pressed.connect(func():
 		AudioManager.toggle_mute()
-		mute_btn.text = Localization.t("ui.menu.mute") if not AudioManager.is_muted else Localization.t("ui.menu.muted")
+		refresh_audio_toggles.call()
 	)
-	vbox.add_child(mute_btn)
+	mute_row.add_child(mute_btn)
+	vbox.add_child(mute_row)
 
 	var sep = HSeparator.new()
 	vbox.add_child(sep)
 
 	var logout_btn = Button.new()
+	logout_btn.name = "SettingsLogoutButton"
 	logout_btn.text = Localization.t("ui.menu.logout")
-	logout_btn.custom_minimum_size = Vector2(0, 42)
+	logout_btn.custom_minimum_size = SETTINGS_TEXTURE_BUTTON_SIZE
+	logout_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
 	logout_btn.set_meta("ccr_settings_destructive", true)
-	CCRVisualStyle.apply_settings_button(logout_btn, false, true)
+	logout_btn.set_meta("ccr_settings_dialog_button", true)
+	CCRVisualStyle.apply_settings_dialog_button(logout_btn, true)
 	logout_btn.pressed.connect(_on_logout_pressed)
 	vbox.add_child(logout_btn)
 
@@ -1208,9 +1432,12 @@ func _build_controller_settings_page(vbox: VBoxContainer) -> void:
 		vbox.add_child(_make_controller_binding_row(action_id))
 
 	var reset_controller_btn := Button.new()
+	reset_controller_btn.name = "ResetControllerButton"
 	reset_controller_btn.text = Localization.t("ui.controller.reset")
-	reset_controller_btn.custom_minimum_size = Vector2(0, 42)
-	CCRVisualStyle.apply_settings_button(reset_controller_btn)
+	reset_controller_btn.custom_minimum_size = SETTINGS_TEXTURE_BUTTON_SIZE
+	reset_controller_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	reset_controller_btn.set_meta("ccr_settings_dialog_button", true)
+	CCRVisualStyle.apply_settings_dialog_button(reset_controller_btn)
 	reset_controller_btn.pressed.connect(func():
 		ControllerInput.reset_bindings()
 		_show_settings()
@@ -1225,9 +1452,72 @@ func _build_profile_settings_page(vbox: VBoxContainer) -> void:
 	CCRVisualStyle.apply_settings_label(profile_title)
 	vbox.add_child(profile_title)
 
+	var player_name_row := HBoxContainer.new()
+	player_name_row.name = "PlayerNameSettingsRow"
+	player_name_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var player_name_label := Label.new()
+	player_name_label.text = Localization.t("ui.profile.player_name")
+	player_name_label.custom_minimum_size = Vector2(150, 32)
+	player_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	player_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	CCRVisualStyle.apply_settings_label(player_name_label)
+	player_name_row.add_child(player_name_label)
+	var player_name_field := LineEdit.new()
+	player_name_field.name = "PlayerNameField"
+	player_name_field.text = GameManager.player_data.nickname if GameManager.player_data.nickname != "" else "%s #%d" % [Localization.t("ui.player.default_name"), GameManager.player_data.user_id]
+	player_name_field.editable = true
+	player_name_field.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	player_name_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	player_name_field.custom_minimum_size = SETTINGS_TEXTURE_FIELD_SIZE
+	CCRVisualStyle.apply_settings_line_edit(player_name_field)
+	var player_name_controls := HBoxContainer.new()
+	player_name_controls.name = "PlayerNameSettingsControls"
+	player_name_controls.size_flags_horizontal = Control.SIZE_SHRINK_END
+	player_name_controls.add_theme_constant_override("separation", 10)
+	player_name_controls.add_child(player_name_field)
+	var player_name_status := Label.new()
+	player_name_status.name = "PlayerNameAvailabilityStatus"
+	player_name_status.custom_minimum_size = Vector2(142, 60)
+	player_name_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	player_name_status.add_theme_font_size_override("font_size", 13)
+	player_name_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	player_name_controls.add_child(player_name_status)
+	var player_name_save := Button.new()
+	player_name_save.name = "PlayerNameSaveButton"
+	player_name_save.text = Localization.t("ui.profile.name.save")
+	player_name_save.custom_minimum_size = Vector2(124, 60)
+	player_name_save.disabled = true
+	player_name_save.set_meta("ccr_settings_dialog_button", true)
+	CCRVisualStyle.apply_settings_dialog_button(player_name_save)
+	player_name_controls.add_child(player_name_save)
+	player_name_row.add_child(player_name_controls)
+	vbox.add_child(player_name_row)
+	_profile_name_field = player_name_field
+	_profile_name_status = player_name_status
+	_profile_name_save_button = player_name_save
+	_profile_name_available = false
+	_profile_name_check_revision += 1
+	player_name_field.text_changed.connect(_on_profile_name_changed)
+	player_name_field.text_submitted.connect(func(_value: String): _save_player_name())
+	player_name_save.pressed.connect(_save_player_name)
+
 	var avatar_row := HBoxContainer.new()
-	avatar_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	avatar_row.name = "AvatarSettingsRow"
+	avatar_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	avatar_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	avatar_row.add_theme_constant_override("separation", 14)
+	var avatar_label := Label.new()
+	avatar_label.text = Localization.t("ui.profile.avatar")
+	avatar_label.custom_minimum_size = Vector2(150, 32)
+	avatar_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	avatar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	CCRVisualStyle.apply_settings_label(avatar_label)
+	avatar_row.add_child(avatar_label)
+	var avatar_controls := HBoxContainer.new()
+	avatar_controls.name = "AvatarSettingsControls"
+	avatar_controls.size_flags_horizontal = Control.SIZE_SHRINK_END
+	avatar_controls.alignment = BoxContainer.ALIGNMENT_END
+	avatar_controls.add_theme_constant_override("separation", 14)
 	var avatar_preview := TextureRect.new()
 	avatar_preview.name = "ProfileAvatarPreview"
 	avatar_preview.texture = AvatarCatalog.get_texture(GameManager.player_data.avatar_id)
@@ -1235,32 +1525,36 @@ func _build_profile_settings_page(vbox: VBoxContainer) -> void:
 	avatar_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	avatar_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	avatar_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	avatar_row.add_child(avatar_preview)
+	avatar_controls.add_child(avatar_preview)
 	var avatar_column := VBoxContainer.new()
-	var avatar_label := Label.new()
-	avatar_label.text = Localization.t("ui.profile.avatar")
-	CCRVisualStyle.apply_settings_label(avatar_label)
-	avatar_column.add_child(avatar_label)
+	avatar_column.alignment = BoxContainer.ALIGNMENT_CENTER
 	var change_avatar_btn := Button.new()
 	change_avatar_btn.name = "AvatarChangeButton"
 	change_avatar_btn.text = Localization.t("ui.profile.avatar.change")
-	change_avatar_btn.custom_minimum_size = Vector2(210, 42)
-	CCRVisualStyle.apply_settings_button(change_avatar_btn)
+	change_avatar_btn.custom_minimum_size = SETTINGS_TEXTURE_BUTTON_SIZE
+	change_avatar_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	change_avatar_btn.set_meta("ccr_settings_dialog_button", true)
+	CCRVisualStyle.apply_settings_dialog_button(change_avatar_btn)
 	change_avatar_btn.pressed.connect(_show_avatar_picker)
 	avatar_column.add_child(change_avatar_btn)
-	avatar_row.add_child(avatar_column)
+	avatar_controls.add_child(avatar_column)
+	avatar_row.add_child(avatar_controls)
 	vbox.add_child(avatar_row)
 
 	var region_row := HBoxContainer.new()
+	region_row.name = "RegionSettingsRow"
+	region_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var region_label := Label.new()
 	region_label.text = Localization.t("ui.profile.region")
 	region_label.custom_minimum_size = Vector2(150, 32)
+	region_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	region_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	CCRVisualStyle.apply_settings_label(region_label)
 	region_row.add_child(region_label)
 	var region_select := OptionButton.new()
 	region_select.name = "RegionSelect"
-	region_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	region_select.custom_minimum_size = Vector2(0, 42)
+	region_select.size_flags_horizontal = Control.SIZE_SHRINK_END
+	region_select.custom_minimum_size = SETTINGS_TEXTURE_DROPDOWN_SIZE
 	var selected_region_index := 0
 	var region_index := 0
 	for entry in CountryCatalog.localized_entries(Localization.locale):
@@ -1292,10 +1586,24 @@ func _configure_region_popup_bounds(select: OptionButton) -> void:
 	var popup := select.get_popup()
 	if popup == null:
 		return
-	popup.max_size = Vector2i(0, int(get_viewport_rect().size.y * 0.9))
 	popup.about_to_popup.connect(func():
+		_prepare_region_popup_bounds(select)
 		_clamp_region_popup_bounds.call_deferred(select)
 	)
+
+func _prepare_region_popup_bounds(select: OptionButton) -> void:
+	if select == null or not select.is_inside_tree():
+		return
+	var popup := select.get_popup()
+	if popup == null:
+		return
+	var select_rect := select.get_global_rect()
+	var content_bottom := _center_area.get_global_rect().end.y if is_instance_valid(_center_area) else get_viewport_rect().end.y
+	var max_bottom := content_bottom - SETTINGS_REGION_POPUP_BOTTOM_CLEARANCE
+	var max_height := maxi(int(select_rect.size.y), int(floorf(max_bottom - select_rect.end.y)))
+	popup.set_meta("ccr_settings_popup_height", max_height)
+	popup.min_size = Vector2i(int(SETTINGS_TEXTURE_DROPDOWN_SIZE.x), max_height)
+	popup.max_size = Vector2i(int(SETTINGS_TEXTURE_DROPDOWN_SIZE.x), max_height)
 
 func _clamp_region_popup_bounds(select: OptionButton) -> void:
 	if select == null or not select.is_inside_tree():
@@ -1304,17 +1612,9 @@ func _clamp_region_popup_bounds(select: OptionButton) -> void:
 	if popup == null:
 		return
 	var select_rect := select.get_global_rect()
-	var viewport_height := get_viewport_rect().size.y
-	var min_y := int(maxf(0.0, select_rect.position.y - select_rect.size.y))
-	var max_bottom := int(viewport_height * 0.9)
-	var popup_position := popup.position
-	if popup_position.y < min_y:
-		popup_position.y = min_y
-	popup.position = popup_position
-	var max_height := maxi(int(select_rect.size.y), max_bottom - popup_position.y)
-	popup.max_size = Vector2i(0, max_height)
-	if popup.size.y > max_height:
-		popup.size = Vector2i(popup.size.x, max_height)
+	var popup_height := int(popup.get_meta("ccr_settings_popup_height", 533))
+	popup.position = Vector2i(int(roundf(select_rect.position.x)), int(roundf(select_rect.end.y)))
+	popup.size = Vector2i(int(SETTINGS_TEXTURE_DROPDOWN_SIZE.x), popup_height)
 
 func _apply_settings_font_delta(root: Node, delta: int) -> void:
 	for child in root.get_children():
@@ -1330,6 +1630,10 @@ func _apply_settings_visuals(root: Node) -> void:
 	for child in root.get_children():
 		if child is Label:
 			CCRVisualStyle.apply_settings_label(child as Label)
+		elif child is LineEdit:
+			CCRVisualStyle.apply_settings_line_edit(child as LineEdit)
+		elif child is CheckBox:
+			CCRVisualStyle.apply_settings_check_box(child as CheckBox)
 		elif child is OptionButton:
 			CCRVisualStyle.apply_settings_option_button(child as OptionButton)
 		elif child is HSlider:
@@ -1337,6 +1641,10 @@ func _apply_settings_visuals(root: Node) -> void:
 		elif child is Button:
 			if child.has_meta("ccr_settings_tab"):
 				CCRVisualStyle.apply_settings_tab_button(child as Button, (child as Button).button_pressed)
+			elif child.has_meta("ccr_settings_toggle"):
+				CCRVisualStyle.apply_settings_toggle_button(child as Button, (child as Button).button_pressed)
+			elif child.has_meta("ccr_settings_dialog_button"):
+				CCRVisualStyle.apply_settings_dialog_button(child as Button, child.has_meta("ccr_settings_destructive"))
 			else:
 				CCRVisualStyle.apply_settings_button(child as Button, false, child.has_meta("ccr_settings_destructive"))
 		elif child is ScrollContainer:
@@ -1415,6 +1723,71 @@ func _save_region(region_code: String, select: OptionButton, status_label: Label
 		status_label.text = Localization.t("ui.profile.save_failed")
 		select.disabled = false
 
+func _on_profile_name_changed(value: String) -> void:
+	_profile_name_check_revision += 1
+	var revision := _profile_name_check_revision
+	_profile_name_available = false
+	if _profile_name_save_button != null:
+		_profile_name_save_button.disabled = true
+	var candidate := value.strip_edges()
+	if candidate == GameManager.player_data.nickname:
+		_set_profile_name_status("idle")
+		return
+	var error_key := AccountInputValidationScript.username_error_key(candidate)
+	if error_key != "":
+		_set_profile_name_status("invalid", error_key)
+		return
+	_set_profile_name_status("checking")
+	await get_tree().create_timer(0.45).timeout
+	if revision != _profile_name_check_revision or not is_instance_valid(_profile_name_field) or candidate != _profile_name_field.text.strip_edges():
+		return
+	var resp := await ApiClient.check_username_availability(candidate)
+	if revision != _profile_name_check_revision or not is_instance_valid(_profile_name_field) or candidate != _profile_name_field.text.strip_edges():
+		return
+	var result: Dictionary = resp.get("data", {}).get("username", {}) if resp.get("success", false) else {}
+	_profile_name_available = bool(result.get("available", false))
+	if _profile_name_available:
+		_set_profile_name_status("valid")
+		_profile_name_save_button.disabled = false
+	else:
+		_set_profile_name_status("invalid", "ui.account.status.id_unavailable")
+
+func _set_profile_name_status(state: String, text_key: String = "") -> void:
+	if not is_instance_valid(_profile_name_status):
+		return
+	match state:
+		"valid":
+			_profile_name_status.text = "✓"
+			_profile_name_status.add_theme_color_override("font_color", Color(0.12, 0.62, 0.32))
+		"checking":
+			_profile_name_status.text = Localization.t("ui.account.status.checking")
+			_profile_name_status.add_theme_color_override("font_color", Color(0.42, 0.48, 0.56))
+		"invalid":
+			_profile_name_status.text = Localization.t(text_key)
+			_profile_name_status.add_theme_color_override("font_color", Color(0.78, 0.18, 0.18))
+		_:
+			_profile_name_status.text = ""
+
+func _save_player_name() -> void:
+	if not _profile_name_available or not is_instance_valid(_profile_name_field) or not is_instance_valid(_profile_name_save_button):
+		return
+	var candidate := _profile_name_field.text.strip_edges()
+	_profile_name_save_button.disabled = true
+	_profile_name_field.editable = false
+	_set_profile_name_status("checking")
+	var resp := await ApiClient.update_profile({"username": candidate})
+	if not is_instance_valid(_profile_name_field):
+		return
+	_profile_name_field.editable = true
+	if resp.get("success", false):
+		GameManager.apply_profile(resp["data"])
+		_profile_name_field.text = GameManager.player_data.nickname
+		_profile_name_available = false
+		_set_profile_name_status("valid")
+	else:
+		_profile_name_available = false
+		_set_profile_name_status("invalid", "ui.account.status.id_unavailable")
+
 func _apply_language_selection(selected_locale: String) -> void:
 	Localization.set_locale(selected_locale, true, GameManager.player_data.user_id)
 
@@ -1425,6 +1798,7 @@ func _return_from_menu() -> void:
 		"deck_panel": _show_deck_collection()
 		"synthesis": _show_synthesis_panel()
 		"settings": _show_settings()
+		"career": _show_career()
 		_: _show_card_pool()
 
 func _on_locale_changed(_locale: String) -> void:
@@ -1433,9 +1807,12 @@ func _on_locale_changed(_locale: String) -> void:
 		_player_info.refresh()
 	if not _game_ui_active:
 		return
-	var localized_data_view := _current_view_id
+	# 玩家通常在设置页切换语言。此时需要刷新返回后会看到的上一页本地化数据，
+	# 不能把仅含本地 UI 的 settings 当成卡牌数据刷新目标。
+	var localized_data_view := _view_before_menu if _current_view_id == "settings" else _current_view_id
 	match _current_view_id:
 		"today_decks": _show_today_decks()
+		"career": _show_career()
 		"settings": _show_settings()
 		"vault": _show_vault()
 		"deck_panel": _show_deck_collection()
@@ -1454,31 +1831,40 @@ func _refresh_localized_server_data(view_id: String) -> void:
 		"card_pool", "synthesis": await GameManager.sync_initial_card_pool_from_server()
 		"vault": await GameManager.sync_vault_from_server()
 		"deck_panel": await GameManager.sync_decks_from_server()
+		"career": await GameManager.sync_career_from_server()
 		_: return
 	if _current_view_id != view_id:
 		return
 	match view_id:
 		"today_decks": _show_today_decks()
+		"career": _show_career()
 		"vault": _show_vault()
 		"deck_panel": _show_deck_collection()
 		"synthesis": _show_synthesis_panel()
 		_: _show_card_pool()
 
-func _make_slider_row(label_text: String, default_val: float, callback: Callable) -> HBoxContainer:
+func _make_slider_row(label_text: String, default_val: float, callback: Callable, slider_name: String = "") -> HBoxContainer:
 	var row = HBoxContainer.new()
+	row.name = "%sSettingsRow" % slider_name if slider_name != "" else "SliderSettingsRow"
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var lbl = Label.new()
 	lbl.text = label_text
 	lbl.custom_minimum_size = Vector2(100, 30)
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	row.add_child(lbl)
 
 	var slider = HSlider.new()
+	if slider_name != "":
+		slider.name = slider_name
 	slider.min_value = 0
 	slider.max_value = 1
 	slider.step = 0.01
 	slider.rounded = false
 	slider.value = default_val
 	slider.mouse_filter = Control.MOUSE_FILTER_STOP
-	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.custom_minimum_size = SETTINGS_TEXTURE_SLIDER_SIZE
+	slider.size_flags_horizontal = Control.SIZE_SHRINK_END
 	slider.value_changed.connect(callback)
 	row.add_child(slider)
 
@@ -1486,13 +1872,19 @@ func _make_slider_row(label_text: String, default_val: float, callback: Callable
 
 func _make_controller_binding_row(action_id: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
+	row.name = "ControllerBindingRow_%s" % action_id
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var label := Label.new()
 	label.text = Localization.t(ControllerInput.get_action_label_key(action_id))
 	label.custom_minimum_size = Vector2(210, 28)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	row.add_child(label)
 
 	var select := OptionButton.new()
-	select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	select.name = "ControllerBindingSelect_%s" % action_id
+	select.size_flags_horizontal = Control.SIZE_SHRINK_END
+	select.custom_minimum_size = SETTINGS_TEXTURE_DROPDOWN_SIZE
 	var current_binding := ControllerInput.get_binding(action_id)
 	var selected_index := 0
 	var index := 0
@@ -1510,25 +1902,10 @@ func _make_controller_binding_row(action_id: String) -> HBoxContainer:
 	row.add_child(select)
 	return row
 
-func _apply_game_text_color(root: Node = null) -> void:
-	var target := root if root != null else self
-	# 卡牌内部文字由 CardDisplay 按稀有度独立管理。页面级主题如果继续递归，
-	# 会在页面切换、后台同步和 resize 时把卡牌标题染回统一深色，随后卡牌
-	# 自身刷新又改回稀有度颜色，形成玩家看到的颜色反复跳变。
-	if target is CardDisplay:
-		(target as CardDisplay).refresh_title_text_color()
-		return
-	for child in target.get_children():
-		if child.name == "ExitGameConfirmDialog":
-			_apply_exit_game_dialog_style(child as Control)
-			continue
-		if child is Label:
-			if child.name != "ExpValueLabel":
-				CCRVisualStyle.apply_dark_label(child as Label)
-		_apply_game_text_color(child)
-
 func _on_controller_action_pressed(action_id: String) -> void:
 	if not _game_ui_active:
+		return
+	if is_instance_valid(_tutorial_controller) and _tutorial_controller.handle_controller_action(action_id):
 		return
 	match action_id:
 		ControllerInput.ACTION_NAV_PREV:
@@ -1599,6 +1976,7 @@ func _on_hand_synthesize() -> void:
 	if selected_indices.size() != 5:
 		_synthesis_animation_running = false
 		return
+	tutorial_forge_started.emit()
 	var animation_sources := _hand_area_ui.get_synthesis_animation_sources(selected_indices)
 
 	var old_pool_cards: Array = CardPoolSystem.current_pool.duplicate()
@@ -1635,9 +2013,11 @@ func _on_hand_synthesize() -> void:
 			_hand_area_ui.clear_selection()
 			_hand_area_ui.refresh_display()
 		_sync_after_synthesis_success_background()
+		tutorial_forge_finished.emit(true, completion.get("result", {}))
 	else:
 		push_error("合成失败: ", completion.get("error", "未知错误"))
 		await _recover_after_synthesis_failure()
+		tutorial_forge_finished.emit(false, {})
 
 
 func _wait_for_prior_asset_operations() -> void:
@@ -1702,6 +2082,7 @@ func _confirm_hand_synthesis_for_animation(
 		completion["success"] = true
 		completion["result"] = result
 		completion["done"] = true
+		tutorial_forge_confirmed.emit(result)
 		if is_instance_valid(overlay):
 			overlay.set_reward_items(_resolve_synthesis_reward_targets(result), true)
 	else:
@@ -1765,6 +2146,7 @@ func _apply_synthesis_confirmed_result(result: Dictionary) -> void:
 	var deck_data: Dictionary = result.get("deck", {})
 	if not deck_data.is_empty():
 		DeckSystem.add_synthesized_deck(deck_data)
+		GameManager.apply_confirmed_synthesis_combat_power(deck_data)
 
 	GameManager.player_data.changed.emit()
 
@@ -1962,6 +2344,7 @@ func _apply_hand_synthesis_result(result: Dictionary, fallback_indices: Array[in
 	var deck_data: Dictionary = result.get("deck", {})
 	if not deck_data.is_empty():
 		DeckSystem.add_synthesized_deck(deck_data)
+		GameManager.apply_confirmed_synthesis_combat_power(deck_data)
 
 	GameManager.player_data.changed.emit()
 
@@ -2025,6 +2408,9 @@ func _on_scene_changed(scene_name: String) -> void:
 		"Main": _show_card_pool()
 
 func _clear_center() -> void:
+	_museum_filter_controls_rect = Rect2()
+	if is_instance_valid(_currency):
+		_currency.visible = _game_ui_active
 	for child in _center_area.get_children():
 		_center_area.remove_child(child)
 		child.queue_free()
@@ -2034,8 +2420,32 @@ func _clear_center() -> void:
 	_vault_ui = null
 	_synthesis_panel = null
 	_deck_collection_ui = null
+	_career_ui = null
+
+func _on_museum_filter_controls_rect_changed(rect: Rect2) -> void:
+	if _current_view_id != "deck_panel" or not is_instance_valid(_deck_collection_ui):
+		return
+	_museum_filter_controls_rect = rect
+	_update_museum_currency_visibility()
+
+func _on_currency_resized() -> void:
+	if _current_view_id == "deck_panel":
+		_update_museum_currency_visibility.call_deferred()
+
+func _update_museum_currency_visibility() -> void:
+	if not is_instance_valid(_currency):
+		return
+	if not _game_ui_active:
+		_currency.visible = false
+		return
+	if _current_view_id != "deck_panel" or not is_instance_valid(_deck_collection_ui) or _museum_filter_controls_rect.size.x <= 0.0:
+		_currency.visible = true
+		return
+	var currency_left := _currency.get_global_rect().position.x
+	_currency.visible = _museum_filter_controls_rect.end.x < currency_left
 
 func refresh_current_view() -> void:
+	_save_current_navigation_scroll_position()
 	_clear_center()
 	_show_card_pool()
 
@@ -2058,22 +2468,22 @@ func _setup_debug_panel() -> void:
 	panel.add_child(vbox)
 
 	var add_gold = Button.new()
-	add_gold.text = "+100 金币"
+	add_gold.text = Localization.t("ui.debug.add_gold")
 	add_gold.pressed.connect(func(): GameManager.player_data.add_gold(100))
 	vbox.add_child(add_gold)
 
 	var add_gems = Button.new()
-	add_gems.text = "+10 宝石"
+	add_gems.text = Localization.t("ui.debug.add_gems")
 	add_gems.pressed.connect(func(): GameManager.player_data.add_gems(10))
 	vbox.add_child(add_gems)
 
 	var add_exp = Button.new()
-	add_exp.text = "+500 经验"
+	add_exp.text = Localization.t("ui.debug.add_exp")
 	add_exp.pressed.connect(func(): GameManager.on_exp_gained(500))
 	vbox.add_child(add_exp)
 
 	var sync_btn = Button.new()
-	sync_btn.text = "🔄 从服务器同步"
+	sync_btn.text = Localization.t("ui.debug.sync")
 	sync_btn.pressed.connect(func():
 		await GameManager.sync_all_from_server()
 		print("[DEBUG] 数据已同步")
@@ -2087,6 +2497,6 @@ func _setup_debug_panel() -> void:
 	menu_btn.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	menu_btn.position = Vector2(130, -80)
 	menu_btn.size = Vector2(80, 36)
-	menu_btn.text = "菜单"
+	menu_btn.text = Localization.t("ui.debug.menu")
 	menu_btn.pressed.connect(_show_menu)
 	debug.add_child(menu_btn)
